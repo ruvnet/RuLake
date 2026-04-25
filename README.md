@@ -501,6 +501,29 @@ cargo run --release -p ruvector-rulake --bin rulake-demo -- --fast
 
 ---
 
+## Examples
+
+Cross-language examples live under [`examples/`](examples/) — each with its own
+README, install instructions, tests, and a runnable smoke flow. The bundle
+protocol (`table.rulake.json` + SHAKE-256 witness) is the language-portable
+primitive; clients in any language verify witnesses against Rust ruLake
+byte-exactly.
+
+| Stack | Path | Highlights |
+|-------|------|------------|
+| Rust  | [`examples/sidecar_daemon.rs`](examples/sidecar_daemon.rs) · [`warm_restart.rs`](examples/warm_restart.rs) | Publisher + reader coherence loop, save → ship → warm-restart |
+| Python | [`examples/python/`](examples/python/) | verify-witness · bundle-server (FastAPI) · subprocess-wrapper · [rag-grounded](examples/python/04-rag-grounded/) |
+| Node + TypeScript | [`examples/nodejs/`](examples/nodejs/) | verify-witness · bundle-publisher (Express) · subprocess-wrapper · [MCP tool](examples/nodejs/04-mcp-tool/) |
+| Rust → WASM | [`examples/wasm/`](examples/wasm/) | [browser verifier](examples/wasm/01-witness-verifier-browser/) (~127 KB) · [Node verifier](examples/wasm/02-witness-verifier-nodejs/) · [WASI CLI](examples/wasm/03-bundle-toolkit-cli/) |
+| GPU | [`examples/gpu/`](examples/gpu/) | [CUDA brute-force](examples/gpu/01-cuda-brute-force/) (38× kernel) · [wgpu portable](examples/gpu/02-wgpu-portable/) (Vulkan/Metal/DX12) · [rabitq-GPU design note](examples/gpu/03-rabitq-gpu-design-note/) |
+
+All cross-language verifiers reproduce the canonical Rust witness
+`dea58c64adb1eb4109438f0353a2b1749d4dc29ed7266e9236720ab6cf07d7e4` byte-exactly.
+Per-language details and the cross-cutting story are in the index at
+[`examples/README.md`](examples/README.md).
+
+---
+
 ## Status
 
 **M1 + M1.5 shipped and measured** (2026-04-24)
