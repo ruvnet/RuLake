@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ruLake bundle witness verifier — browser</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <header>
+      <h1>ruLake bundle witness verifier</h1>
+      <p class="sub">
+        Drop a <code>table.rulake.json</code> sidecar to verify its
+        SHAKE-256 witness end-to-end in the browser. No backend round-trip.
+      </p>
+    </header>
+
+    <section id="drop-zone" class="drop-zone" tabindex="0" role="button"
+             aria-label="Drop a bundle JSON file here, or click to choose">
+      <p class="drop-headline">drop <code>table.rulake.json</code> here</p>
+      <p class="drop-sub">or click to choose a file</p>
+      <input type="file" id="file-input" accept=".json,application/json" hidden>
+    </section>
+
+    <div class="actions">
+      <button id="sample-btn" type="button">Try sample bundle</button>
+      <button id="tamper-btn" type="button">Tamper sample (should FAIL)</button>
+      <span id="wasm-status" class="status">loading wasm…</span>
+    </div>
+
+    <section id="result" class="result hidden" aria-live="polite">
+      <div id="banner" class="banner"></div>
+
+      <table class="fields">
+        <tbody>
+          <tr><th>format_version</th>     <td id="f-format"></td></tr>
+          <tr><th>data_ref</th>           <td id="f-dref"></td></tr>
+          <tr><th>dim</th>                <td id="f-dim"></td></tr>
+          <tr><th>rotation_seed</th>      <td id="f-seed"></td></tr>
+          <tr><th>rerank_factor</th>      <td id="f-rerank"></td></tr>
+          <tr><th>generation</th>         <td id="f-gen"></td></tr>
+          <tr><th>pii_policy</th>         <td id="f-pii"></td></tr>
+          <tr><th>lineage_id</th>         <td id="f-lin"></td></tr>
+          <tr><th>memory_class</th>       <td id="f-mc"></td></tr>
+        </tbody>
+      </table>
+
+      <h3>witness comparison</h3>
+      <table class="witness">
+        <tbody>
+          <tr><th>stored</th>   <td><code id="w-stored"></code></td></tr>
+          <tr><th>computed</th> <td><code id="w-computed"></code></td></tr>
+          <tr><th>match</th>    <td id="w-match"></td></tr>
+        </tbody>
+      </table>
+
+      <p id="error-line" class="error hidden"></p>
+    </section>
+
+    <footer>
+      <p>
+        Witness: <code>SHAKE-256(32)</code> over a length-prefixed
+        concatenation of <code>data_ref</code>, <code>dim</code>,
+        <code>rotation_seed</code>, <code>rerank_factor</code>, and
+        <code>generation</code>. Variant tag byte (audit 2026-04-23)
+        guarantees <code>Num(n)</code> and <code>Opaque(s)</code> can never
+        collide. <code>memory_class</code> intentionally not part of the
+        digest.
+      </p>
+    </footer>
+  </main>
+
+  <script type="module" src="index.js"></script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "name": "rulake-witness-verifier-nodejs",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Node.js example: verify ruLake bundles with a wasm32 verifier",
+  "license": "MIT OR Apache-2.0",
+  "scripts": {
+    "build": "./build.sh",
+    "test": "node --test tests/verify.test.js",
+    "verify": "node verify.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

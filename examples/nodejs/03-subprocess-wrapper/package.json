@@ -1,0 +1,23 @@
+{
+  "name": "rulake-subprocess-wrapper",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TypeScript wrapper around the Rust `rulake-demo` benchmark binary. Spawns the subprocess, parses its stdout, returns structured results.",
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "benchmark": "tsx src/cli.ts benchmark --fast"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.1.0"
+  }
+}

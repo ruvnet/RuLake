@@ -1,0 +1,25 @@
+{
+  "name": "rulake-verify-witness",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Verify a ruLake table.rulake.json bundle's SHAKE-256 witness from Node/TypeScript.",
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "verify": "tsx src/cli.ts"
+  },
+  "dependencies": {
+    "@noble/hashes": "^1.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.1.0"
+  }
+}

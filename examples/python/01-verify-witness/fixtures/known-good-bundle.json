@@ -1,0 +1,11 @@
+{
+  "format_version": 2,
+  "data_ref": "gs://rulake-fixtures/python-example/v1/vectors.parquet",
+  "dim": 384,
+  "rotation_seed": 12648430,
+  "rerank_factor": 20,
+  "generation": 1700000000,
+  "rvf_witness": "885a6125dcfcef1a4e3b1ec31fce0e681f42f93e93b4f4fb2dc2a6117a7547dc",
+  "pii_policy": null,
+  "lineage_id": "ol://jobs/python-fixture-1"
+}

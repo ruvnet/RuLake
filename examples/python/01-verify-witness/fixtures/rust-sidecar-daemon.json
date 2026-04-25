@@ -1,0 +1,11 @@
+{
+  "format_version": 2,
+  "data_ref": "local://publisher/memories",
+  "dim": 8,
+  "rotation_seed": 42,
+  "rerank_factor": 20,
+  "generation": 2,
+  "rvf_witness": "31c0865f078d9d646edaf0fe339d5d8c20a04bac9e95571fae91035306c2b584",
+  "pii_policy": null,
+  "lineage_id": null
+}

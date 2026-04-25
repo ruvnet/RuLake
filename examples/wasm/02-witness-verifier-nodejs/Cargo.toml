@@ -1,0 +1,33 @@
+[package]
+name = "rulake-witness-verifier-nodejs"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Node.js ruLake bundle witness verifier (wasm32-unknown-unknown, --target nodejs)"
+publish = false
+
+# Standalone — same reasoning as 01: keep the wasm32 build off the host
+# ruLake workspace so it doesn't pull rayon / std::sync.
+[workspace]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+wasm-bindgen = "0.2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde-wasm-bindgen = "0.6"
+sha3 = "0.10"
+hex = "0.4"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+# Disable wasm-pack's bundled wasm-opt — see browser example for context.
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false

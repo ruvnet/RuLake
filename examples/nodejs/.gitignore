@@ -1,0 +1,9 @@
+# Per-example installs — each example has its own scoped node_modules.
+**/node_modules/
+**/dist/
+**/.vitest-cache/
+**/coverage/
+
+# Editor / OS
+**/.DS_Store
+**/*.log

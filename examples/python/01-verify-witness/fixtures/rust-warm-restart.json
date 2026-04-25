@@ -1,0 +1,11 @@
+{
+  "format_version": 2,
+  "data_ref": "local://prod-warehouse/memories",
+  "dim": 128,
+  "rotation_seed": 42,
+  "rerank_factor": 20,
+  "generation": 1,
+  "rvf_witness": "36366434d81af600842b090102800e24b13f6a1f464e9a5e5dac247f51ec62be",
+  "pii_policy": null,
+  "lineage_id": null
+}

@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rulake-rag-grounded"
+version = "0.1.0"
+description = "Witness-pinned RAG pipeline that consumes ruLake snapshot directories from Python."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "ruLake Python examples" }]
+license = { text = "Apache-2.0 OR MIT" }
+
+dependencies = [
+    "rulake-verify-witness",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4", "mypy>=1.8"]
+embed = ["sentence-transformers>=2.7"]
+
+[project.scripts]
+rulake-rag = "pipeline:main"
+
+[tool.setuptools]
+py-modules = ["pipeline"]
+
+[tool.uv.sources]
+rulake-verify-witness = { path = "../01-verify-witness", editable = true }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.mypy]
+strict = true
+python_version = "3.11"

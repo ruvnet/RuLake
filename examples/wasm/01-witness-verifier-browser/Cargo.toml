@@ -1,0 +1,42 @@
+[package]
+name = "rulake-witness-verifier-browser"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Browser-side ruLake bundle witness verifier (wasm32-unknown-unknown)"
+publish = false
+
+# Standalone — NOT a workspace member of the parent ruLake crate. Keeping this
+# isolated lets wasm32-unknown-unknown build cleanly without dragging in std::sync
+# and rayon from the host crate.
+[workspace]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+wasm-bindgen = "0.2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde-wasm-bindgen = "0.6"
+sha3 = "0.10"
+hex = "0.4"
+
+# Note: wee_alloc was removed — it is unmaintained and breaks linking against
+# recent wasm-bindgen releases. The default Rust allocator is ~5–8 KB heavier
+# but works reliably and the resulting binary is still small after wasm-opt.
+[features]
+default = []
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+# Disable wasm-pack's bundled wasm-opt — the version bundled with wasm-pack
+# 0.14 chokes on the bulk-memory ops emitted by recent rustc. The build.sh
+# script invokes a system wasm-opt explicitly when one is available.
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
