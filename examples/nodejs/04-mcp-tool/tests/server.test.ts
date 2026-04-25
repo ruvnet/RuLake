@@ -114,11 +114,16 @@ describe.skipIf(!HAS_FIXTURE)("rulake_bundle_info", () => {
       });
       expect(result.isError).toBeFalsy();
       const sc = result.structuredContent as Record<string, unknown>;
+      // Shape-only assertions — the README points users at the
+      // `warm_restart` example to produce a fixture, which differs
+      // from the older `sidecar_daemon` (different data_ref / dim).
+      // Pin the witness contract, not the example-specific values.
       expect(sc.witness_verified).toBe(true);
       expect(sc.format_version).toBe(2);
-      expect(sc.data_ref).toBe("local://publisher/memories");
-      expect(sc.dim).toBe(8);
-      expect(sc.rotation_seed).toBe(42);
+      expect(typeof sc.data_ref).toBe("string");
+      expect(typeof sc.dim).toBe("number");
+      expect((sc.dim as number) > 0).toBe(true);
+      expect(typeof sc.rotation_seed === "number" || typeof sc.rotation_seed === "string").toBe(true);
       expect(sc.rvf_witness).toMatch(/^[0-9a-f]{64}$/);
     } finally {
       rmSync(dir, { recursive: true, force: true });

@@ -14,9 +14,10 @@
     "skipLibCheck": true,
     "declaration": true,
     "outDir": "dist",
-    "rootDir": "src",
+    "rootDir": ".",
     "isolatedModules": true,
     "verbatimModuleSyntax": false
   },
-  "include": ["src/**/*.ts", "tests/**/*.ts"]
+  "include": ["src/**/*.ts", "tests/**/*.ts"],
+  "exclude": ["dist", "node_modules"]
 }

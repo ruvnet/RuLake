@@ -21,7 +21,7 @@ import { join, relative, sep } from "node:path";
 
 import chokidar, { type FSWatcher } from "chokidar";
 
-import { parseBundle, type RuLakeBundle } from "./bundle.js";
+import { MAX_BUNDLE_BYTES, parseBundle, type RuLakeBundle } from "./bundle.js";
 import { verifyBundle } from "./witness.js";
 
 const SIDECAR = "table.rulake.json";
@@ -118,10 +118,26 @@ export class BundleStore {
     let st;
     try {
       st = statSync(absPath);
-      raw = readFileSync(absPath, "utf8");
     } catch {
       // Reader race with writer / file vanished — let the next event
       // sort it out. Don't drop the prior entry on a transient error.
+      return;
+    }
+    // Pre-check the file size BEFORE reading. A regular bundle is a
+    // few hundred bytes; we must not allocate gigabytes for an attacker
+    // who drops a giant file under the watch root. parseBundle would
+    // reject it later, but only after we'd already paid the read cost.
+    if (st.size > MAX_BUNDLE_BYTES) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `[bundle-publisher] refusing to read oversize sidecar ${absPath}: ${st.size} bytes > cap ${MAX_BUNDLE_BYTES}`,
+      );
+      this.entries.delete(meta.key);
+      return;
+    }
+    try {
+      raw = readFileSync(absPath, "utf8");
+    } catch {
       return;
     }
 

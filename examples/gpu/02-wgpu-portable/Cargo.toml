@@ -1,0 +1,42 @@
+[package]
+name = "rulake-gpu-wgpu-portable"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Witness-pinned cross-platform GPU L2 kNN over a ruLake snapshot (wgpu)"
+publish = false
+
+# Standalone — keeps wgpu off the host workspace and lets this binary
+# compile without the CUDA toolkit on the developer's path.
+[workspace]
+
+[[bin]]
+name = "wgpu-portable"
+path = "src/main.rs"
+
+[dependencies]
+# wgpu drives the underlying Vulkan / Metal / DX12 / WebGPU backends —
+# no NVIDIA-specific tooling required. Tested on the Vulkan backend
+# against an RTX 5080.
+wgpu = { version = "29", default-features = false, features = [
+    "std",
+    "wgsl",
+    "vulkan",
+    "metal",
+    "dx12",
+] }
+# pollster is the canonical sync-bridge for blocking on wgpu's async
+# device + queue setup. We don't want a runtime in this CLI.
+pollster = "0.4"
+# bytemuck is how we hand `&[f32]` directly to wgpu's Queue::write_buffer.
+# Pod / Zeroable are the only traits we use, so the dep is small.
+bytemuck = { version = "1.25", features = ["derive"] }
+sha3 = "0.10"
+hex = "0.4"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1

@@ -36,7 +36,7 @@
 import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-import { parseBundle, type RuLakeBundle } from "./bundle.js";
+import { MAX_BUNDLE_BYTES, parseBundle, type RuLakeBundle } from "./bundle.js";
 import { verifyBundle } from "./witness.js";
 
 const RBPX_MAGIC = Buffer.from("rbpx0001", "utf8");
@@ -44,6 +44,16 @@ const RBPX_VERSION_MAX = 1;
 const MAX_DIM = 8192;
 const MAX_N = 100_000_000;
 const MAX_RERANK = 1024;
+/**
+ * Hard cap on the on-disk `.rbpx` file. The MCP tool is fed
+ * `snapshot_dir` paths by an upstream agent / client — that input is
+ * not trusted, so refuse to allocate unbounded memory for a hostile
+ * symlink farm or an attacker-supplied path. The cap below is a few
+ * GiB headroom over the largest realistic snapshot at MAX_N × MAX_DIM
+ * × 4 bytes (~3.2 TiB), but capped to a manageable 4 GiB so a single
+ * call cannot OOM the process.
+ */
+const MAX_RBPX_BYTES = 4 * 1024 * 1024 * 1024;
 
 export interface RbpxItem {
   id: number;
@@ -86,6 +96,25 @@ export function loadSnapshot(dir: string): SnapshotLoadResult {
 
   const bundleStat = statSync(bundlePath);
   const rbpxStat = statSync(rbpxPath);
+  // Refuse to read unreasonable inputs BEFORE allocating buffers. The
+  // snapshot_dir comes from an MCP client and may be hostile; a 100 GB
+  // index.rbpx must error out, not OOM the agent process.
+  if (!bundleStat.isFile()) {
+    throw new Error(`snapshot: ${bundlePath} is not a regular file`);
+  }
+  if (!rbpxStat.isFile()) {
+    throw new Error(`snapshot: ${rbpxPath} is not a regular file`);
+  }
+  if (bundleStat.size > MAX_BUNDLE_BYTES) {
+    throw new Error(
+      `snapshot: bundle ${bundlePath} is ${bundleStat.size} bytes, exceeds cap ${MAX_BUNDLE_BYTES}`,
+    );
+  }
+  if (rbpxStat.size > MAX_RBPX_BYTES) {
+    throw new Error(
+      `snapshot: index ${rbpxPath} is ${rbpxStat.size} bytes, exceeds cap ${MAX_RBPX_BYTES}`,
+    );
+  }
   const bundleRaw = readFileSync(bundlePath, "utf8");
   const bundle = parseBundle(bundleRaw);
   const { ok: witnessOk, expected } = verifyBundle(bundle);

@@ -3,6 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Defense-in-depth CSP. Allow only same-origin scripts/styles/fetches.
+       'wasm-unsafe-eval' is required so the wasm-bindgen JS glue can
+       instantiate the .wasm module via WebAssembly.instantiate. -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'">
   <title>ruLake bundle witness verifier — browser</title>
   <link rel="stylesheet" href="style.css">
 </head>

@@ -106,7 +106,7 @@ def test_ruvec1_rejects_payload_size_mismatch(tmp_path: Path) -> None:
               + struct.pack("<Q", 1)
               + struct.pack("<2f", 0.0, 0.0))
     p.write_bytes(header)
-    with pytest.raises(CorpusError, match="payload size"):
+    with pytest.raises(CorpusError, match="file size"):
         read_ruvec1(p)
 
 

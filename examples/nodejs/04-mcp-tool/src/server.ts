@@ -26,15 +26,30 @@ import { loadSnapshot, type SnapshotLoadResult } from "./snapshot.js";
 
 const VERSION = "0.1.0";
 
-/** Light in-process cache so an agent can call us repeatedly. */
+/**
+ * Light in-process cache so an agent can call us repeatedly without
+ * re-parsing the same `.rbpx`. Bounded by `MAX_CACHED_SNAPSHOTS`: an
+ * MCP client could otherwise pass thousands of unique paths and grow
+ * the map (and the Float32Array buffers it holds) without bound.
+ * LRU eviction: when full, drop the least-recently-inserted entry.
+ */
+const MAX_CACHED_SNAPSHOTS = 16;
 const snapshotCache = new Map<string, SnapshotLoadResult>();
 
 function cachedLoad(snapshotDir: string): SnapshotLoadResult {
   const abs = resolve(snapshotDir);
-  let entry = snapshotCache.get(abs);
-  if (!entry) {
-    entry = loadSnapshot(abs);
-    snapshotCache.set(abs, entry);
+  const existing = snapshotCache.get(abs);
+  if (existing) {
+    // Refresh recency: re-insert at the end of the iteration order.
+    snapshotCache.delete(abs);
+    snapshotCache.set(abs, existing);
+    return existing;
+  }
+  const entry = loadSnapshot(abs);
+  snapshotCache.set(abs, entry);
+  if (snapshotCache.size > MAX_CACHED_SNAPSHOTS) {
+    const oldest = snapshotCache.keys().next().value;
+    if (oldest !== undefined) snapshotCache.delete(oldest);
   }
   return entry;
 }

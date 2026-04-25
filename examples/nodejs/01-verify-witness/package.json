@@ -9,8 +9,8 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "vitest run --exclude '**/dist/**' --exclude '**/node_modules/**'",
+    "test:watch": "vitest --exclude '**/dist/**' --exclude '**/node_modules/**'",
     "verify": "tsx src/cli.ts"
   },
   "dependencies": {

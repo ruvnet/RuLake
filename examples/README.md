@@ -19,7 +19,8 @@ examples/
 ├── warm_restart.rs                 # Rust — save → ship → warm-restart cycle
 ├── python/                         # 4 modules, no Rust bindings required
 ├── nodejs/                         # 4 modules, TypeScript + ESM, no Rust bindings
-└── wasm/                           # 3 modules — browser, Node, WASI
+├── wasm/                           # 3 modules — browser, Node, WASI
+└── gpu/                            # 3 modules — CUDA, wgpu portable, design note
 ```
 
 Run the existing Rust examples first; their output (real `table.rulake.json`
@@ -109,18 +110,37 @@ Optional: `wasm-opt` (binaryen) for ~30% size reduction. Each example's
   must produce different witnesses. If your implementation gets the same hex
   for both, the tag byte is missing.
 
+## GPU / CUDA — `gpu/`
+
+Three packages. Honest framing: ruLake's RaBitQ compressed-scan kernel
+does NOT have a GPU port today (ADR-157 is "Proposed — scaffolding only"),
+so these examples take the "verify the witness, then brute-force-L2 the
+floats" path, which is real and useful — just not the M2+ kernel plane.
+Module 03 is the bridge: a design note for what the rabitq GPU port
+would look like.
+
+| Module | Stack | What it shows |
+|--------|-------|---------------|
+| [`01-cuda-brute-force/`](gpu/01-cuda-brute-force/) | CUDA via cudarc, nvcc-compiled PTX | Witness-verified brute-force L2. Measured 38× kernel-only speedup vs CPU at 100k×128 on RTX 5080. 4/4 tests pass. |
+| [`02-wgpu-portable/`](gpu/02-wgpu-portable/) | wgpu / WGSL — runs on Vulkan/Metal/DX12 | Same shape, no CUDA toolkit needed. ~21× kernel-only speedup. Top-K agreement with CPU = 100% (exact L2). 1/1 test passes. |
+| [`03-rabitq-gpu-design-note/`](gpu/03-rabitq-gpu-design-note/) | Markdown only | Design note for the missing rabitq GPU port: per-candidate `__popc()` kernel, AoS↔SoA layout, `VectorKernel` trait integration, recall guarantees, witness compatibility, 7-step implementation checklist. |
+
 ## What's NOT in here (and why)
 
 - **No pyo3 / napi-rs / wasm-bindgen bindings to the full ruLake crate.**
-  Bindings are weeks of work and a real engineering project. The bundle
-  protocol gives you a lighter cross-language story that ships today.
+  Bindings are weeks of work and a real engineering project — see the
+  proposed-status [`docs/adrs/sdk/ADR-002`](../docs/adrs/sdk/ADR-002-python-sdk.md)
+  and [`ADR-003`](../docs/adrs/sdk/ADR-003-nodejs-typescript-sdk.md) for the
+  shape those would take. The bundle protocol gives you a lighter
+  cross-language story that ships today.
 - **No production cloud-backend examples** (Parquet, BigQuery, Iceberg, Delta).
   Those backends are M2+ roadmap per [ADR-155 §M2](../docs/adrs/ADR-155-rulake-datalake-layer.md).
   The `BackendAdapter` trait is 4 methods; building a real adapter is real
   domain work, not example-sized.
-- **No GPU / CUDA examples.** The ADR-157 kernel plane is "Proposed —
-  scaffolding only"; per-arch kernels ship as separate crates and none are
-  committed yet.
+- **No GPU port of the rabitq compressed scan.** ADR-157 is scaffolding-only;
+  the GPU examples in `gpu/` use brute-force L2 over uncompressed floats,
+  not the rabitq 1-bit popcount path. See [`gpu/03-rabitq-gpu-design-note/`](gpu/03-rabitq-gpu-design-note/)
+  for the bridge.
 
 For deeper context on what ruLake does and doesn't do today, read
 [`../docs/review/`](../docs/review/) (capability / performance / security

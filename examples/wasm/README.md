@@ -74,6 +74,28 @@ cd 03-bundle-toolkit-cli && ./build.sh
 - `wasm-opt` / `binaryen` — optional, all build scripts use it if
   present and skip the optimization pass otherwise
 
+## Skipped optional tooling
+
+The verifier swarm flagged that some sizing/CVE numbers depend on
+tools that may not be installed on every host. Each `build.sh`
+gracefully skips them when absent:
+
+- **`wasm-opt`** — when present, applies `-Os` post-pass; shrinks
+  examples 1/2 from ~127 KB to ~80–95 KB and example 3 from ~315 KB to
+  ~200–220 KB. Without it, the wasm-pack output ships as-built.
+- **`cargo audit`** — when present, runs against each example's lockfile
+  for known CVEs. Without it, no CVE scan is performed and the deps
+  are trusted as-pinned in `Cargo.toml`.
+- **`wasmtime` / `wasmer`** — only example 3 needs a WASI runtime to
+  actually execute. Without one, the wasm builds successfully but is
+  not exercised end-to-end. Install via
+  `curl https://wasmtime.dev/install.sh -sSf | bash`.
+
+Each per-example README repeats the relevant skip-conditions in
+context. None of these tools are required for the build to succeed —
+they only affect output size, supply-chain assurance, and runtime
+verification respectively.
+
 ## Producing a real fixture
 
 ```bash

@@ -1,0 +1,44 @@
+[package]
+name = "rulake-gpu-cuda-brute-force"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Witness-pinned CUDA brute-force L2 kNN over a ruLake snapshot"
+publish = false
+
+# Standalone crate. Empty [workspace] keeps cudarc + the CUDA toolchain
+# off the host ruLake build — the parent Cargo workspace will not pick
+# up this directory.
+[workspace]
+
+[[bin]]
+name = "cuda-brute-force"
+path = "src/main.rs"
+
+[dependencies]
+# Safe Rust bindings to the CUDA driver / runtime / NVRTC. We use the
+# driver API at runtime to load the PTX we compile in build.rs.
+# `fallback-dynamic-loading` lets the binary dlopen libcuda at startup
+# rather than linking it statically — friendlier on machines without
+# libcuda.so on the linker path.
+cudarc = { version = "0.19", default-features = false, features = [
+    "std",
+    "driver",
+    "nvrtc",
+    "fallback-dynamic-loading",
+    # CUDA toolkit version pinned at build time. cudarc requires one of
+    # its `cuda-XXXXX` features so it knows which sys-bindings to use.
+    # The host has CUDA 13.0; switch to cuda-12080 / 12090 etc. on
+    # older toolkits, or use `cuda-version-from-build-system` to let
+    # cudarc autodetect by invoking `nvcc --version`.
+    "cuda-13000",
+] }
+sha3 = "0.10"
+hex = "0.4"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1

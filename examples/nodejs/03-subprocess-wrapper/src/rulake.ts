@@ -107,21 +107,48 @@ export class Rulake {
         ? args
         : ["run", "--release", "--quiet", "--bin", "rulake-demo", "--", ...args];
 
+      // shell:false (the default for `spawn` when args is an array) —
+      // never let the shell touch any of these inputs. No user input
+      // flows here either; both the binary path and the flags are
+      // controlled by this module.
       const child = spawn(cmd, fullArgs, {
         cwd: this.repoRoot,
         env: this.env,
         stdio: ["ignore", "pipe", "pipe"],
       });
 
+      // Bound stdout/stderr buffering. The Rust benchmark's normal
+      // output is < 16 KiB; a runaway process that flooded the pipe
+      // would otherwise grow the parent's heap until the timeout
+      // fired. 16 MiB each is comfortable headroom; on overflow we
+      // truncate and kill the child with SIGKILL.
+      const MAX_OUTPUT_BYTES = 16 * 1024 * 1024;
       let stdout = "";
       let stderr = "";
+      let killedForOverflow = false;
       child.stdout!.setEncoding("utf8");
       child.stderr!.setEncoding("utf8");
       child.stdout!.on("data", (chunk: string) => {
-        stdout += chunk;
+        if (stdout.length + chunk.length > MAX_OUTPUT_BYTES) {
+          stdout += chunk.slice(0, MAX_OUTPUT_BYTES - stdout.length);
+          if (!killedForOverflow) {
+            killedForOverflow = true;
+            child.kill("SIGKILL");
+          }
+        } else {
+          stdout += chunk;
+        }
       });
       child.stderr!.on("data", (chunk: string) => {
-        stderr += chunk;
+        if (stderr.length + chunk.length > MAX_OUTPUT_BYTES) {
+          stderr += chunk.slice(0, MAX_OUTPUT_BYTES - stderr.length);
+          if (!killedForOverflow) {
+            killedForOverflow = true;
+            child.kill("SIGKILL");
+          }
+        } else {
+          stderr += chunk;
+        }
       });
 
       const timer = setTimeout(() => {

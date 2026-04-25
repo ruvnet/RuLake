@@ -69,8 +69,26 @@ wasmer run --mapdir=/tmp::/tmp $WASM -- verify /tmp/rulake-fixture
 | command   | exit codes                       | notes                            |
 |-----------|----------------------------------|----------------------------------|
 | `verify`  | 0 = match, 1 = mismatch, 2 = err | suitable for `&&` chains         |
-| `dump`    | 0 = ok, 2 = err                  | pretty-printed JSON              |
+| `dump`    | 0 = ok, 2 = err                  | pretty-printed JSON. Same load + validation path as `verify`, so a tampered bundle exits 2 (err), not 0 with garbage. |
 | `witness` | 0 = ok, 2 = err                  | only the hex digest, no decor    |
+
+## Path inputs
+
+The CLI takes paths via `clap` without an application-level length cap.
+This is not a vulnerability — two outer layers already bound it:
+
+- **WASI runtime + kernel** enforce `PATH_MAX` (4096 on Linux); arguments
+  longer than that fail in the runtime before reaching the program.
+- **WASI capability model** is the actual reachability boundary. The
+  binary only sees the directories the host explicitly granted via
+  `--dir=…` (wasmtime) or equivalent. Symlinks pointing outside the
+  preopened tree are not followed by the WASI VFS unless the runtime
+  is invoked with an explicit follow-symlinks flag.
+
+In practice: if you `wasmtime --dir=/tmp run bundle-toolkit.wasm verify
+/tmp/foo`, the binary cannot read `/etc/passwd` even if a malicious
+sidecar named it as `data_ref`. Run the wasm with the narrowest
+preopened-dir set you need.
 
 ## Generating a test bundle
 

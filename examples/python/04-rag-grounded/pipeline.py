@@ -166,36 +166,51 @@ def write_ruvec1(path: Path, dim: int, ids: Sequence[int],
 def read_ruvec1(path: Path) -> tuple[list[int], list[list[float]], int]:
     """Read a ``ruvec1`` file and return ``(ids, vectors, dim)``.
 
-    Mirror of ``FsBackend::pull_vectors``. Bounds-checks the header
-    BEFORE allocating to refuse pathological / hostile files.
+    Mirror of ``FsBackend::pull_vectors``. Streams header-then-payload so
+    a hostile / oversized file is rejected by the bounds checks BEFORE
+    its bytes ever land in process memory. Without streaming, a
+    `read_bytes()` of a 50 GB file would OOM the process before any
+    guard fired.
     """
-    raw = path.read_bytes()
-    if len(raw) < RUVEC1_HEADER_BYTES:
-        raise CorpusError(f"{path}: truncated header ({len(raw)} bytes)")
-    if raw[:8] != RUVEC1_MAGIC:
-        raise CorpusError(f"{path}: bad magic {raw[:8]!r}")
-    count = struct.unpack("<Q", raw[8:16])[0]
-    dim = struct.unpack("<I", raw[16:20])[0]
-    # raw[20:24] reserved — ignored.
-    if count > MAX_VECTORS:
-        raise CorpusError(f"{path}: count={count} exceeds MAX_VECTORS")
-    if dim == 0 or dim > MAX_DIM:
-        raise CorpusError(f"{path}: dim={dim} outside (0, {MAX_DIM}]")
+    with open(path, "rb") as f:
+        header = f.read(RUVEC1_HEADER_BYTES)
+        if len(header) < RUVEC1_HEADER_BYTES:
+            raise CorpusError(f"{path}: truncated header ({len(header)} bytes)")
+        if header[:8] != RUVEC1_MAGIC:
+            raise CorpusError(f"{path}: bad magic {header[:8]!r}")
+        count = struct.unpack("<Q", header[8:16])[0]
+        dim = struct.unpack("<I", header[16:20])[0]
+        # header[20:24] reserved — ignored.
+        if count > MAX_VECTORS:
+            raise CorpusError(f"{path}: count={count} exceeds MAX_VECTORS")
+        if dim == 0 or dim > MAX_DIM:
+            raise CorpusError(f"{path}: dim={dim} outside (0, {MAX_DIM}]")
 
-    record_bytes = 8 + dim * 4
-    expected = RUVEC1_HEADER_BYTES + count * record_bytes
-    if len(raw) != expected:
-        raise CorpusError(
-            f"{path}: payload size {len(raw)} != expected {expected} "
-            f"(count={count}, dim={dim})"
-        )
+        record_bytes = 8 + dim * 4
+        payload_bytes = count * record_bytes
+        # Cross-check on-disk size matches the declared header BEFORE we
+        # try to read it. os.fstat is cheap and lets us refuse hostile
+        # files (extra trailing bytes, truncated payload) up front.
+        actual_size = os.fstat(f.fileno()).st_size
+        expected_total = RUVEC1_HEADER_BYTES + payload_bytes
+        if actual_size != expected_total:
+            raise CorpusError(
+                f"{path}: file size {actual_size} != expected {expected_total} "
+                f"(count={count}, dim={dim})"
+            )
+        payload = f.read(payload_bytes)
+        if len(payload) != payload_bytes:
+            raise CorpusError(
+                f"{path}: short read {len(payload)} of {payload_bytes} bytes"
+            )
+
     ids: list[int] = []
     vectors: list[list[float]] = []
-    off = RUVEC1_HEADER_BYTES
+    off = 0
     for _ in range(count):
-        idv = struct.unpack("<Q", raw[off:off + 8])[0]
+        idv = struct.unpack("<Q", payload[off:off + 8])[0]
         off += 8
-        vec = list(struct.unpack(f"<{dim}f", raw[off:off + dim * 4]))
+        vec = list(struct.unpack(f"<{dim}f", payload[off:off + dim * 4]))
         off += dim * 4
         ids.append(idv)
         vectors.append(vec)
@@ -215,19 +230,52 @@ def _resolve_data_file(bundle_dir: Path, bundle: RuLakeBundle,
     1. ``data_filename`` argument, if given (relative to ``bundle_dir``).
     2. The ``data_ref`` of the bundle, if it parses as ``file://``.
     3. ``bundle_dir / "vectors.ruvec1"`` (this example's convention).
+
+    All three branches enforce containment: the resolved data file MUST
+    live inside ``bundle_dir`` (after symlink resolution). This refuses:
+
+    - ``data_filename = "../../../etc/hostname"`` — relative escape.
+    - ``data_ref = "file:///etc/passwd"`` — absolute escape via a hostile
+      publisher (the witness covers ``data_ref``, so a quiet tamper of an
+      already-published bundle is impossible — but a malicious publisher
+      can still mint a fresh, witness-correct bundle that names an
+      arbitrary local file).
+    - A symlink inside ``bundle_dir`` that points outside it.
+
+    The substrate trust boundary is the bundle dir; everything outside is
+    untrusted regardless of who published the sidecar.
     """
+    bundle_dir_resolved = bundle_dir.resolve()
+
+    def _enforce_contained(candidate: Path, why: str) -> Path:
+        resolved = candidate.resolve()
+        try:
+            resolved.relative_to(bundle_dir_resolved)
+        except ValueError as e:
+            raise CorpusError(
+                f"refusing to load data file outside bundle dir "
+                f"({resolved} is not under {bundle_dir_resolved}); "
+                f"source: {why}"
+            ) from e
+        if not resolved.is_file():
+            raise CorpusError(f"{resolved}: not a regular file (source: {why})")
+        return resolved
+
     if data_filename is not None:
-        return bundle_dir / data_filename
+        candidate = bundle_dir / data_filename
+        return _enforce_contained(candidate, why="data_filename argument")
+
     if bundle.data_ref.startswith("file://"):
-        # ``file://`` URIs are absolute paths on POSIX. Refuse to follow
-        # them OUTSIDE the bundle directory unless the file is named in
-        # the directory we already trust.
-        path = Path(bundle.data_ref[len("file://"):])
-        if path.is_file():
-            return path
+        # ``file://`` URIs are absolute paths on POSIX. We resolve them
+        # and require they land inside the bundle dir — the bundle is the
+        # trust unit, not the URI.
+        candidate = Path(bundle.data_ref[len("file://"):])
+        return _enforce_contained(candidate, why=f"bundle.data_ref={bundle.data_ref!r}")
+
     default = bundle_dir / "vectors.ruvec1"
     if default.is_file():
-        return default
+        return _enforce_contained(default, why="convention vectors.ruvec1")
+
     raise CorpusError(
         f"could not locate the data file for bundle at {bundle_dir}; "
         f"data_ref={bundle.data_ref!r}"

@@ -130,12 +130,12 @@ describe("bundle-publisher HTTP", () => {
 
   it("GET .../table.rulake.json honours If-None-Match (304)", async () => {
     const first = await request(app).get("/bundles/publisher/memories/table.rulake.json");
-    const etag = first.headers.etag;
+    const etag = first.headers.etag as string | undefined;
     expect(etag).toBeDefined();
 
     const second = await request(app)
       .get("/bundles/publisher/memories/table.rulake.json")
-      .set("If-None-Match", etag);
+      .set("If-None-Match", etag!);
     expect(second.status).toBe(304);
     // 304 must not carry a body.
     expect(second.text).toBe("");
