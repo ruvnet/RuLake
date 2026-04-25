@@ -108,7 +108,7 @@ Open source. ❤️ Free forever.
 | 19 | **Per-shard over-request** | `k' = k + ⌈√(k·ln S)⌉` — closes the Weaviate/Elasticsearch data-skew recall gap |
 | 20 | **`search_batch` API** | One lock + one coherence check per N queries; plug-point for future GPU kernels |
 
-**Backends** ([`BackendAdapter` trait](crates/ruvector-rulake/src/backend.rs))
+**Backends** ([`BackendAdapter` trait](src/backend.rs))
 
 | # | Capability | What It Does |
 |---|------------|--------------|
@@ -214,15 +214,37 @@ n=100k, 8 clients × 300 queries, adaptive per-shard rerank.
 - 4-shard adaptive rerank @ D=128: **≥ 85 %**
 - Hadamard rotation vs Haar @ D=128: **1.000 / 1.000** (identical)
 
-See [`crates/ruvector-rulake/BENCHMARK.md`](https://github.com/ruvnet/ruvector/blob/main/crates/ruvector-rulake/BENCHMARK.md) for the full table.
+See [`BENCHMARK.md`](BENCHMARK.md) for the full table.
 
 ---
 
 ## Quick start
 
+### Build from source (the supported path while the crate is pre-publish)
+
+```bash
+git clone --recurse-submodules https://github.com/ruvnet/RuLake.git
+cd RuLake
+./install.sh                                   # checks rustc, inits submodules, cargo build + test
+cargo run --release --bin rulake-demo -- --fast  # smoke-runs the demo in ~5 s
+```
+
+If you forgot `--recurse-submodules`, run `git submodule update --init --recursive` to fetch the vendored
+`ruvector-rabitq` source under `vendor/ruvector/`. See [ADR-001](docs/adrs/ADR-001-standalone-repo-strategy.md)
+for why we vendor instead of taking a `git`/`crates.io` dependency.
+
+### Or run inside Docker (no Rust toolchain required)
+
+```bash
+docker build -t rulake .
+docker run --rm rulake --fast
+```
+
+### As a library dependency
+
 ```toml
 [dependencies]
-ruvector-rulake = "2.2"
+ruvector-rulake = "2.2"  # once published; until then use `git = "https://github.com/ruvnet/RuLake"`
 ```
 
 ```rust
@@ -303,7 +325,7 @@ loop {
 }
 ```
 
-Full example: [`examples/sidecar_daemon.rs`](https://github.com/ruvnet/ruvector/blob/main/crates/ruvector-rulake/examples/sidecar_daemon.rs).
+Full example: [`examples/sidecar_daemon.rs`](examples/sidecar_daemon.rs).
 
 </details>
 
@@ -323,7 +345,7 @@ impl BackendAdapter for ParquetBackend {
 }
 ```
 
-See [`src/fs_backend.rs`](https://github.com/ruvnet/ruvector/blob/main/crates/ruvector-rulake/src/fs_backend.rs) for a 250-line reference implementation.
+See [`src/fs_backend.rs`](src/fs_backend.rs) for a 250-line reference implementation.
 
 </details>
 
@@ -484,7 +506,7 @@ cargo run --release -p ruvector-rulake --bin rulake-demo -- --fast
 **M1 + M1.5 shipped and measured** (2026-04-24)
 
 <details>
-<summary>✅ What's done (83 tests passing, zero unsafe in ruLake)</summary>
+<summary>✅ What's done (43 tests passing — 21 unit + 22 integration — zero unsafe in ruLake)</summary>
 
 - Core abstraction — `BackendAdapter` trait, `VectorCache`, bundle protocol, 3 consistency modes, LRU
 - Two reference backends — `LocalBackend` (in-memory), `FsBackend` (file-based with `ruvec1` format)
@@ -555,8 +577,9 @@ at your option.
 ## Links
 
 - Main development: [ruvnet/ruvector — `crates/ruvector-rulake`](https://github.com/ruvnet/ruvector/tree/main/crates/ruvector-rulake)
-- ADRs: [ADR-155](https://github.com/ruvnet/ruvector/blob/main/docs/adr/ADR-155-rulake-datalake-layer.md) · [ADR-156](https://github.com/ruvnet/ruvector/blob/main/docs/adr/ADR-156-rulake-as-memory-substrate.md) · [ADR-157](https://github.com/ruvnet/ruvector/blob/main/docs/adr/ADR-157-optional-accelerator-plane.md) · [ADR-158](https://github.com/ruvnet/ruvector/blob/main/docs/adr/ADR-158-optional-rotation-and-qvcache-positioning.md)
-- Research: [`docs/research/ruLake/`](https://github.com/ruvnet/ruvector/tree/main/docs/research/ruLake)
-- Benchmarks: [`BENCHMARK.md`](https://github.com/ruvnet/ruvector/blob/main/crates/ruvector-rulake/BENCHMARK.md)
+- ADRs: [ADR-155](docs/adrs/ADR-155-rulake-datalake-layer.md) · [ADR-156](docs/adrs/ADR-156-rulake-as-memory-substrate.md) · [ADR-157](docs/adrs/ADR-157-optional-accelerator-plane.md) · [ADR-158](docs/adrs/ADR-158-optional-rotation-and-qvcache-positioning.md) · [ADR-001 (this repo's standalone strategy)](docs/adrs/ADR-001-standalone-repo-strategy.md)
+- Research: [`docs/research/ruLake/`](https://github.com/ruvnet/ruvector/tree/main/docs/research/ruLake) (lives in upstream RuVector — not vendored)
+- Benchmarks: [`BENCHMARK.md`](BENCHMARK.md)
+- Capability / performance / security review: [`docs/review/`](docs/review/)
 - Powered by Cognitum: [cognitum.one](https://cognitum.one)
 - Website: [ruv.io](https://ruv.io)

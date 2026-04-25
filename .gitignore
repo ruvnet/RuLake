@@ -1,0 +1,33 @@
+# Cargo build artifacts
+/target/
+**/target/
+
+# Cargo lock — kept for binaries (we ship a binary), checked in via separate decision
+# (uncomment the next line if you want to ignore it instead)
+# Cargo.lock
+
+# Rust backup files
+**/*.rs.bk
+
+# IDE
+/.idea/
+/.vscode/
+*.iml
+
+# macOS / Linux junk
+.DS_Store
+*.swp
+*.swo
+*~
+
+# Coverage
+*.profraw
+/coverage/
+/tarpaulin-report.html
+
+# Local rulake artifacts (snapshots, sidecars produced by examples)
+/tmp/rulake-*
+/var/rulake/
+
+# Tooling caches
+.claude-flow/

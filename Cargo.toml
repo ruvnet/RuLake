@@ -1,28 +1,35 @@
 [package]
 name = "ruvector-rulake"
-version.workspace = true
-edition.workspace = true
-rust-version.workspace = true
-license.workspace = true
-authors.workspace = true
-repository.workspace = true
+version = "2.2.0"
+edition = "2021"
+rust-version = "1.77"
+license = "MIT OR Apache-2.0"
+authors = ["Ruvector Team"]
+repository = "https://github.com/ruvnet/RuLake"
 description = "ruLake — vector-native federation intermediary over heterogeneous backends (ADR-155)"
+readme = "README.md"
 
 [[bin]]
 name = "rulake-demo"
 path = "src/bin/rulake-demo.rs"
 
 [dependencies]
-ruvector-rabitq = { path = "../ruvector-rabitq", version = "2.2" }
-serde = { workspace = true }
-serde_json = "1"
-thiserror = { workspace = true }
-# Witness digest for the table.rulake.json bundle (ADR-155). Matches the
-# pin used by `crates/rvf/rvf-crypto`.
+# Sourced from the vendored RuVector submodule (vendor/ruvector). The submodule
+# pins the rabitq revision; bump it via `git submodule update --remote vendor/ruvector`.
+ruvector-rabitq = { path = "vendor/ruvector/crates/ruvector-rabitq" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+# Witness digest for the table.rulake.json bundle (ADR-155).
 sha3 = "0.10"
 hex = "0.4"
 # needed by the bin; tests already pull these via dev-deps.
-rand = { workspace = true }
-rand_distr = { workspace = true }
-# Parallel fan-out for federated search (ADR-155). Workspace-pinned 1.10.
-rayon = { workspace = true }
+rand = "0.8"
+rand_distr = "0.4"
+# Parallel fan-out for federated search (ADR-155).
+rayon = "1.10"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1

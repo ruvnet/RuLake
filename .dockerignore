@@ -1,0 +1,11 @@
+target
+.git
+.github
+docs
+.claude-flow
+.idea
+.vscode
+**/*.swp
+*.profraw
+coverage
+tarpaulin-report.html
