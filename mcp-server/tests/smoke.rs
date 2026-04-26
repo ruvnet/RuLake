@@ -117,6 +117,58 @@ async fn budget_max_results_caps_k() {
     assert_eq!(resp.data.len(), 10, "budget.max_results must cap k");
 }
 
+// ─── v0.7: structured backpressure response (ADR-004 §6) ─────────────
+
+#[tokio::test]
+async fn backpressure_response_carries_advice_block() {
+    use ruvector_rulake_mcp::planner::BackpressureReason;
+    let (lake, _, _) = make_lake(50, 16);
+    let server = RuLakeMcpServer::from_lake(
+        Arc::clone(&lake),
+        "Fresh".to_string(),
+        vec!["local".to_string()],
+        64,
+    )
+    .unwrap();
+    let resp = server.planner().build_degraded_response(
+        "search",
+        BackpressureReason::RateLimitCollection,
+        100,
+    );
+    assert!(resp.data.is_empty(), "degraded → empty data");
+    assert!(resp.decision.degraded, "decision.degraded = true");
+    let advice = resp.decision.degraded_advice.as_ref().expect("advice block present");
+    assert_eq!(advice.reason, "rate_limit_collection");
+    assert!(advice.retry_after_ms > 0);
+    assert!(
+        advice.hints.iter().any(|h| h == "narrow_target"),
+        "rate_limit_collection should suggest narrow_target, got: {:?}",
+        advice.hints
+    );
+}
+
+#[tokio::test]
+async fn backpressure_inflight_cap_carries_inflight_numbers() {
+    use ruvector_rulake_mcp::planner::BackpressureReason;
+    let (lake, _, _) = make_lake(50, 16);
+    let server = RuLakeMcpServer::from_lake(
+        Arc::clone(&lake),
+        "Fresh".to_string(),
+        vec!["local".to_string()],
+        64,
+    )
+    .unwrap();
+    let resp = server.planner().build_degraded_response(
+        "search",
+        BackpressureReason::InflightCap { inflight: 64, cap: 64 },
+        100,
+    );
+    assert!(resp.decision.degraded);
+    let advice = resp.decision.degraded_advice.unwrap();
+    assert!(advice.reason.contains("inflight=64"));
+    assert!(advice.reason.contains("cap=64"));
+}
+
 // ─── v0.4: tools/list capability filter ───────────────────────────────
 
 #[tokio::test]
@@ -328,6 +380,36 @@ async fn verify_intent_refuses_on_missing_bundle() {
         code.contains("WitnessMismatchRefused"),
         "missing bundle should map to WitnessMismatchRefused (fail-closed), got {code}"
     );
+}
+
+#[tokio::test]
+async fn verify_intent_via_backend_returns_real_dim_and_witness() {
+    // v0.7: with via_backend=true, verify reaches through to the
+    // route's BackendAdapter::current_bundle (no disk path required).
+    // For LocalBackend this hands back the in-memory bundle with the
+    // real dim + the canonical Generation::Num generation.
+    let (lake, _, _) = make_lake(100, 32);
+    let server = RuLakeMcpServer::from_lake(
+        Arc::clone(&lake),
+        "Fresh".to_string(),
+        vec!["local".to_string()],
+        64,
+    )
+    .unwrap();
+    let req = serde_json::from_value(serde_json::json!({
+        "intent": "verify",
+        "target": { "collection": "docs" },
+        "verify": { "via_backend": true }
+    }))
+    .unwrap();
+    let resp = server.planner().handle(req).await.expect("ok");
+    assert_eq!(resp.decision.intent, "verify");
+    assert!(
+        resp.provenance.witness_verified,
+        "BackendAdapter::current_bundle returns a freshly-built bundle whose witness verifies"
+    );
+    let witness = resp.provenance.witness.as_ref().expect("witness present");
+    assert_eq!(witness.len(), 64, "SHAKE-256(32) hex");
 }
 
 #[tokio::test]

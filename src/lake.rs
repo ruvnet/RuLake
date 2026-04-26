@@ -155,6 +155,26 @@ impl RuLake {
         self.cache.invalidate(key);
     }
 
+    /// Ask the registered backend for its current bundle. Public
+    /// accessor over `BackendAdapter::current_bundle` so callers
+    /// (notably the MCP server's `intent: "verify"` planner path,
+    /// ADR-004 §4a) can read the bundle without going through
+    /// `publish_bundle`'s file-write side effect.
+    ///
+    /// Returns the bundle synthesized from the backend's authoritative
+    /// state — for `LocalBackend` / `FsBackend` that's an in-memory
+    /// look-up; for `GcsParquetBackend` it's a HEAD + footer read; for
+    /// `IpfsBackend` it's a CID-resolved fetch (or a fast-path local
+    /// synthesis when the operator pre-set the CID).
+    pub fn current_bundle(&self, key: &CacheKey) -> Result<crate::RuLakeBundle> {
+        let backend = self.get_backend(&key.0)?;
+        backend.current_bundle(
+            &key.1,
+            self.cache.rotation_seed(),
+            self.cache.rerank_factor(),
+        )
+    }
+
     /// Publish the current bundle for `(backend, collection)` to `dir`
     /// as `table.rulake.json`. Pairs with `RuLakeBundle::read_from_dir`:
     /// a cache sidecar daemon can watch the target directory and hand

@@ -128,6 +128,22 @@ pub struct ExplainArgs {
     pub include_per_collection_stats: bool,
 }
 
+/// Why the planner had to back off. Drives `DegradedAdvice.reason`
+/// + the retry hint table in `build_degraded_response`.
+#[derive(Debug, Clone, Copy)]
+pub enum BackpressureReason {
+    /// Worker pool inflight cap reached.
+    InflightCap { inflight: usize, cap: usize },
+    /// Per-(transport, principal) rate bucket empty.
+    RateLimitPrincipal,
+    /// Per-(principal, backend, collection) rate bucket empty.
+    RateLimitCollection,
+    /// Process-wide rate bucket empty.
+    RateLimitProcess,
+    /// `budget.max_latency_ms` would be exceeded by the coherence check.
+    BudgetExceeded,
+}
+
 /// Internal — output from the verify planner branch.
 struct VerifyOutcome {
     disk_witness: String,
@@ -251,6 +267,29 @@ pub struct Decision {
     pub budget_cap_ms: u64,
     pub degraded: bool,
     pub refusals: Vec<Refusal>,
+    /// Structured backpressure advice (ADR-004 §6). Present when the
+    /// planner had to degrade the response (rate-limit hit, budget
+    /// exceeded, etc.) so framework-aware agents can adapt instead
+    /// of retry-storming.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub degraded_advice: Option<DegradedAdvice>,
+}
+
+/// `_meta.rulake.degraded` shape from ADR-004 §6. Inline on
+/// `Decision` rather than nested under `_meta` because rmcp's tool
+/// response shape doesn't surface `_meta` cleanly through `Json<T>`;
+/// the closed enum + retry hint is the load-bearing part anyway.
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct DegradedAdvice {
+    /// One of: `rate_limit_principal`, `rate_limit_collection`,
+    /// `rate_limit_process`, `inflight_cap`, `budget_exceeded`.
+    pub reason: String,
+    /// Recommended backoff before retry, in milliseconds.
+    pub retry_after_ms: u32,
+    /// Concrete actions the agent can take to succeed under load.
+    /// Closed list: `reduce_k`, `reduce_batch`, `use_cached_consistency`,
+    /// `narrow_target`, `wait`.
+    pub hints: Vec<String>,
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
@@ -415,6 +454,7 @@ impl Planner {
                 budget_used_ms: elapsed_ms,
                 budget_cap_ms: req.budget.max_latency_ms,
                 degraded: false,
+                degraded_advice: None,
                 refusals: vec![],
             },
         })
@@ -454,56 +494,26 @@ impl Planner {
         let routes_for_run = routes.clone();
         let via_backend = v.via_backend;
         let bundle_dir = v.bundle_dir.clone().map(std::path::PathBuf::from);
-        let rerank_factor = req.budget.max_rerank as usize;
-        let rotation_seed: u64 = 42; // The lake's seed isn't surfaced; use the
-                                     // ADR-155 default. v0.7: thread the lake's
-                                     // configured rotation_seed through.
         let submit = self
             .workers
             .submit(move || -> Result<VerifyOutcome, ruvector_rulake::RuLakeError> {
                 let bundle = if via_backend {
-                    // BackendAdapter path. Picks the first route, looks up
-                    // the registered backend, asks it for the current
-                    // bundle. For IpfsBackend this is the CID-resolved
-                    // bundle; for FsBackend it's the in-memory state.
+                    // v0.7: real BackendAdapter path. Picks the first
+                    // route, calls RuLake::current_bundle (which
+                    // dispatches to the adapter's current_bundle).
+                    // For IpfsBackend this is the CID-resolved bundle;
+                    // for GcsParquetBackend it's a HEAD+footer read;
+                    // for FsBackend / LocalBackend it's an in-memory
+                    // synthesis. The bundle's dim, witness, and
+                    // generation are all real.
                     let (b, c) = routes_for_run.first().ok_or_else(|| {
                         ruvector_rulake::RuLakeError::InvalidParameter(
                             "verify via_backend: no routes resolved".into(),
                         )
                     })?;
-                    let backends = lake.backend_ids();
-                    if !backends.contains(b) {
-                        return Err(ruvector_rulake::RuLakeError::UnknownBackend(b.clone()));
-                    }
-                    // Re-fetch via the adapter. We can't reach
-                    // RuLake's private `get_backend`, so we use a
-                    // small helper: ask the lake for cache_witness_of
-                    // (which it can serve cheaply if the bundle is
-                    // cached); otherwise the cache miss goes through
-                    // ensure_fresh on the next search and the witness
-                    // becomes available. v0.6 returns the cached
-                    // witness directly; v0.7 will add a public
-                    // `RuLake::current_bundle(&key)` accessor.
-                    let cached = lake.cache_witness_of(&(b.clone(), c.clone()));
-                    let witness = cached.ok_or_else(|| {
-                        ruvector_rulake::RuLakeError::InvalidParameter(format!(
-                            "verify via_backend: no cached bundle for {b}/{c} — \
-                             run a search first to prime the cache (v0.7 will reach \
-                             through to BackendAdapter::current_bundle directly)"
-                        ))
-                    })?;
-                    // Synthesize a sparse bundle from the cache pointer.
-                    // dim is unknown to the cache pointer alone; use a
-                    // sentinel and let the audit downstream tell.
-                    ruvector_rulake::RuLakeBundle::new(
-                        format!("cache://{b}/{c}"),
-                        0, // dim sentinel — v0.7 surfaces real dim from cache.dim_of
-                        rotation_seed,
-                        rerank_factor,
-                        ruvector_rulake::Generation::Opaque(witness),
-                    )
+                    lake.current_bundle(&(b.clone(), c.clone()))?
                 } else {
-                    // Disk path (v0.5 default).
+                    // Disk path (back-compat default).
                     let dir = bundle_dir.ok_or_else(|| {
                         ruvector_rulake::RuLakeError::InvalidParameter(
                             "verify intent: either bundle_dir or via_backend=true required".into(),
@@ -596,6 +606,7 @@ impl Planner {
                 budget_used_ms: elapsed_ms,
                 budget_cap_ms: req.budget.max_latency_ms,
                 degraded: false,
+                degraded_advice: None,
                 refusals: vec![],
             },
         })
@@ -656,6 +667,7 @@ impl Planner {
                 budget_used_ms: elapsed_ms,
                 budget_cap_ms: req.budget.max_latency_ms,
                 degraded: false,
+                degraded_advice: None,
                 refusals: vec![],
             },
         })
@@ -674,6 +686,77 @@ impl Planner {
         let mut r = self.build_refusal(reason, code, backends_planned, refusals, start, budget_cap_ms);
         r.decision.intent = intent.to_string();
         r
+    }
+
+    /// Public builder for the structured backpressure response shape
+    /// from ADR-004 §6. The HTTP layer / rate-limit gate calls this
+    /// when the worker pool is at capacity or a rate bucket is empty,
+    /// then turns the resulting QueryResponse into the JSON-RPC
+    /// payload (instead of a bare error). Framework-aware agents read
+    /// `decision.degraded_advice.{reason, retry_after_ms, hints}` to
+    /// adapt.
+    pub fn build_degraded_response(
+        &self,
+        intent: &str,
+        reason: BackpressureReason,
+        budget_cap_ms: u64,
+    ) -> QueryResponse {
+        let (reason_str, retry_after_ms, hints) = match reason {
+            BackpressureReason::InflightCap { inflight, cap } => (
+                format!("inflight_cap inflight={inflight} cap={cap}"),
+                250u32,
+                vec!["wait".into(), "reduce_batch".into()],
+            ),
+            BackpressureReason::RateLimitPrincipal => (
+                "rate_limit_principal".into(),
+                500,
+                vec!["wait".into(), "use_cached_consistency".into()],
+            ),
+            BackpressureReason::RateLimitCollection => (
+                "rate_limit_collection".into(),
+                500,
+                vec!["wait".into(), "narrow_target".into()],
+            ),
+            BackpressureReason::RateLimitProcess => (
+                "rate_limit_process".into(),
+                1000,
+                vec!["wait".into()],
+            ),
+            BackpressureReason::BudgetExceeded => (
+                "budget_exceeded".into(),
+                0,
+                vec!["reduce_k".into(), "use_cached_consistency".into()],
+            ),
+        };
+        QueryResponse {
+            data: vec![],
+            provenance: Provenance {
+                witness: None,
+                witness_verified: false,
+                consistency: self.consistency_label.clone(),
+                served_from: vec![],
+                lineage_id: None,
+            },
+            trust_level: TrustLevel::Unverified,
+            decision: Decision {
+                intent: intent.to_string(),
+                chosen_action: "degraded".into(),
+                reason_code: ReasonCode::BudgetExceededFallbackCache,
+                reason: format!("backpressure: {reason_str}"),
+                backends_planned: vec![],
+                backends_used: vec![],
+                consistency_used: self.consistency_label.clone(),
+                budget_used_ms: 0.0,
+                budget_cap_ms,
+                degraded: true,
+                refusals: vec![],
+                degraded_advice: Some(DegradedAdvice {
+                    reason: reason_str,
+                    retry_after_ms,
+                    hints,
+                }),
+            },
+        }
     }
 
     async fn handle_search(
@@ -805,6 +888,7 @@ impl Planner {
                 budget_used_ms: elapsed_ms,
                 budget_cap_ms: req.budget.max_latency_ms,
                 degraded: false,
+                degraded_advice: None,
                 refusals: vec![],
             },
         })
@@ -935,6 +1019,7 @@ impl Planner {
                 budget_used_ms: start.elapsed().as_secs_f64() * 1000.0,
                 budget_cap_ms,
                 degraded: false,
+                degraded_advice: None,
                 refusals,
             },
         }
