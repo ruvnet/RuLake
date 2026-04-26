@@ -1,20 +1,23 @@
-# ruLake MCP server (ADR-004 v0.1).
+# ruLake MCP server (ADR-004 v0.2).
 #
-# v0.1 scope:
-# - stdio transport only (Streamable HTTP is v0.2)
-# - one public tool: rulake_query with intent=search
+# v0.2 scope:
+# - stdio transport (carried forward from v0.1)
+# - Streamable HTTP transport (--http :PORT)
+# - bearer-token auth on the HTTP path (dev-only flag for public bind)
+# - DNS-rebinding guard via rmcp's allowed_hosts (loopback by default)
+# - one public tool: rulake_query (intent=search; verify/explain/refresh
+#   land in later iterations)
 # - LocalBackend + FsBackend backends from a config file
 # - bounded worker pool via flume + rayon
-# - JSONL audit log to stderr (file output is v0.2)
+# - JSONL audit log to stderr (file output deferred)
 # - witness-fail-closed wherever bundles are touched
-# - parent-process trust (no auth — stdio only in v0.1)
 #
 # Standalone Cargo package per ADR-001 (no root workspace; the parent
 # ruvector-rulake crate is reached via `path = ".."`).
 
 [package]
 name = "ruvector-rulake-mcp"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 authors = ["Ruvector Team"]
@@ -33,10 +36,30 @@ ruvector-rulake = { path = ".." }
 # `server` feature enables the request/response handler scaffolding;
 # `transport-io` enables the stdio transport. Streamable HTTP comes
 # later via the `transport-streamable-http-server` feature.
-rmcp = { version = "1.5", default-features = false, features = ["server", "transport-io", "macros", "schemars"] }
+rmcp = { version = "1.5", default-features = false, features = [
+    "server",
+    "transport-io",
+    "transport-streamable-http-server",
+    "macros",
+    "schemars",
+] }
+
+# Streamable HTTP transport stack — hyper 1.x (matches what rmcp uses
+# internally for `transport-streamable-http-server`).
+hyper = { version = "1", features = ["server", "http1", "http2"] }
+hyper-util = { version = "0.1", features = ["tokio", "server-auto", "service"] }
+http = "1"
+http-body-util = "0.1"
+tower = { version = "0.5", features = ["util"] }
+tower-service = "0.3"
+bytes = "1"
+
+# Constant-time bearer-token compare. The `subtle` crate is the
+# de-facto Rust idiom for timing-safe comparisons.
+subtle = "2"
 
 # Async runtime used by rmcp's stdio transport.
-tokio = { version = "1.39", features = ["rt-multi-thread", "macros", "io-std", "signal", "sync"] }
+tokio = { version = "1.39", features = ["rt-multi-thread", "macros", "io-std", "signal", "sync", "net", "time"] }
 
 # Serialization. serde_json is the wire format; schemars generates
 # the JSON Schema rmcp serves to clients on tools/list.

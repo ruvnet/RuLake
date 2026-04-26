@@ -4,10 +4,11 @@ Implements [ADR-004](../docs/adrs/sdk/ADR-004-rulake-mcp-server.md) — the
 control-plane / decision-layer over [`ruvector-rulake`](..) for
 agent-callable governed memory.
 
-## Status: v0.1 (skeleton)
+## Status: v0.2 (deployable to remote agents)
 
-The first commit lands the architecture and the public-surface tool;
-later versions fill in the rest of the ADR scope.
+v0.1 landed the architecture; v0.2 makes it deployable to remote
+agents (Streamable HTTP transport + bearer auth with the
+embarrassing-flag dev-only guards from ADR-004 §5).
 
 | Capability | v0.1 | v0.2 | v0.3 |
 |---|:---:|:---:|:---:|
@@ -19,11 +20,13 @@ later versions fill in the rest of the ADR scope.
 | TOML config (`mcp.toml`) — backends, consistency, workers | ✅ | ✅ | ✅ |
 | Witness-fail-closed for bundle reads         | ✅ | ✅ | ✅ |
 | Streamable HTTP transport                    |    | ✅ | ✅ |
-| OAuth 2.1 + bearer + mTLS                    |    | ✅ | ✅ |
-| Replay protection (`MCP-Request-Id` + session binding) | | ✅ | ✅ |
-| Layered rate limiting (`governor`)           |    | ✅ | ✅ |
-| Intents `verify` / `explain`                 |    | ✅ | ✅ |
-| Resources (`rulake://stats`, `rulake://bundle/...`) | | ✅ | ✅ |
+| Bearer-token auth (dev-only, embarrassing-flag for public bind) | | ✅ | ✅ |
+| DNS-rebinding guard (rmcp `allowed_hosts`)   |    | ✅ | ✅ |
+| OAuth 2.1 + mTLS                             |    |    | ✅ |
+| Replay protection (`MCP-Request-Id` + session binding) | | | ✅ |
+| Layered rate limiting (`governor`)           |    |    | ✅ |
+| Intents `verify` / `explain`                 |    |    | ✅ |
+| Resources (`rulake://stats`, `rulake://bundle/...`) | | | ✅ |
 | Mutation tools (`publish`, `admin` capabilities) |  |    | ✅ |
 | `intent: "refresh"`                          |    |    | ✅ |
 | JSONL audit file (full §7 schema)            |    |    | ✅ |
@@ -44,11 +47,31 @@ a sibling Cargo package — no root workspace; the parent
 ## Run
 
 ```bash
-# v0.1 — stdio only.
+# stdio (parent-process trust, default).
 ./target/release/rulake-mcp stdio --config tests/fixtures/mcp.toml
+
+# Streamable HTTP on loopback, no auth (default for local dev).
+./target/release/rulake-mcp http --bind 127.0.0.1:7440 --auth none
+
+# Streamable HTTP with bearer auth (still loopback by default).
+echo "my-dev-token" > /tmp/rulake-token
+./target/release/rulake-mcp http --bind 127.0.0.1:7440 \
+    --auth bearer --bearer-token-file /tmp/rulake-token
+
+# Bind public — refused unless explicitly opted-in (ADR-004 §5):
+./target/release/rulake-mcp http --bind 0.0.0.0:7440 --auth none
+# Error: refusing to bind 0.0.0.0:7440 with --auth none — pass
+#        --insecure-allow-no-auth or use --bind 127.0.0.1:* (ADR-004 §5)
+
+./target/release/rulake-mcp http --bind 0.0.0.0:7440 \
+    --auth bearer --bearer-token-file /tmp/rulake-token
+# Error: refusing to bind 0.0.0.0:7440 with --auth bearer — bearer is
+#        dev-only (static tokens leak once → permanent access). Pass
+#        --allow-bearer-on-public to override or migrate to OAuth (ADR-004 §5)
 ```
 
-Wire to an MCP client (e.g. Claude Desktop's `claude_desktop_config.json`):
+Wire to an MCP client over stdio (e.g. Claude Desktop's
+`claude_desktop_config.json`):
 
 ```json
 {
@@ -61,15 +84,40 @@ Wire to an MCP client (e.g. Claude Desktop's `claude_desktop_config.json`):
 }
 ```
 
+Wire to a remote MCP client over Streamable HTTP (Cursor / Cline /
+Continue with `http_url`; agentic-flow with the `streamable-http`
+transport):
+
+```json
+{
+  "mcpServers": {
+    "rulake": {
+      "transport": "streamable-http",
+      "url": "https://rulake.example.com/mcp",
+      "headers": { "Authorization": "Bearer <your-token>" }
+    }
+  }
+}
+```
+
 ## Test
 
 ```bash
 cargo test --release
-# 4/4 pass:
-#   search_one_returns_top_k_via_planner
-#   refuses_on_unknown_backend_with_policy_refused_allowlist
-#   budget_max_results_caps_k
-#   decision_trace_has_required_fields_for_audit
+# 11/11 pass:
+#   tests/smoke.rs:
+#     search_one_returns_top_k_via_planner
+#     refuses_on_unknown_backend_with_policy_refused_allowlist
+#     budget_max_results_caps_k
+#     decision_trace_has_required_fields_for_audit
+#   tests/http_e2e.rs:
+#     http_serve_starts_on_loopback_with_no_auth
+#     http_refuses_bearer_on_public_without_override
+#     http_refuses_no_auth_on_public_without_override
+#     bearer_auth_accepts_correct_token
+#     bearer_auth_rejects_wrong_token
+#     bearer_auth_rejects_missing_header
+#     bearer_auth_rejects_wrong_scheme
 ```
 
 ## Design
