@@ -15,13 +15,19 @@ const NAV_GLYPHS = {
 };
 
 function Sidebar({ route, setRoute, currentWitness, currentBundle, className = '' }) {
+  // Live counts from IndexedDB — make the sidebar badges reflect what's
+  // actually persisted, not fixture numbers.
+  const [auditRows] = (window.useRuStore || (() => [[]]))('audit');
+  const [connRows]  = (window.useRuStore || (() => [[]]))('connections');
+  const [bundleRows] = (window.useRuStore || (() => [[]]))('bundles');
+  const auditTotal = (auditRows.length + (window.RULAKE?.AUDIT?.length || 0));
   const items = [
-    { id: 'stats',      label: 'Stats',      sub: 'live · qps 28.4',   glyph: NAV_GLYPHS.stats,      badge: 'live',      badgeKind: 'live' },
-    { id: 'playground', label: 'Playground', sub: 'rulake_query',      glyph: NAV_GLYPHS.playground, badge: '',          badgeKind: '' },
-    { id: 'browse',     label: 'Backends',   sub: '3 lakes · 7 colls', glyph: NAV_GLYPHS.browse,     badge: '3',         badgeKind: 'count' },
-    { id: 'bundle',     label: 'Bundle',     sub: 'witness · gen-7741',glyph: NAV_GLYPHS.bundle,     badge: 'WARM',      badgeKind: 'warm' },
-    { id: 'audit',      label: 'Audit',      sub: 'jsonl · tail',      glyph: NAV_GLYPHS.audit,      badge: '12',        badgeKind: 'count' },
-    { id: 'connect',    label: 'Connect',    sub: 'mcp · 2025-03-26',  glyph: NAV_GLYPHS.connect,    badge: 'JWT',       badgeKind: 'auth' },
+    { id: 'stats',      label: 'Stats',      sub: 'live · qps 28.4',   glyph: NAV_GLYPHS.stats,      badge: 'live',                  badgeKind: 'live' },
+    { id: 'playground', label: 'Playground', sub: 'rulake_query',      glyph: NAV_GLYPHS.playground, badge: '',                      badgeKind: '' },
+    { id: 'browse',     label: 'Backends',   sub: '3 lakes · 7 colls', glyph: NAV_GLYPHS.browse,     badge: String(3 + bundleRows.length), badgeKind: 'count' },
+    { id: 'bundle',     label: 'Bundle',     sub: 'witness · gen-7741',glyph: NAV_GLYPHS.bundle,     badge: 'WARM',                  badgeKind: 'warm' },
+    { id: 'audit',      label: 'Audit',      sub: 'jsonl · tail',      glyph: NAV_GLYPHS.audit,      badge: String(auditTotal),      badgeKind: 'count' },
+    { id: 'connect',    label: 'Connect',    sub: connRows.length > 0 ? `mcp · ${connRows.length} saved` : 'mcp · 2025-03-26', glyph: NAV_GLYPHS.connect, badge: 'JWT', badgeKind: 'auth' },
   ];
 
   const resources = [
