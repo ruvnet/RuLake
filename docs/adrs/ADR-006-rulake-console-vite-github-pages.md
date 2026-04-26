@@ -196,6 +196,90 @@ We will:
     vector-database product offers.** ADR-006 commits to making
     this experience real in v0.1.
 
+10. **Tri-mode UI: demo / WASM-local / live, all from one Vite build.**
+    Decision (3) is upgraded — between demo and live we add a
+    **WASM-local** mode that turns the console into a fully-featured,
+    in-browser ruLake substrate with no MCP server required. This is
+    how a developer with no infrastructure can use ruLake as their
+    agent's actual memory layer (LangChain.js / browser agents /
+    Cloudflare-Workers RAG / Bun servers). The pieces are already
+    available; the console wires them together.
+
+    | Capability | Browser primitive | Source |
+    |---|---|---|
+    | Persistent state (queries, bundles, audit, settings) | **IndexedDB** | `ui/src/lib/store.js` (already shipping; `RuStore` over a single DB with 5 stores) |
+    | Vector cache + brute-force search | **WASM** | `rulake-wasm@2.2.1` — `searchBruteForceL2`, exact L2, recall = 1.0, capped at `min(n, 4096)` |
+    | Witness recompute + bundle verify | **WASM** | `rulake-wasm@2.2.1` — `verifyBundleJson`, `computeWitness` (SHAKE-256, byte-exact match with the host crate) |
+    | Heavy compute off the main thread (embed, batch search, prime) | **Web Workers** | `ui/src/workers/embed.worker.ts`, `ui/src/workers/search.worker.ts` — postMessage-shaped, the wasm module instantiated in the worker so the main thread stays at 60 fps |
+    | Vector field, sparkline, histogram, score distribution | **WebGL** (via plain `<canvas>` + `gl.drawArrays`) | `ui/src/components/VectorFieldGL.jsx` — replaces the SVG vector field for ≥10 k-vector renders; SVG fallback when WebGL unavailable |
+    | Embedding generation | **OpenAI** (cloud) / **Cohere** / **Voyage** / **local Web-LLM via WebGPU** | `ui/src/lib/embed/` — each provider behind a `EmbedProvider` interface; Web-LLM optional dynamic import |
+    | Cloud bundle storage | **GCS HTTP** / **S3 fetch** with signed URLs | `ui/src/lib/storage/cloud.ts` — read-only by default; CORS-allow-listed buckets |
+    | **IPFS bundle distribution** | **kubo HTTP RPC** + **gateway fallback** + **HTTP gateway** | `ui/src/lib/storage/ipfs.ts` — mirrors `ipfs-backend/`'s three modes (kubo / gateway-only / kubo + gateway-fallback), publishes `table.rulake.json` sidecars by CIDv1, witness ↔ CID per ADR-005 §3 |
+    | Settings UI for all of the above | **Existing Connect / Tweaks panel** | `ui/src/components/screens.jsx` Connect screen + a new "Storage" tab |
+
+    The mode picker on the Connect screen becomes:
+
+    1. **Demo** — local fixtures only, no I/O. The 30-second pitch.
+    2. **WASM-local** — the user's real bundles, persisted in
+       IndexedDB, served from the browser. Optional cloud + IPFS for
+       storage. **No server.** This is the new default for "I want
+       to use ruLake but don't want to host anything."
+    3. **Live (MCP)** — connect to a remote `rulake-mcp` server (the
+       original decision (3) live mode).
+
+    The three modes share every screen; only the data source differs.
+    Witness verification is identical and load-bearing across all
+    three (decision (8) holds).
+
+    **Settings surface (new "Storage" tab on Connect screen):**
+
+    - **Embedding provider** — radio: OpenAI · Cohere · Voyage ·
+      Web-LLM (local, WebGPU) · None (paste vectors only). API keys
+      stay in JS memory; only a `lastUsed` timestamp persists to
+      IndexedDB.
+    - **Cloud bundle storage** — toggle: GCS bucket / S3 bucket /
+      none. Signed-URL prefix (read-only by default).
+    - **IPFS** — toggle: enabled / disabled. Sub-radio: kubo HTTP
+      RPC (with URL field, default `http://127.0.0.1:5001`),
+      gateway-only (with gateway URL, default
+      `https://w3s.link`), or kubo + gateway-fallback. The default
+      ships disabled to avoid a broken first-load against a missing
+      kubo daemon.
+    - **WebGL** — toggle: prefer WebGL renderers (default on if
+      `WebGL2RenderingContext` exists, off otherwise; SVG fallback
+      always present).
+    - **Web Workers** — toggle: off the main thread (default on if
+      `typeof Worker !== 'undefined'`).
+    - **Cache size cap** — slider: max IndexedDB bytes per origin
+      (default 200 MiB; soft cap with LRU eviction in `RuStore`).
+
+    **Mode-specific availability matrix** (what each screen does in each mode):
+
+    | Screen | Demo | WASM-local | Live |
+    |---|---|---|---|
+    | Stats | fixture metrics | local IndexedDB rollup + wasm compute | live `rulake://stats` |
+    | Playground | fixture brute-force | wasm `searchBruteForceL2` over user data | `rulake_query` MCP tool |
+    | Backends | 3 fixture lakes | local "lakes" = IndexedDB stores + cloud + IPFS | `rulake_list_collections` (server gap, ADR-006 §V) |
+    | Bundle | fixture bundle + verify | user bundles, witness recompute | server-side bundle + verify |
+    | Audit | fixture JSONL | local IndexedDB audit ring | `rulake://audit/tail` (server gap) |
+    | Connect / Storage | mode picker | full settings | endpoint config |
+
+    **What WASM-local does NOT do:** federated cross-cluster search
+    (single-process scope by definition), peer-to-peer cache sharing
+    beyond IPFS-published bundles (would need WebRTC + a witness
+    discovery protocol — a v0.3 idea), JWT-issuer-as-trust-anchor
+    (no IdP without a server). These are correct exclusions, not
+    bugs — the WASM-local promise is "ruLake, in your browser, for
+    your data, with cryptographic provenance, no infra."
+
+    **Why this matters for adoption.** Today a developer who finds
+    ruLake on Hacker News has to install Rust, pull a submodule,
+    run a server, configure auth, point an MCP client at it. With
+    WASM-local mode they paste embeddings into Playground, see the
+    witness compute in their tab, hit "Pin bundle to IPFS", and the
+    bundle is live for any agent that knows the CID — in 60 seconds,
+    on any device, with no install.
+
 ---
 
 ## Consequences
@@ -223,6 +307,13 @@ We will:
 - **The cryptographic claim is in-product, not in-readme.** The
   user can see the witness recomputed in their browser; trust comes
   from the experience, not the marketing.
+- **WASM-local mode (decision 10) collapses the "I want to try
+  this with my data" funnel from `cargo install` to `paste keys`.**
+  ruLake stops being a server you have to host and becomes a
+  library agents can adopt the way they adopt LangChain — but with
+  cryptographic provenance the others can't offer. IndexedDB +
+  Web Workers + WebGL + WASM is enough substrate for an entire
+  class of edge-agent applications without any backend at all.
 
 ### Negative
 
@@ -245,6 +336,30 @@ We will:
   lands is `mcp-server v0.9 — rulake_list_collections + audit/tail
   resource + CORS allow-list`, which unblocks Browse and Audit live
   modes simultaneously.
+- **WASM-local mode owns the user's API keys.** The OpenAI /
+  Cohere / Voyage embedding key sits in JS memory — never
+  persisted, never sent anywhere except the embedding provider —
+  but a hostile browser extension or a tampered console asset
+  could exfiltrate. Mitigations: CSP `connect-src` allow-listing
+  the embedding endpoints (already in `index.html`), the witness
+  chain verifies the console build itself when published as an
+  IPFS-pinned bundle, and the welcome modal documents the trust
+  boundary in plain language. The user owns the trade-off.
+- **WebGL renderers add a fallback path to maintain.** Every WebGL
+  component (VectorFieldGL, HistogramGL) ships an SVG fallback for
+  hosts without `WebGL2RenderingContext`. This is two
+  implementations of the same chart. Acceptable — the WebGL win at
+  ≥10 k-vector renders is real, and the SVG fallback is the
+  artifact's existing implementation.
+- **Web Worker boundary is a marshalling cost.** Posting a
+  Float32Array to the worker is zero-copy via `transferable`s, but
+  the result has to be cloned back. At our problem sizes (≤4 k
+  hits) the cost is sub-millisecond; we measure and document the
+  threshold above which workers actually help.
+- **IPFS optional path adds a footgun**: a default-on kubo URL
+  would 404 noisily for every visitor without a local daemon. We
+  ship IPFS disabled by default; the welcome modal points at a
+  three-line "enable IPFS" walkthrough.
 - **Demo mode requires us to ship a small fixture vector set in
   the static bundle** (a few hundred random unit vectors of the
   appropriate dimensions) so `searchBruteForceL2` has something to

@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ruLake Console · Verifiable Vector Memory for AI Agents · MCP-Native</title>
+
+  <meta name="description" content="ruLake Console — operator's lens for ruLake, the MCP-native verifiable vector cache for AI agents. Watch queries, inspect SHAKE-256 witnesses, audit honest refusals, and tune cache policy across federated lakes (S3, GCS, BigQuery, Parquet). ~1ms queries, 32× compression, zero-cost open source." />
+  <meta name="keywords" content="ruLake, RuVector, MCP server, Model Context Protocol, vector cache, vector database alternative, AI agent memory, RAG infrastructure, RaBitQ, SHAKE-256 witness, federated vector search, verifiable retrieval, agent memory substrate, Claude Desktop MCP, Cursor MCP, Cline MCP, agentic-flow, embeddings cache, semantic search, lakehouse vector search" />
+  <meta name="author" content="rUv · ruv.io" />
+  <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large" />
+  <meta name="theme-color" content="#0a0e14" />
+  <link rel="canonical" href="https://ruvnet.github.io/RuLake/" />
+
+  <!-- Defense-in-depth CSP. wasm-unsafe-eval needed for rulake-wasm. -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://*.openai.com http://localhost:* http://127.0.0.1:* https://registry.npmjs.org; object-src 'none'; base-uri 'none'; form-action 'none'" />
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="ruLake" />
+  <meta property="og:title" content="ruLake Console — Verifiable Vector Memory for AI Agents" />
+  <meta property="og:description" content="MCP-native cache that gives AI agents fast, trustworthy memory across S3, GCS, BigQuery, and Parquet — without standing up a vector database. ~1ms queries · SHAKE-256 witnesses · honest refusals." />
+  <meta property="og:url" content="https://ruvnet.github.io/RuLake/" />
+  <meta property="og:image" content="https://ruvnet.github.io/RuLake/og.png" />
+  <meta property="og:image:alt" content="ruLake Console — agent memory dashboard with witness verification" />
+
+  <!-- Twitter / X -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="ruLake — Verifiable Vector Memory for AI Agents" />
+  <meta name="twitter:description" content="MCP-native vector cache. ~1ms queries, 32× compression, witness-verified, refuses on stale data. Open source." />
+  <meta name="twitter:image" content="https://ruvnet.github.io/RuLake/og.png" />
+  <meta name="twitter:creator" content="@ruvnet" />
+
+  <!-- JSON-LD: SoftwareApplication -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "ruLake",
+    "alternateName": "ruLake Console",
+    "applicationCategory": "DeveloperApplication",
+    "applicationSubCategory": "AI Infrastructure · Vector Cache · MCP Server",
+    "operatingSystem": "Linux, macOS, Windows, Browser, Cloudflare Workers, Deno, Bun",
+    "url": "https://ruvnet.github.io/RuLake/",
+    "downloadUrl": "https://github.com/ruvnet/RuLake",
+    "license": "https://opensource.org/licenses/MIT",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+    "creator": { "@type": "Person", "name": "rUv", "url": "https://ruv.io" }
+  }
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.jsx"></script>
+</body>
+</html>
