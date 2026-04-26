@@ -1,0 +1,65 @@
+# ruLake Python SDK — PEP 517 build via maturin (ADR-002).
+#
+# Build a wheel:    maturin build --release
+# Build + install:  maturin develop --release
+# Build sdist:      maturin sdist
+# Run tests:        pytest tests/
+
+[build-system]
+requires = ["maturin>=1.5,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "ruvector-rulake"
+version = "2.2.0"
+description = "ruLake — vector-native cache + federation intermediary, Python bindings"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT OR Apache-2.0" }
+authors = [{ name = "Ruvector Team" }]
+keywords = ["vector", "search", "ann", "rabitq", "cache", "datalake", "rag"]
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License",
+    "Topic :: Database",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "numpy>=1.21",
+]
+
+[project.urls]
+Homepage   = "https://github.com/ruvnet/RuLake"
+Repository = "https://github.com/ruvnet/RuLake"
+Issues     = "https://github.com/ruvnet/RuLake/issues"
+
+[project.optional-dependencies]
+test = ["pytest>=7", "pytest-asyncio>=0.21"]
+
+[tool.maturin]
+# The native module's import name. The pure-Python wrapper at
+# python_src/rulake/__init__.py re-exports from rulake._rulake.
+module-name = "rulake._rulake"
+features = ["pyo3/extension-module"]
+# Pure-Python source tree shipped alongside the .so/.pyd. Holds the
+# user-facing __init__.py, type stubs, and py.typed marker.
+python-source = "python_src"
+
+# sdist must include the parent crate sources (path-dep) and the
+# vendored rabitq submodule the parent depends on. Without these
+# `pip install <sdist>` cannot build in an air-gapped environment.
+include = [
+    { path = "../src/**/*.rs",                                  format = "sdist" },
+    { path = "../Cargo.toml",                                   format = "sdist" },
+    { path = "../Cargo.lock",                                   format = "sdist" },
+    { path = "../vendor/ruvector/Cargo.toml",                   format = "sdist" },
+    { path = "../vendor/ruvector/Cargo.lock",                   format = "sdist" },
+    { path = "../vendor/ruvector/crates/ruvector-rabitq/**/*",  format = "sdist" },
+]

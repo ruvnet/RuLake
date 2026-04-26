@@ -1,0 +1,43 @@
+# ruLake — Python SDK (PyO3 binding)
+#
+# Implements ADR-002. Standalone Cargo package — does not declare a
+# workspace; cargo discovers the parent ruvector-rulake crate via the
+# `path = ".."` dep, and the vendored ruvector-rabitq via that crate's
+# own dep on `vendor/ruvector/...` (ADR-001).
+#
+# Build:  maturin develop --release
+# Test:   cd .. && python -m pytest python/tests
+[package]
+name = "ruvector-rulake-py"
+version = "2.2.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+authors = ["Ruvector Team"]
+repository = "https://github.com/ruvnet/RuLake"
+description = "Python bindings for ruLake — vector cache + federation intermediary"
+publish = false
+
+[lib]
+# napi-rs / pyo3 both want a `cdylib`. The Python module's import name
+# is `_rulake` (see pyproject [tool.maturin].module-name) — the pure-
+# Python wrapper at python_src/rulake/__init__.py re-exports from it.
+name = "_rulake"
+crate-type = ["cdylib"]
+
+[dependencies]
+# The cache + router crate one directory up. This is the whole point —
+# every `pyo3` wrapper here is a thin shim over the public Rust surface.
+ruvector-rulake = { path = ".." }
+# PyO3 — abi3-py39 keeps one wheel working across CPython 3.9–3.13.
+# The `extension-module` feature is required when building a Python
+# extension (otherwise we'd link libpython at build time, breaking
+# manylinux wheels).
+pyo3 = { version = "0.22", features = ["abi3-py39", "extension-module"] }
+# numpy — PyArray + .as_slice()? for zero-copy borrows. Tracks pyo3 0.22.
+numpy = "0.22"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true

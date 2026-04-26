@@ -327,21 +327,30 @@ SDK targets and triple the wheel matrix. Add on demand.
 The Rust `RuLakeError` enum maps to a Python exception hierarchy
 rooted at `rulake.RuLakeError(Exception)`:
 
-| Rust variant | Python class | Inherits |
-|---|---|---|
-| `RuLakeError::BackendNotFound` | `rulake.BackendNotFoundError` | `LookupError, RuLakeError` |
-| `RuLakeError::CollectionNotFound` | `rulake.CollectionNotFoundError` | `LookupError, RuLakeError` |
-| `RuLakeError::DimensionMismatch` | `rulake.DimensionMismatchError` | `ValueError, RuLakeError` |
-| `RuLakeError::InvalidParameter` | `rulake.InvalidParameterError` | `ValueError, RuLakeError` |
-| `RuLakeError::Io` | `rulake.IoError` | `OSError, RuLakeError` |
-| `RuLakeError::Witness` | `rulake.WitnessError` | `RuLakeError` |
-| `RuLakeError::Backend(s)` | `rulake.BackendError` | `RuntimeError, RuLakeError` |
+| Rust variant | Python class |
+|---|---|
+| `RuLakeError::UnknownBackend` | `rulake.BackendNotFoundError` |
+| `RuLakeError::UnknownCollection` | `rulake.CollectionNotFoundError` |
+| `RuLakeError::DimensionMismatch` | `rulake.DimensionMismatchError` |
+| `RuLakeError::InvalidParameter` | `rulake.InvalidParameterError` |
+| `RuLakeError::Backend { .. }` | `rulake.BackendError` |
+| `RuLakeError::Rabitq(_)` | `rulake.RuLakeError` (base) |
 
-Multiple-inheritance from a stdlib exception (`LookupError`, `ValueError`,
-`OSError`) is deliberate: it lets users write idiomatic
-`except KeyError:` / `except ValueError:` over our errors when they
-don't care about the ruLake-specific class, while still getting a
-ruLake-specific class when they do.
+All typed subclasses inherit from `rulake.RuLakeError`, so
+`except RuLakeError:` is the catch-all idiom and
+`except DimensionMismatchError:` discriminates.
+
+**v1 ships single inheritance.** The original ADR draft proposed
+multi-inheritance from stdlib bases (`LookupError`, `ValueError`,
+`OSError`) so idiomatic `except KeyError:` / `except ValueError:` could
+catch our errors without learning ruLake-specific names. PyO3 0.22's
+`create_exception!` macro caches the exception class on the Rust side
+at module load, so monkey-patching the Python class slot in
+`__init__.py` after import does not affect what the binding raises.
+Building a multi-inherited class via `PyType::new_with_qualname` from
+inside the Rust binding is doable but adds non-trivial complexity to
+the boilerplate of every variant. Reopened as a v1.5 question if a
+real user files a "this is verbose to catch" issue.
 
 ## Alternatives considered
 

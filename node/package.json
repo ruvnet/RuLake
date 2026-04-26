@@ -1,0 +1,67 @@
+{
+  "name": "@ruvector/rulake",
+  "version": "2.2.0",
+  "description": "ruLake — vector cache + federation intermediary, Node.js bindings (ADR-003)",
+  "type": "module",
+  "main": "index.cjs",
+  "module": "index.mjs",
+  "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.mjs",
+      "require": "./index.cjs"
+    }
+  },
+  "files": [
+    "index.mjs",
+    "index.cjs",
+    "index.d.ts",
+    "binding.cjs",
+    "rulake.linux-x64-gnu.node",
+    "rulake.linux-arm64-gnu.node",
+    "rulake.darwin-x64.node",
+    "rulake.darwin-arm64.node",
+    "rulake.win32-x64-msvc.node"
+  ],
+  "engines": {
+    "node": ">= 18"
+  },
+  "license": "MIT OR Apache-2.0",
+  "author": "Ruvector Team",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ruvnet/RuLake"
+  },
+  "keywords": [
+    "vector",
+    "search",
+    "ann",
+    "rabitq",
+    "cache",
+    "datalake",
+    "rag"
+  ],
+  "scripts": {
+    "build": "napi build --platform --release",
+    "build:debug": "napi build --platform",
+    "test": "node --test __test__/*.test.mjs",
+    "prepublishOnly": "node -e \"if (!require('fs').existsSync('../vendor/ruvector/Cargo.toml')) { console.error('vendor/ruvector submodule missing — run git submodule update --init --recursive (ADR-001)'); process.exit(1); }\""
+  },
+  "napi": {
+    "name": "rulake",
+    "triples": {
+      "defaults": false,
+      "additional": [
+        "x86_64-unknown-linux-gnu",
+        "aarch64-unknown-linux-gnu",
+        "x86_64-apple-darwin",
+        "aarch64-apple-darwin",
+        "x86_64-pc-windows-msvc"
+      ]
+    }
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^2.18.4"
+  }
+}

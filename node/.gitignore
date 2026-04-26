@@ -1,0 +1,19 @@
+# Rust build artifacts
+target/
+
+# Native binaries — produced by `cargo build` or `napi build`. CI publishes
+# them as platform-specific @ruvector/rulake-<triple> sub-packages.
+*.node
+*.so
+*.dylib
+*.dll
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log
+
+# Project-local agent state
+.claude-flow/

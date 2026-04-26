@@ -1,0 +1,21 @@
+# Rust build artifacts
+target/
+
+# Python build / cache
+*.pyc
+__pycache__/
+.pytest_cache/
+*.egg-info/
+.venv/
+venv/
+dist/
+build/
+
+# Maturin output
+*.abi3.so
+*.so
+*.pyd
+*.dylib
+
+# Project-local agent state
+.claude-flow/

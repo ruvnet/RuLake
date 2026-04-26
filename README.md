@@ -349,6 +349,196 @@ See [`src/fs_backend.rs`](src/fs_backend.rs) for a 250-line reference implementa
 
 </details>
 
+### Python — `pip install ruvector-rulake`
+
+PyO3 bindings live in [`python/`](python/). Wheels (cp39+, manylinux_2_28 / macOS / Windows) per [ADR-002](docs/adrs/sdk/ADR-002-python-sdk.md).
+
+```python
+import numpy as np
+import rulake
+
+lake = rulake.RuLake(rerank_factor=20, rotation_seed=42) \
+    .with_consistency(rulake.Consistency.eventual(ttl_ms=5_000))
+
+be = rulake.LocalBackend("local")
+be.put_collection("docs",
+                  ids=np.arange(10_000, dtype=np.uint64),
+                  vectors=np.random.randn(10_000, 768).astype(np.float32))
+lake.register_backend(be)
+
+q = np.random.randn(768).astype(np.float32)
+for hit in lake.search_one("local", "docs", q, k=10):
+    print(hit.backend, hit.collection, hit.id, hit.score)
+
+print("hit_rate:", lake.cache_stats().hit_rate())
+```
+
+<details>
+<summary>🐍 Python — full usage, conventions, build</summary>
+
+**Build from source** (until wheels are on PyPI):
+
+```bash
+git clone --recurse-submodules https://github.com/ruvnet/RuLake
+cd RuLake/python
+python -m venv .venv && source .venv/bin/activate
+pip install maturin pytest numpy
+maturin develop --release      # builds + installs the _rulake extension
+pytest tests/ -v               # 14/14 smoke tests
+```
+
+**Vector conventions** — vectors are `np.ndarray[float32]`, IDs are `np.ndarray[uint64]`, both C-contiguous. The binding borrows zero-copy via `PyReadonlyArray1<f32>::as_slice()`. Non-contiguous or wrong-dtype arrays raise `ValueError` rather than silently copying — the silent-copy bug is the regression this binding exists to prevent (ADR-002 §2).
+
+**Concurrency** — every search / prime / publish / refresh / save / warm path releases the GIL via `py.allow_threads`. Use `concurrent.futures.ThreadPoolExecutor` for parallel queries; the underlying Rust crate is `Send + Sync` and the RaBitQ scan runs lock-free under contention (8–12× lift on `BENCHMARK.md`'s "concurrent clients" block).
+
+**Error hierarchy** — single base `rulake.RuLakeError`. Typed subclasses discriminate:
+
+```python
+try:
+    lake.search_one("nope", "docs", q, k=10)
+except rulake.BackendNotFoundError as e:
+    ...                       # specific
+except rulake.RuLakeError as e:
+    ...                       # catch-all
+```
+
+| Rust variant                     | Python class                          |
+|----------------------------------|---------------------------------------|
+| `RuLakeError::UnknownBackend`    | `rulake.BackendNotFoundError`         |
+| `RuLakeError::UnknownCollection` | `rulake.CollectionNotFoundError`      |
+| `RuLakeError::DimensionMismatch` | `rulake.DimensionMismatchError`       |
+| `RuLakeError::InvalidParameter`  | `rulake.InvalidParameterError`        |
+| `RuLakeError::Backend { .. }`    | `rulake.BackendError`                 |
+
+**Bundle round-trip + warm-restart**:
+
+```python
+# Snapshot a primed cache.
+lake.save_cache_to_dir("local", "docs", "/var/rulake/snap/")
+lake.publish_bundle("local", "docs", "/var/rulake/snap/")
+
+# Reopen elsewhere — no backend RTT, byte-exact results.
+fresh = rulake.RuLake(20, 42).with_consistency(rulake.Consistency.frozen())
+n = fresh.warm_from_dir("local", "docs", "/var/rulake/snap/")
+```
+
+**Type-checked editor support** — `py.typed` + `_rulake.pyi` ship in the wheel. mypy / pyright catch dim/dtype errors at edit time.
+
+**Not in v1** (see ADR-002 §"Open questions"): native async API (use `ThreadPoolExecutor`), Python-implemented `BackendAdapter`, HTTP client variant.
+
+</details>
+
+### Node.js / TypeScript — `npm install @ruvector/rulake`
+
+napi-rs bindings live in [`node/`](node/). Per-platform `.node` binaries via npm `optionalDependencies` (Prisma / next-swc pattern), per [ADR-003](docs/adrs/sdk/ADR-003-nodejs-typescript-sdk.md).
+
+```ts
+import { RuLake, LocalBackend, Consistency } from "@ruvector/rulake";
+
+const lake = new RuLake(20, 42n)
+    .withConsistency(Consistency.eventual(5_000));
+
+const N = 10_000, D = 768;
+const ids = new BigInt64Array(N);
+for (let i = 0; i < N; i++) ids[i] = BigInt(i);
+const vectors = new Float32Array(N * D);   // fill with embeddings...
+
+const be = new LocalBackend("local");
+await be.putCollection("docs", ids, vectors, D);
+lake.registerLocalBackend(be);
+
+const q = new Float32Array(D);
+for (const hit of await lake.searchOne("local", "docs", q, 10)) {
+    console.log(hit.backend, hit.collection, hit.id /* bigint */, hit.score);
+}
+console.log("hitRate:", lake.cacheStats().hitRate);
+```
+
+<details>
+<summary>🟢 Node.js / TypeScript — full usage, conventions, build</summary>
+
+**Build from source** (until binaries are on npm):
+
+```bash
+git clone --recurse-submodules https://github.com/ruvnet/RuLake
+cd RuLake/node
+cargo build --release
+cp target/release/libruvector_rulake_node.so rulake.linux-x64-gnu.node
+# (.dylib → rulake.darwin-arm64.node ; .dll → rulake.win32-x64-msvc.node)
+node --test __test__/smoke.test.mjs       # 10/10 smoke tests
+```
+
+The supported release path uses `@napi-rs/cli` (`npx napi build --platform --release`) which produces the same artifact and regenerates the JS / `.d.ts` shims.
+
+**Vector conventions** — `Float32Array` for vectors, `BigInt64Array` for IDs going in, `bigint` coming out. Rust IDs are `u64`; we don't silently truncate to `Number.MAX_SAFE_INTEGER`. The binding borrows the typed-array buffer and copies *once* at the FFI boundary (~3 µs at D = 768) because the borrow can't cross `await` to a libuv worker thread. The relative tax stays under 1.05× per `BENCHMARK.md`.
+
+**Async-only** — every method that does work returns `Promise<T>` and runs on a libuv worker via `spawn_blocking`. The event loop keeps serving other requests during a scan. Pure getters (`cacheStats()`, `cacheEntryCount()`, `backendIds()`) stay sync.
+
+**ESM-first, CJS shim** — `type: "module"` package, `index.mjs` is the import target, `index.cjs` is the require target, `index.d.ts` is hand-checked against the `napi build`-generated shape.
+
+**Error mapping** — single `RuLakeError` class with a `.code` discriminator (idiomatic Node — matches `SystemError` / AWS SDK):
+
+```ts
+try {
+  await lake.searchOne("nope", "docs", q, 10);
+} catch (e) {
+  if (e instanceof RuLakeError && e.code === "RULAKE_BACKEND_NOT_FOUND") {
+    // ...
+  }
+}
+```
+
+| Code                              | Meaning                                              |
+|-----------------------------------|------------------------------------------------------|
+| `RULAKE_BACKEND_NOT_FOUND`        | unknown backend id                                   |
+| `RULAKE_COLLECTION_NOT_FOUND`     | backend exists, collection doesn't                   |
+| `RULAKE_DIMENSION_MISMATCH`       | query/vectors don't match the collection dim         |
+| `RULAKE_INVALID_PARAMETER`        | malformed input (e.g. illegal filename)              |
+| `RULAKE_BACKEND`                  | a registered backend reported an internal error      |
+
+**Federated + bundle round-trip**:
+
+```ts
+const hits = await lake.searchFederated(
+  [["bigquery", "events"], ["snowflake", "profiles"]],
+  q, 10,
+);
+
+const b = new Bundle("s3://bucket/path", D, 42n, 20, 1n);
+await b.writeToDir("/var/rulake/snap/");
+const b2 = await Bundle.readFromDir("/var/rulake/snap/");
+console.assert(b2.verifyWitness());
+```
+
+**Distribution** — npm `optionalDependencies` per platform (`@ruvector/rulake-linux-x64-gnu`, …). On install npm reads `os` / `cpu` / `libc` and pulls only the matching binary. Works in air-gapped envs and behind corporate registries (every binary mirrored), unlike `postinstall`-download patterns.
+
+**Not in v1** (see ADR-003 §"Open questions"): WASM build for browser / Cloudflare Workers / Deno (`@ruvector/rulake-wasm` reserved on npm — loses AVX-512 popcnt + rayon parallel fan-out, so it's a feature-reduced surface), HTTP client variant (`@ruvector/rulake/http`), JS-implemented `BackendAdapter`.
+
+</details>
+
+<details>
+<summary>📐 SDK design — why these two languages, why these shapes</summary>
+
+Both SDKs hit the same goals via different platform-shaped means:
+
+| Concern              | Python (PyO3)                              | Node (napi-rs)                                        |
+|----------------------|--------------------------------------------|-------------------------------------------------------|
+| Hot-path zero-copy   | `PyReadonlyArray1<f32>::as_slice()`        | `Float32Array` borrow + one copy across `await`       |
+| Concurrency          | Sync API, GIL released; threadpool friendly | Async-only, libuv `spawn_blocking`, event-loop safe   |
+| ID type              | Python `int` (Python ints are arbitrary)   | `bigint` in / out (no `Number.MAX_SAFE_INTEGER` loss) |
+| Error model          | `RuLakeError` base + typed subclasses      | Single `RuLakeError`, `.code` discriminator           |
+| Distribution         | ABI3 wheels (one per platform per release) | `optionalDependencies` per-platform `.node`           |
+| Editor types         | `py.typed` + `.pyi` stubs                  | `index.d.ts` (hand-checked vs `napi build` output)    |
+| Tax over Rust        | ≤ 1.05× (release; FFI ~1 µs/call)          | ≤ 1.10× (release; FFI ~5 µs/call from one memcpy)     |
+
+The shared design ground (witness-anchored bundles, RaBitQ kernel, Consistency knob) makes a Python writer and a Node reader interoperable: a Python process can `publish_bundle` a snapshot that a Node process `Bundle.readFromDir`s and verifies byte-exact.
+
+Why these two and not Java / Go / C# in v1: the audiences map directly. Python = ML / RAG / data engineers (the entire `numpy`+`sentence-transformers` stack). Node + TS = edge-RAG, serverless handlers, LangChain.js / LlamaIndex.ts orchestration. Java / Go / C# customers exist but trail by an order of magnitude in the design-partner conversations driving v1 — they're explicitly v2 in both ADRs' "Open questions".
+
+See [ADR-002](docs/adrs/sdk/ADR-002-python-sdk.md) and [ADR-003](docs/adrs/sdk/ADR-003-nodejs-typescript-sdk.md) for the rejected alternatives (ctypes/cffi, Neon, WASM-first, sync-Node, async-Python, pure-language rewrites, HTTP-client-first) and the reasoning per axis.
+
+</details>
+
 ---
 
 ## How it works

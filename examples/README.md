@@ -127,12 +127,13 @@ would look like.
 
 ## What's NOT in here (and why)
 
-- **No pyo3 / napi-rs / wasm-bindgen bindings to the full ruLake crate.**
-  Bindings are weeks of work and a real engineering project — see the
-  proposed-status [`docs/adrs/sdk/ADR-002`](../docs/adrs/sdk/ADR-002-python-sdk.md)
-  and [`ADR-003`](../docs/adrs/sdk/ADR-003-nodejs-typescript-sdk.md) for the
-  shape those would take. The bundle protocol gives you a lighter
-  cross-language story that ships today.
+- **No wasm-bindgen binding to the full ruLake crate.** v2 — see
+  [ADR-003 §A](../docs/adrs/sdk/ADR-003-nodejs-typescript-sdk.md)
+  on why WASM-first loses AVX-512 popcnt and rayon parallel fan-out.
+  The pyo3 (`python/`) and napi-rs (`node/`) bindings now ship the full
+  surface — see those directories' READMEs to install / build / test.
+  The bundle-protocol examples in this directory remain the lighter
+  cross-language story for cases where a native binary is too heavy.
 - **No production cloud-backend examples** (Parquet, BigQuery, Iceberg, Delta).
   Those backends are M2+ roadmap per [ADR-155 §M2](../docs/adrs/ADR-155-rulake-datalake-layer.md).
   The `BackendAdapter` trait is 4 methods; building a real adapter is real

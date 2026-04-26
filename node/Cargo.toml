@@ -1,0 +1,35 @@
+# ruLake — Node.js SDK (napi-rs binding)
+#
+# Implements ADR-003. Standalone Cargo package — no workspace; the
+# parent ruvector-rulake crate is reached via `path = ".."`, the
+# vendored ruvector-rabitq via that crate's own dep on
+# `vendor/ruvector/...` (ADR-001).
+#
+# Build:  npx @napi-rs/cli build --release
+# Test:   node --test __test__/smoke.test.mjs
+[package]
+name = "ruvector-rulake-node"
+version = "2.2.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+authors = ["Ruvector Team"]
+repository = "https://github.com/ruvnet/RuLake"
+description = "Node.js bindings for ruLake — vector cache + federation intermediary"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+ruvector-rulake = { path = ".." }
+napi = { version = "2.16", default-features = false, features = ["napi8", "async"] }
+napi-derive = "2.16"
+
+[build-dependencies]
+napi-build = "2.1"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
