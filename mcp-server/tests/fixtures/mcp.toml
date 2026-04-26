@@ -1,0 +1,29 @@
+# Sample mcp.toml for the v0.1 server.
+#
+# Drop more backends here. v0.1 supports `local` (in-memory; the
+# operator pre-populates collections in code) and `fs` (filesystem-
+# backed `ruvec1` files). Real cloud backends (Parquet, BigQuery,
+# Iceberg, Delta) land per ADR-155 §M2-M5.
+
+consistency  = { mode = "Eventual", ttl_ms = 5000 }
+rerank_factor = 20
+rotation_seed = 42
+workers       = 0    # 0 = cores * 2 (ADR-004 §6 default)
+max_inflight  = 64
+
+[[backends]]
+type = "local"
+id   = "demo"
+
+# An fs-backend example with one pre-registered collection. The file
+# itself isn't created here — operators load it via FsBackend::write
+# in their own code (or via the existing rulake-demo binary).
+#
+# [[backends]]
+# type = "fs"
+# id   = "lake-prod"
+# root = "/srv/rulake/lake-prod"
+#
+# [[backends.collections]]
+# name     = "memories"
+# filename = "memories.ruvec1"

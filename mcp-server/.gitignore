@@ -1,0 +1,9 @@
+# Rust build artifacts
+target/
+
+# Editor / OS noise
+.DS_Store
+*.swp
+
+# Project-local agent state
+.claude-flow/

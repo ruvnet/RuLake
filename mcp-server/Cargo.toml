@@ -1,0 +1,70 @@
+# ruLake MCP server (ADR-004 v0.1).
+#
+# v0.1 scope:
+# - stdio transport only (Streamable HTTP is v0.2)
+# - one public tool: rulake_query with intent=search
+# - LocalBackend + FsBackend backends from a config file
+# - bounded worker pool via flume + rayon
+# - JSONL audit log to stderr (file output is v0.2)
+# - witness-fail-closed wherever bundles are touched
+# - parent-process trust (no auth — stdio only in v0.1)
+#
+# Standalone Cargo package per ADR-001 (no root workspace; the parent
+# ruvector-rulake crate is reached via `path = ".."`).
+
+[package]
+name = "ruvector-rulake-mcp"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+authors = ["Ruvector Team"]
+repository = "https://github.com/ruvnet/RuLake"
+description = "MCP server for ruLake — agent-callable, witness-aware vector cache (ADR-004)"
+
+[[bin]]
+name = "rulake-mcp"
+path = "src/main.rs"
+
+[dependencies]
+# The ruLake crate the server wraps. Per ADR-001, sibling-crate path-dep.
+ruvector-rulake = { path = ".." }
+
+# Official Rust MCP SDK (Anthropic, modelcontextprotocol/rust-sdk).
+# `server` feature enables the request/response handler scaffolding;
+# `transport-io` enables the stdio transport. Streamable HTTP comes
+# later via the `transport-streamable-http-server` feature.
+rmcp = { version = "1.5", default-features = false, features = ["server", "transport-io", "macros", "schemars"] }
+
+# Async runtime used by rmcp's stdio transport.
+tokio = { version = "1.39", features = ["rt-multi-thread", "macros", "io-std", "signal", "sync"] }
+
+# Serialization. serde_json is the wire format; schemars generates
+# the JSON Schema rmcp serves to clients on tools/list.
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+schemars = "1.0"      # match rmcp 1.5's resolved schemars major (avoid two copies)
+
+# Bounded worker pool: flume = MPMC channel, rayon = thread pool.
+flume = "0.11"
+rayon = "1.10"
+
+# Structured logging to stderr. tracing is the de-facto Rust idiom
+# and rmcp uses it internally.
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Operator config file parser (mcp.toml — see ADR-004 §5).
+toml = "0.8"
+
+# Error type for the binary's main() — keeps errors composable across
+# the rmcp / tokio / std::io boundary without writing a manual From impl.
+anyhow = "1"
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
