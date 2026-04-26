@@ -205,11 +205,14 @@ rustls           = "0.23"         # TLS for mTLS + HTTPS
 
 The crate runs on tokio because `rmcp` is tokio-native and the
 Streamable HTTP transport needs an async stack anyway. The underlying
-`RuLake` is sync; we call it from inside `tokio::task::spawn_blocking`
-on the search hot paths so a long scan doesn't starve the runtime.
-This is the same discipline the Python SDK adopts via
-`py.allow_threads` (ADR-002 §3) and the Node SDK via libuv worker
-threads (ADR-003 §3).
+`RuLake` is sync; the tokio task forwards the call to a **bounded
+rayon worker pool** (cores × 2; details in §6) over a `flume` channel
+so a long scan doesn't starve the tokio runtime *and* a burst of
+concurrent calls cannot saturate the global blocking pool. This is
+the same goal the Python SDK reaches via `py.allow_threads`
+(ADR-002 §3) and the Node SDK via libuv worker threads (ADR-003 §3),
+but with explicit bounds because the MCP server is a multi-tenant
+control plane, not a per-process binding.
 
 ### 2. Crate placement — sibling `mcp-server/`, not `examples/`, not `crates/`
 
@@ -427,22 +430,26 @@ struct SearchOneArgs {
     k: u32,
 }
 
+// Illustrative shape of an *internal-kernel* handler. The public-
+// surface `rulake_query` handler composes one or more of these after
+// the planner picks an action (§4a). Both shapes submit work to the
+// bounded worker pool from §6 — never `tokio::task::spawn_blocking`
+// directly — so saturation is bounded.
 #[rmcp::tool(
     name = "rulake_search_one",
-    description = "Vector search against a single (backend, collection) in a live ruLake. \
-                   Returns up to k nearest neighbours under squared L2. Cache-coherence is \
-                   enforced per the server's Consistency mode. Read-only — no side effects."
+    description = "Internal: vector search against a single (backend, collection). \
+                   Returns up to k nearest neighbours under squared L2. Cache-coherence \
+                   is enforced per the server's Consistency mode. Read-only."
 )]
 async fn search_one(&self, args: SearchOneArgs) -> Result<Vec<SearchResultJson>, McpError> {
-    self.policy.require(Capability::Read)?;
+    self.policy.require(Capability::Read | Capability::Internal)?;
     self.policy.require_collection(&args.backend, &args.collection)?;
     let lake = self.lake.clone();
-    let hits = tokio::task::spawn_blocking(move || {
+    // Submit to the bounded rayon pool via a flume channel; returns
+    // Degraded immediately if --max-inflight is at cap (§6).
+    let hits = self.workers.submit(move || {
         lake.search_one(&args.backend, &args.collection, &args.query, args.k as usize)
-    })
-    .await
-    .map_err(map_join_err)?
-    .map_err(map_rulake_err)?;
+    }).await?.map_err(map_rulake_err)?;
     self.audit.tool_ok("rulake_search_one", hits.len());
     Ok(hits.into_iter().map(SearchResultJson::from).collect())
 }
@@ -452,7 +459,9 @@ async fn search_one(&self, args: SearchOneArgs) -> Result<Vec<SearchResultJson>,
 on-disk bundle (`rulake_bundle_info`, `rulake_verify_witness`,
 `rulake_warm_from_dir`) refuses to return data when the witness check
 fails. This matches the existing posture of
-`RuLakeBundle::read_from_dir` (`src/bundle.rs:215`) and the TS demo
+`RuLakeBundle::read_from_dir` (`src/bundle.rs:349` — the
+`if !bundle.verify_witness()` guard inside `read_from_dir` at line 340)
+and the TS demo
 (`examples/nodejs/04-mcp-tool/src/server.ts:102`); we propagate it
 verbatim. A `witness_verified: false` response is never silently
 served — the tool returns `isError: true` with the expected and actual
@@ -530,7 +539,7 @@ trusting them. The mitigations baked into this ADR:
 | **Malicious agent prompt** ("call `rulake_search_one('foo', 'bar', vec![…128k floats…], k=1_000_000)`") | Any read tool | JSON Schema bounds (`k ∈ [1,1000]`, query length ≤ 8192, batch ≤ 256). Per-client rate limit (§6). |
 | **Hostile MCP client** speaking the wire directly | HTTP transport | Bind localhost by default; mandatory auth on the HTTP path; OAuth 2.1 PRM in production; mTLS when an operator wants it. `Origin` header validated on every request (DNS-rebinding). |
 | **Network attacker** (TLS strip, MitM, replay) | HTTP transport | TLS terminated by `rulake-mcp` itself or by the operator's reverse proxy; mTLS option for environments that want client identity at the network layer; OAuth 2.1 with PKCE + Resource Indicators (RFC 8707) so a token issued for service A cannot be replayed at service B. |
-| **Supply-chain — poisoned bundle on disk** | `rulake_warm_from_dir`, `rulake_bundle_info`, `rulake_verify_witness` | All three propagate `RuLakeBundle::read_from_dir`'s witness verification (`src/bundle.rs:215`). Witness mismatch → tool returns `isError: true`, never serves data. Path arguments must resolve under an allow-listed root (see below). |
+| **Supply-chain — poisoned bundle on disk** | `rulake_warm_from_dir`, `rulake_bundle_info`, `rulake_verify_witness` | All three propagate `RuLakeBundle::read_from_dir`'s witness verification (`src/bundle.rs:349`). Witness mismatch → tool returns `isError: true`, never serves data. Path arguments must resolve under an allow-listed root (see below). |
 | **Path traversal** through the snapshot-dir argument | Tools that accept paths | Path canonicalization + allow-list of roots in `mcp.toml`. The discipline is already in place for `FsBackend` filename validation (`src/fs_backend.rs:82,105`); we propagate it to tool arguments. |
 | **DoS via giant queries** | Read tools | Schema caps + concurrency cap (`--max-inflight 64`) + per-call timeout (`--tool-timeout 30s`) + per-client token bucket. |
 | **Tool description poisoning** | Tool registration time | Static descriptions, CI lint (§4). |
