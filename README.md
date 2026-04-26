@@ -966,8 +966,11 @@ Per-language details and the cross-cutting story are in the index at
 **First cloud backend:**
 - **GCS Parquet** ([`gcs-backend/`](gcs-backend/)) — reads `LIST<FLOAT32>` columns from Parquet on GCS, generation = GCS object generation, cheap `current_bundle()` override. **4/4 offline + 1 live (gated) tests.**
 
+**Bundle distribution:**
+- **IPFS** ([`ipfs-backend/`](ipfs-backend/)) — publishes `table.rulake.json` bundles to kubo over HTTP RPC, addresses them by CIDv1; bundle-only (vector bodies stay on the body-store backend). Three modes: kubo / gateway-only / kubo + gateway-fallback. Witness ↔ CID via two-anchors-one-cache-key (ADR-005 §3). Per-VM cost ~$20–25/month on Compute Engine `e2-small`. **5/5 offline + 1 live (gated) tests.** ([ADR-005](docs/adrs/sdk/ADR-005-ipfs-backend-and-deploy.md))
+
 **ADRs:**
-- ADR-001 (standalone repo), ADR-155 (cache-first), ADR-156 (substrate), ADR-157 (accelerator plane), ADR-158 (Hadamard + QVCache positioning), [ADR-002](docs/adrs/sdk/ADR-002-python-sdk.md) (Python SDK), [ADR-003](docs/adrs/sdk/ADR-003-nodejs-typescript-sdk.md) (Node SDK), [ADR-004](docs/adrs/sdk/ADR-004-rulake-mcp-server.md) (MCP server, 1340 lines)
+- ADR-001 (standalone repo), ADR-155 (cache-first), ADR-156 (substrate), ADR-157 (accelerator plane), ADR-158 (Hadamard + QVCache positioning), [ADR-002](docs/adrs/sdk/ADR-002-python-sdk.md) (Python SDK), [ADR-003](docs/adrs/sdk/ADR-003-nodejs-typescript-sdk.md) (Node SDK), [ADR-004](docs/adrs/sdk/ADR-004-rulake-mcp-server.md) (MCP server, 1340 lines), [ADR-005](docs/adrs/sdk/ADR-005-ipfs-backend-and-deploy.md) (IPFS backend + GCP deploy, 1306 lines)
 - Research note: [`docs/research/rvf-backend-blocker.md`](docs/research/rvf-backend-blocker.md) — why RVF-as-backend is upstream-blocked
 
 **CI / release** — six GitHub Actions workflows in [`.github/workflows/`](.github/workflows/):

@@ -1,0 +1,68 @@
+# ruLake IPFS backend — bundle distribution over IPFS (ADR-005).
+#
+# Stores `table.rulake.json` bundles on IPFS and addresses them by
+# CID. Vector bodies stay on the original backend (Parquet/GCS/etc.);
+# this layer is the bundle/witness distribution plane only.
+#
+# Standalone Cargo package per ADR-001 (no root workspace).
+#
+# Build:  cargo build --release
+# Test:   cargo test --release                    (4 offline tests)
+#         RULAKE_IPFS_LIVE_TEST=1 \
+#         RULAKE_IPFS_KUBO_API=http://127.0.0.1:5001 \
+#         cargo test --release -- --ignored ipfs_live
+
+[package]
+name = "ruvector-rulake-ipfs"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+authors = ["Ruvector Team"]
+repository = "https://github.com/ruvnet/RuLake"
+description = "IPFS BackendAdapter for ruLake — bundle distribution + content addressing (ADR-005)"
+
+[dependencies]
+ruvector-rulake = { path = ".." }
+
+# Note: we deliberately don't use `ipfs-api-backend-hyper` for v0.1.
+# It transitively pulls multihash 0.17 → core2 0.4 (yanked). Kubo's
+# HTTP RPC is just `POST /api/v0/{add,cat,pin/add}` with simple JSON
+# responses — talking to it via `reqwest` directly is ~50 LOC and
+# cuts ~40 transitive dependencies. A higher-level SDK can land in
+# v0.2 once the upstream multihash chain unyanks.
+#
+# We also don't pull the `cid` crate — same yanked transitive. CIDs
+# are passed as opaque strings; kubo and the gateway canonically
+# validate them on the wire.
+
+# Async runtime for the kubo HTTP calls. Wrapped in a current-thread
+# blocking bridge so the sync BackendAdapter trait stays satisfied
+# (same pattern as gcs-backend).
+tokio = { version = "1.39", default-features = false, features = ["rt", "macros"] }
+futures = "0.3"
+bytes = "1"
+
+# HTTP client — the kubo HTTP RPC endpoint AND the public-gateway
+# fallback (Mode::Gateway / Mode::KuboWithGatewayFallback). One client
+# library, two endpoints. `multipart` is needed for `POST /api/v0/add`
+# which requires a multipart body per the kubo RPC spec.
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream", "multipart"] }
+
+anyhow = "1"
+tracing = "0.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1.39", features = ["rt-multi-thread", "macros", "net"] }
+# Mock kubo HTTP server for offline tests.
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio", "server-auto", "service"] }
+http-body-util = "0.1"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
