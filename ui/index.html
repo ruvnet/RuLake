@@ -12,9 +12,14 @@
   <meta name="theme-color" content="#0a0e14" />
   <link rel="canonical" href="https://ruvnet.github.io/RuLake/" />
 
-  <!-- Defense-in-depth CSP. wasm-unsafe-eval needed for rulake-wasm. -->
+  <!-- Defense-in-depth CSP. wasm-unsafe-eval needed for rulake-wasm.
+       connect-src is intentionally permissive for the WASM-local mode
+       (ADR-006 §10): the user configures embedding/cloud/IPFS endpoints
+       at runtime. Tightening to a per-deployment allow-list is a v0.2
+       hardening item. https: covers cloud + IPFS gateways; http: covers
+       loopback dev (mcp-server, kubo). -->
   <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://*.openai.com http://localhost:* http://127.0.0.1:* https://registry.npmjs.org; object-src 'none'; base-uri 'none'; form-action 'none'" />
+        content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; object-src 'none'; base-uri 'none'; form-action 'none'" />
 
   <!-- Open Graph -->
   <meta property="og:type" content="website" />

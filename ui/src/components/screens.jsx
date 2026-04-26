@@ -1211,6 +1211,215 @@ function AuditScreen({ envTab = 'prod' }) {
 }
 
 // ─── CONNECT SCREEN ─────────────────────────────────────────────────
+// ─── STORAGE & RUNTIME SETTINGS (ADR-006 §10) ──────────────────────
+//
+// Backs the WASM-local mode promise: the toggles below configure how the
+// in-browser substrate sources data and renders. Settings persist to
+// IndexedDB via the existing kv store; embedding API keys are kept in JS
+// memory only (never persisted).
+function StorageSettingsCard() {
+  const [, kvOps] = (window.useRuStore || (() => [[], { put: () => {} }]))('kv');
+  const [settings, setSettings] = React.useState({
+    embedProvider: 'none',
+    cloudProvider: 'none',
+    cloudBucket: '',
+    ipfsEnabled: false,
+    ipfsMode: 'gateway',
+    ipfsGateway: 'https://w3s.link',
+    ipfsKuboUrl: 'http://127.0.0.1:5001',
+    webglEnabled: typeof WebGL2RenderingContext !== 'undefined',
+    workersEnabled: typeof Worker !== 'undefined',
+    cacheCapMib: 200,
+  });
+  const [embedKeyInMemory, setEmbedKeyInMemory] = React.useState('');
+
+  // Load persisted settings on mount.
+  React.useEffect(() => {
+    if (!window.RuStore) return;
+    window.RuStore.list('kv').then(rows => {
+      const row = rows.find(r => r.label === 'storage-settings');
+      if (row && row.settings) setSettings(s => ({ ...s, ...row.settings }));
+    }).catch(() => {});
+  }, []);
+
+  const update = (patch) => {
+    setSettings(prev => {
+      const next = { ...prev, ...patch };
+      if (window.RuStore) {
+        window.RuStore.put('kv', { label: 'storage-settings', settings: next });
+      }
+      return next;
+    });
+  };
+
+  const dot = (v, color) => (
+    <span className="mono" style={{
+      display:'inline-block', width:8, height:8, borderRadius:8,
+      background: v ? (color || 'var(--verifier-bright)') : 'var(--fg-faintest)',
+      marginRight: 6,
+    }} />
+  );
+
+  return (
+    <div className="connect-card" style={{marginTop:16}}>
+      <div className="connect-card-h">
+        <span className="connect-card-h-glyph">⚙</span>
+        <span className="connect-card-h-title">Storage &amp; runtime · WASM-local mode</span>
+        <span className="mono" style={{marginLeft:'auto', fontSize:10.5, color:'var(--fg-faint)'}}>ADR-006 §10 · IndexedDB</span>
+      </div>
+      <div className="connect-form">
+        <label className="connect-field">
+          <span className="connect-field-l">
+            <span>Embedding provider</span>
+            <span className="connect-field-hint">turns text into vectors. API key kept in JS memory only.</span>
+          </span>
+          <select className="input" value={settings.embedProvider} onChange={e=>update({embedProvider:e.target.value})}>
+            <option value="none">None — paste vectors directly</option>
+            <option value="openai">OpenAI · text-embedding-3-small</option>
+            <option value="cohere">Cohere · embed-english-v3</option>
+            <option value="voyage">Voyage · voyage-3-lite</option>
+            <option value="webllm">Web-LLM (local, WebGPU)</option>
+          </select>
+        </label>
+        {settings.embedProvider !== 'none' && settings.embedProvider !== 'webllm' && (
+          <label className="connect-field">
+            <span className="connect-field-l">
+              <span>API key (memory-only)</span>
+              <span className="connect-field-hint">cleared on tab reload — never persisted.</span>
+            </span>
+            <input className="input" type="password" placeholder="sk-…" value={embedKeyInMemory} onChange={e=>setEmbedKeyInMemory(e.target.value)} />
+          </label>
+        )}
+
+        <label className="connect-field">
+          <span className="connect-field-l">
+            <span>Cloud bundle storage</span>
+            <span className="connect-field-hint">read-only signed-URL prefix.</span>
+          </span>
+          <select className="input" value={settings.cloudProvider} onChange={e=>update({cloudProvider:e.target.value})}>
+            <option value="none">None</option>
+            <option value="gcs">GCS</option>
+            <option value="s3">S3</option>
+          </select>
+        </label>
+        {settings.cloudProvider !== 'none' && (
+          <label className="connect-field">
+            <span className="connect-field-l">
+              <span>Bucket prefix</span>
+              <span className="connect-field-hint">e.g. https://storage.googleapis.com/my-bundles/</span>
+            </span>
+            <input className="input" type="text" value={settings.cloudBucket} onChange={e=>update({cloudBucket:e.target.value})} placeholder="https://…/" />
+          </label>
+        )}
+
+        <label className="connect-field">
+          <span className="connect-field-l">
+            <span>{dot(settings.ipfsEnabled)}IPFS bundle distribution</span>
+            <span className="connect-field-hint">publish witness-anchored bundles by CID.</span>
+          </span>
+          <span className="seg" role="radiogroup" aria-label="ipfs">
+            {[['off','off'],['gateway','HTTP gateway only'],['kubo','kubo RPC'],['hybrid','kubo + gateway fallback']].map(([k, l]) => (
+              <button
+                key={k}
+                type="button"
+                className={'seg-item' + ((settings.ipfsEnabled ? settings.ipfsMode : 'off') === k ? ' active' : '')}
+                onClick={() => update(k === 'off' ? { ipfsEnabled: false } : { ipfsEnabled: true, ipfsMode: k })}
+              >{l}</button>
+            ))}
+          </span>
+        </label>
+        {settings.ipfsEnabled && (settings.ipfsMode === 'gateway' || settings.ipfsMode === 'hybrid') && (
+          <label className="connect-field">
+            <span className="connect-field-l"><span>Gateway URL</span></span>
+            <input className="input" type="text" value={settings.ipfsGateway} onChange={e=>update({ipfsGateway:e.target.value})} />
+          </label>
+        )}
+        {settings.ipfsEnabled && (settings.ipfsMode === 'kubo' || settings.ipfsMode === 'hybrid') && (
+          <label className="connect-field">
+            <span className="connect-field-l"><span>kubo RPC URL</span></span>
+            <input className="input" type="text" value={settings.ipfsKuboUrl} onChange={e=>update({ipfsKuboUrl:e.target.value})} />
+          </label>
+        )}
+
+        <div className="connect-field">
+          <span className="connect-field-l">
+            <span>Renderers</span>
+            <span className="connect-field-hint">SVG fallback always present.</span>
+          </span>
+          <div style={{display:'flex', gap:18, alignItems:'center'}}>
+            <label style={{display:'flex', gap:6, alignItems:'center', cursor:'pointer'}}>
+              <input type="checkbox" checked={settings.webglEnabled} onChange={e=>update({webglEnabled:e.target.checked})} />
+              <span className="mono" style={{fontSize:11}}>{dot(settings.webglEnabled)}WebGL</span>
+            </label>
+            <label style={{display:'flex', gap:6, alignItems:'center', cursor:'pointer'}}>
+              <input type="checkbox" checked={settings.workersEnabled} onChange={e=>update({workersEnabled:e.target.checked})} />
+              <span className="mono" style={{fontSize:11}}>{dot(settings.workersEnabled)}Web Workers</span>
+            </label>
+          </div>
+        </div>
+
+        <label className="connect-field">
+          <span className="connect-field-l">
+            <span>Cache size cap</span>
+            <span className="connect-field-hint">soft cap with LRU eviction.</span>
+          </span>
+          <div style={{display:'flex', gap:10, alignItems:'center'}}>
+            <input type="range" min="50" max="2000" step="50" value={settings.cacheCapMib} onChange={e=>update({cacheCapMib:Number(e.target.value)})} style={{flex:1}} />
+            <span className="mono" style={{fontSize:11, minWidth:60, textAlign:'right'}}>{settings.cacheCapMib} MiB</span>
+          </div>
+        </label>
+      </div>
+      <div className="connect-actions">
+        <button
+          className="btn"
+          onClick={async () => {
+            // Quick connectivity probe: fetch a known-good CID via the configured gateway.
+            // The bundle of node-wasm/fixtures has CID we don't pin yet; use a random text fixture instead.
+            // Known-good CIDv1 — small text file pinned indefinitely on
+            // multiple public gateways (used as a "is IPFS reachable?"
+            // canary). Swap with your bundle CID once you've published one.
+            const cid = 'bafkreigh2akiscaildcqabsyg3dfr6chu3fgpregiymsck7e7aqa4s52zy';
+            const url = `${settings.ipfsGateway.replace(/\/$/,'')}/ipfs/${cid}`;
+            const t0 = performance.now();
+            try {
+              const resp = await fetch(url, { method: 'GET', mode: 'cors' });
+              const ms = Math.round(performance.now() - t0);
+              const body = await resp.text();
+              const ok = resp.ok;
+              window.toast && window.toast[ok?'ok':'warn'](
+                ok ? 'IPFS gateway reachable' : 'IPFS gateway error',
+                `${ms}ms · ${resp.status} · ${body.length}B`,
+              );
+              if (window.RuStore) await window.RuStore.appendAudit({
+                ts: new Date().toISOString().slice(11,19),
+                principal: 'jules@ruv', tool: 'rulake_ipfs_probe',
+                target: settings.ipfsGateway, k: 0, ms,
+                code: ok ? 'IPFS_OK' : 'IPFS_HTTP_ERROR', outcome: ok ? 'ok' : 'refused',
+              });
+            } catch (e) {
+              const ms = Math.round(performance.now() - t0);
+              window.toast && window.toast.warn('IPFS unreachable', String(e.message || e));
+              if (window.RuStore) await window.RuStore.appendAudit({
+                ts: new Date().toISOString().slice(11,19),
+                principal: 'jules@ruv', tool: 'rulake_ipfs_probe',
+                target: settings.ipfsGateway, k: 0, ms,
+                code: 'IPFS_NETWORK_ERROR', outcome: 'refused',
+              });
+            }
+          }}
+          disabled={!settings.ipfsEnabled}
+        >Probe IPFS gateway</button>
+        <span className="mono" style={{fontSize:10.5, color:'var(--fg-faint)', marginLeft:'auto'}}>
+          {settings.workersEnabled ? '○ workers' : '· workers off'} ·
+          {settings.webglEnabled ? '○ webgl' : '· webgl off'} ·
+          embed:{settings.embedProvider} ·
+          ipfs:{settings.ipfsEnabled ? settings.ipfsMode : 'off'}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function ConnectScreen() {
   const [mode, setMode] = useState('jwt');
   const [endpoint, setEndpoint] = useState('https://rulake.ruv.net/mcp');
@@ -1399,6 +1608,8 @@ function ConnectScreen() {
           </div>
         </div>
       </div>
+
+      <StorageSettingsCard />
 
       <div className="sec-h" style={{padding:'24px 0 10px', borderBottom:'none'}}>
         <span>Capability matrix · once connected</span>
