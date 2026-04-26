@@ -104,7 +104,7 @@
     "rulake-darwin-x64": "2.2.0",
     "rulake-darwin-arm64": "2.2.0",
     "rulake-win32-x64-msvc": "2.2.0",
-    "rulake-wasm": "2.2.0"
+    "rulake-wasm": "2.2.1"
   },
   "devDependencies": {
     "@napi-rs/cli": "^2.18.4"

@@ -1,40 +1,39 @@
 {
   "name": "rulake-wasm",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "description": "Memory Lake for Agentic AI — WASM build for browsers, Cloudflare Workers, Deno, Bun. Same witness-anchored memory model as `rulake` (Node.js bindings), feature-reduced surface for edge runtimes (no AVX-512, no rayon).",
   "type": "module",
-  "main": "pkg-nodejs/rulake_wasm.js",
-  "module": "pkg-bundler/rulake_wasm.js",
-  "browser": "pkg-web/rulake_wasm.js",
-  "types": "pkg-bundler/rulake_wasm.d.ts",
+  "main": "rulake_wasm.js",
+  "module": "rulake_wasm.js",
+  "types": "rulake_wasm.d.ts",
   "exports": {
     ".": {
-      "types": "./pkg-bundler/rulake_wasm.d.ts",
-      "browser": "./pkg-web/rulake_wasm.js",
-      "deno": "./pkg-bundler/rulake_wasm.js",
-      "worker": "./pkg-web/rulake_wasm.js",
-      "bun": "./pkg-bundler/rulake_wasm.js",
-      "import": "./pkg-bundler/rulake_wasm.js",
-      "require": "./pkg-nodejs/rulake_wasm.js",
-      "default": "./pkg-bundler/rulake_wasm.js"
+      "types": "./rulake_wasm.d.ts",
+      "browser": "./web/rulake_wasm.js",
+      "worker": "./web/rulake_wasm.js",
+      "deno": "./rulake_wasm.js",
+      "bun": "./rulake_wasm.js",
+      "import": "./rulake_wasm.js",
+      "require": "./nodejs/rulake_wasm.js",
+      "default": "./rulake_wasm.js"
     },
     "./web": {
-      "types": "./pkg-web/rulake_wasm.d.ts",
-      "default": "./pkg-web/rulake_wasm.js"
+      "types": "./web/rulake_wasm.d.ts",
+      "default": "./web/rulake_wasm.js"
     },
     "./nodejs": {
-      "types": "./pkg-nodejs/rulake_wasm.d.ts",
-      "default": "./pkg-nodejs/rulake_wasm.js"
-    },
-    "./bundler": {
-      "types": "./pkg-bundler/rulake_wasm.d.ts",
-      "default": "./pkg-bundler/rulake_wasm.js"
+      "types": "./nodejs/rulake_wasm.d.ts",
+      "default": "./nodejs/rulake_wasm.js"
     }
   },
   "files": [
-    "pkg-web/",
-    "pkg-nodejs/",
-    "pkg-bundler/",
+    "rulake_wasm.js",
+    "rulake_wasm.d.ts",
+    "rulake_wasm_bg.js",
+    "rulake_wasm_bg.wasm",
+    "rulake_wasm_bg.wasm.d.ts",
+    "web/",
+    "nodejs/",
     "README.md"
   ],
   "keywords": [

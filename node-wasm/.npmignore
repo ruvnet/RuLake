@@ -1,0 +1,8 @@
+target/
+node_modules/
+*.log
+src/
+build.sh
+Cargo.toml
+Cargo.lock
+.gitignore
