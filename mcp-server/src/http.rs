@@ -30,6 +30,7 @@ use crate::auth::{BearerAuth, JwtAuth};
 use crate::ratelimit::{LayeredRateLimiter, RateLimitDecision};
 use crate::replay::ReplayGuard;
 use crate::server::RuLakeMcpServer;
+use crate::sessions::{SessionBindings, SessionDecision};
 
 /// Auth mode selected at startup.
 #[derive(Clone)]
@@ -71,6 +72,7 @@ pub async fn serve(
         insecure_allow_no_auth,
         Arc::new(ReplayGuard::new()),
         Arc::new(LayeredRateLimiter::default()),
+        Arc::new(SessionBindings::new()),
     )
     .await
 }
@@ -83,6 +85,7 @@ pub async fn serve_with_guards(
     insecure_allow_no_auth: InsecureAllowNoAuth,
     replay: Arc<ReplayGuard>,
     rate_limit: Arc<LayeredRateLimiter>,
+    sessions: Arc<SessionBindings>,
 ) -> anyhow::Result<()> {
     // Refuse to bind a non-loopback interface unless the operator
     // explicitly opted in for the chosen auth mode.
@@ -156,6 +159,7 @@ pub async fn serve_with_guards(
         let auth = auth.clone();
         let replay = Arc::clone(&replay);
         let rate_limit = Arc::clone(&rate_limit);
+        let sessions = Arc::clone(&sessions);
         tokio::spawn(async move {
             let io = TokioIo::new(stream);
             let svc = service_fn(move |req: Request<Incoming>| {
@@ -163,7 +167,10 @@ pub async fn serve_with_guards(
                 let auth = auth.clone();
                 let replay = Arc::clone(&replay);
                 let rate_limit = Arc::clone(&rate_limit);
-                async move { handle(req, mcp_service, auth, peer, replay, rate_limit).await }
+                let sessions = Arc::clone(&sessions);
+                async move {
+                    handle(req, mcp_service, auth, peer, replay, rate_limit, sessions).await
+                }
             });
             if let Err(e) = auto::Builder::new(TokioExecutor::new())
                 .serve_connection(io, svc)
@@ -190,13 +197,23 @@ async fn handle(
     peer: SocketAddr,
     replay: Arc<ReplayGuard>,
     rate_limit: Arc<LayeredRateLimiter>,
+    sessions: Arc<SessionBindings>,
 ) -> Result<Response<BoxBody<Bytes, Infallible>>, Infallible> {
     // 1. Auth gate (where applicable). Resolves to a principal string
-    // used by the rate-limit and audit layers.
-    let principal = match &auth {
-        AuthMode::None => format!("anon:{peer}"),
+    // + optional client_id that flow into the rate-limit, session-
+    // binding, and audit layers.
+    let mut principal: String;
+    let client_id: Option<String>;
+    match &auth {
+        AuthMode::None => {
+            principal = format!("anon:{peer}");
+            client_id = None;
+        }
         AuthMode::Bearer(b) => match b.verify(req.headers()) {
-            Ok(p) => p,
+            Ok(p) => {
+                principal = p;
+                client_id = None;
+            }
             Err(status) => {
                 tracing::warn!(?peer, %status, "bearer auth failed");
                 return Ok(error_response(status, "auth"));
@@ -204,24 +221,53 @@ async fn handle(
         },
         AuthMode::Jwt(j) => match j.verify(req.headers()) {
             Ok(jp) => {
-                // The JWT carried scopes → capabilities. v0.4 emits a
-                // log line; v0.5 will thread these into a per-request
-                // CapabilitySet so per-call cap checks honor the token,
-                // not the server's startup --capabilities flag.
                 tracing::debug!(
                     principal = %jp.principal,
                     scopes = ?jp.scopes,
                     capabilities = ?jp.capabilities.labels(),
                     "jwt verified",
                 );
-                jp.principal
+                principal = jp.principal;
+                client_id = jp.client_id;
             }
             Err(status) => {
                 tracing::warn!(?peer, %status, "jwt auth failed");
                 return Ok(error_response(status, "auth"));
             }
         },
-    };
+    }
+
+    // 1b. Session binding (ADR-004 §5). Streamable HTTP carries the
+    // session id in `mcp-session-id` after the initialize handshake.
+    // First sighting records (session_id) → (principal, client_id);
+    // subsequent requests must present the same tuple.
+    let session_id = req
+        .headers()
+        .get("mcp-session-id")
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    match sessions.check_or_bind(&session_id, &principal, client_id.as_deref(), None) {
+        SessionDecision::Allowed { first_sighting } => {
+            if first_sighting && !session_id.is_empty() {
+                tracing::info!(
+                    session = %session_id,
+                    principal = %principal,
+                    "session binding recorded"
+                );
+            }
+        }
+        SessionDecision::Mismatch { expected_principal, presented_principal } => {
+            tracing::warn!(
+                ?peer,
+                session = %session_id,
+                expected = %expected_principal,
+                presented = %presented_principal,
+                "session binding mismatch — token reused with different principal"
+            );
+            return Ok(error_response(StatusCode::UNAUTHORIZED, "session"));
+        }
+    }
 
     // 2. Replay protection — `MCP-Request-Id` nonce dedup
     // (ADR-004 §5). Empty id (stdio's case) bypasses; here we only

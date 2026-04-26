@@ -643,9 +643,11 @@ The public tool is `rulake_query` — submit `intent` (`search` | `verify` | `ex
 | stdio | parent-process trust | ✅ v0.1 |
 | Streamable HTTP `--auth none` | loopback only by default; `--insecure-allow-no-auth` to override | ✅ v0.2 |
 | Streamable HTTP `--auth bearer` | file token, constant-time compare; dev-only (`--allow-bearer-on-public` for any non-loopback bind) | ✅ v0.2 |
-| Streamable HTTP `--auth jwt` | HMAC JWS (HS256/384/512), iss + aud + exp validation, scope→capability mapping via `mcp:rulake:read|publish|admin` | ✅ v0.4 |
-| Streamable HTTP `--auth jwt` (RS256/ES256 + JWKS fetch) | public-key signature verification + remote key rotation | v0.5 |
-| Streamable HTTP `--auth mtls` | client cert CN as principal, operator-supplied CA | v0.5 |
+| Streamable HTTP `--auth jwt` (HMAC) | HMAC JWS (HS256/384/512), iss + aud + exp validation, scope→capability mapping via `mcp:rulake:read|publish|admin` | ✅ v0.4 |
+| Streamable HTTP `--auth jwt` (RS256/ES256) | RSA + EC public-key JWS via `--jwt-rsa-pem-file` / `--jwt-ec-pem-file` | ✅ v0.5 |
+| Streamable HTTP `--auth jwt` (JWKS fetch) | `--jwt-jwks-url` — periodic refresh against the IdP's JWKS endpoint, kid-routed key selection, hot rotation | ✅ v0.5 |
+| **Session binding** | (mcp-session-id) → (principal, client_id, mTLS-cert) tuple recorded at first sighting; mismatch → 401 (token replayed from a different client) | ✅ v0.5 |
+| Streamable HTTP `--auth mtls` | client cert CN as principal, operator-supplied CA | v0.6 |
 | **Replay protection** | `MCP-Request-Id` LRU dedup over a 10k-request window | ✅ v0.4 |
 | **Layered rate limiting** | 3 governor buckets: (transport, principal), (principal, backend, collection), per-process | ✅ v0.4 |
 | **Per-collection RBAC** | `[[allow]] backend, collection (anchored regex), caps` blocks in `mcp.toml` | ✅ v0.4 |
@@ -961,7 +963,7 @@ Per-language details and the cross-cutting story are in the index at
 **Audience shells:**
 - **Python SDK** ([`python/`](python/)) — PyO3 + ABI3 wheels, NumPy zero-copy, GIL release on hot paths. **14/14 tests.**
 - **Node.js SDK** ([`node/`](node/)) — napi-rs, Float32Array zero-copy, async-only, `bigint` IDs. **10/10 tests.**
-- **MCP server** ([`mcp-server/`](mcp-server/)) — `rulake-mcp` binary; stdio + Streamable HTTP; **JWT bearer with OAuth-style scope→capability mapping** + bearer (dev-only embarrassing-flag); 4 intents (search/verify/explain/refresh); 7 tools across read/internal/publish/admin capability tiers; **per-collection RBAC** via `[[allow]]` blocks; **layered rate limiting** (3 governor buckets); **replay protection** (MCP-Request-Id nonce LRU); **`tools/list` filtered by capability** (agents see only what they can call); bounded rayon worker pool; JSONL audit file with §7 schema. **39/39 tests.**
+- **MCP server** ([`mcp-server/`](mcp-server/)) — `rulake-mcp` binary; stdio + Streamable HTTP; **JWT auth with full SOTA stack: HMAC + RSA + EC + JWKS hot rotation** (kid-routed key lookup, periodic IdP refresh) + bearer (dev-only embarrassing-flag); **session binding** ((session_id) → (principal, client_id, mTLS-cert) tuple, mismatch → 401); 4 intents (search/verify/explain/refresh); 7 tools across read/internal/publish/admin capability tiers; **per-collection RBAC** via `[[allow]]` blocks; **layered rate limiting** (3 governor buckets); **replay protection** (MCP-Request-Id nonce LRU); **`tools/list` filtered by capability**; bounded rayon worker pool; JSONL audit file with §7 schema. **52/52 tests.**
 
 **First cloud backend:**
 - **GCS Parquet** ([`gcs-backend/`](gcs-backend/)) — reads `LIST<FLOAT32>` columns from Parquet on GCS, generation = GCS object generation, cheap `current_bundle()` override. **4/4 offline + 1 live (gated) tests.**
@@ -987,7 +989,8 @@ Per-language details and the cross-cutting story are in the index at
 <summary>🗺 What's next</summary>
 
 **Sprint-sized:**
-- MCP server v0.5 — RS256/ES256 JWT (current v0.4 ships HMAC HS256/384/512) + JWKS fetch loop, mTLS auth mode, session-binding (token-to-(principal, client_id, mTLS-cert) tuple), `rulake://bundle/...` resource (v0.4 ships `rulake://stats` + `rulake://stats/by-backend`)
+- MCP server v0.6 — mTLS auth mode (TLS termination at `rulake-mcp` itself, client-cert validation via rustls, cert SHA-256 hash bound into the session tuple), `rulake://bundle/...` resource (v0.4 ships `rulake://stats` + `rulake://stats/by-backend`), wire ipfs-backend through the MCP planner so `intent: "verify"` can reach IPFS-pinned bundles
+- ipfs-backend v0.2 — pinning-service mode (Storacha / Pinata / Filebase), AES-256-GCM envelope for private bundles
 
 **Real product work:**
 - Persistent disk-backed cache (ADR-155 §M1.5)

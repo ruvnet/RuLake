@@ -17,6 +17,7 @@ use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
 use serde::{Deserialize, Serialize};
 use subtle::ConstantTimeEq;
 
+use crate::jwks::JwksKeys;
 use crate::policy::{Capability, CapabilitySet};
 
 /// Bearer-token verifier. Cheap to clone (Arc-wrapped state).
@@ -138,10 +139,18 @@ pub struct JwtConfig {
 #[derive(Debug, Clone)]
 pub enum JwtKey {
     /// HMAC secret (HS256/HS384/HS512). Fine when the operator and
-    /// the IdP share trust; production deployments using public-key
-    /// algorithms (RS256/ES256) land in v0.5 alongside the JWKS
-    /// fetch loop and the `use_pem` feature flag flip.
+    /// the IdP share trust; production deployments use the
+    /// public-key variants below.
     Hmac(Vec<u8>),
+    /// RSA public key in PEM (`-----BEGIN PUBLIC KEY-----` /
+    /// `-----BEGIN RSA PUBLIC KEY-----`). RS256/RS384/RS512.
+    RsaPem(Vec<u8>),
+    /// EC public key in PEM. ES256/ES384.
+    EcPem(Vec<u8>),
+    /// JWKS-fetched key — the JWKS loop builds these and hot-swaps
+    /// them into the verifier. The `kid` (key id) routes incoming
+    /// tokens to the right key.
+    Jwks(Arc<JwksKeys>),
 }
 
 #[derive(Clone)]
@@ -150,9 +159,16 @@ pub struct JwtAuth {
 }
 
 struct JwtInner {
-    decoding_key: DecodingKey,
+    key_mode: KeyMode,
     validation: Validation,
     audience: String,
+}
+
+enum KeyMode {
+    /// One static key — set at startup, never rotated. HMAC, raw PEM.
+    Static(DecodingKey),
+    /// JWKS-managed keys, refreshed by a background task.
+    Jwks(Arc<JwksKeys>),
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -177,18 +193,26 @@ struct JwtClaims {
 
 impl JwtAuth {
     pub fn new(config: JwtConfig) -> Self {
-        let decoding_key = match config.key {
-            JwtKey::Hmac(bytes) => DecodingKey::from_secret(&bytes),
+        let mode = match config.key {
+            JwtKey::Hmac(bytes) => KeyMode::Static(DecodingKey::from_secret(&bytes)),
+            JwtKey::RsaPem(bytes) => KeyMode::Static(
+                DecodingKey::from_rsa_pem(&bytes)
+                    .unwrap_or_else(|e| panic!("invalid RSA PEM: {e}")),
+            ),
+            JwtKey::EcPem(bytes) => KeyMode::Static(
+                DecodingKey::from_ec_pem(&bytes)
+                    .unwrap_or_else(|e| panic!("invalid EC PEM: {e}")),
+            ),
+            JwtKey::Jwks(keys) => KeyMode::Jwks(keys),
         };
-        let mut validation = Validation::new(
-            *config.algorithms.first().unwrap_or(&Algorithm::HS256),
-        );
+        let mut validation =
+            Validation::new(*config.algorithms.first().unwrap_or(&Algorithm::HS256));
         validation.algorithms = config.algorithms;
         validation.set_issuer(&[config.issuer.clone()]);
         validation.set_audience(&[config.audience.clone()]);
         Self {
             inner: Arc::new(JwtInner {
-                decoding_key,
+                key_mode: mode,
                 validation,
                 audience: config.audience,
             }),
@@ -197,6 +221,8 @@ impl JwtAuth {
 
     /// Validate `Authorization: Bearer <jwt>`. Returns the audit
     /// principal + the capability set the token's scopes grant.
+    /// In JWKS mode, the JWT header's `kid` claim selects the key
+    /// from the rotation set.
     pub fn verify(&self, headers: &HeaderMap) -> Result<JwtPrincipal, StatusCode> {
         let header = headers
             .get(http::header::AUTHORIZATION)
@@ -207,7 +233,26 @@ impl JwtAuth {
             .strip_prefix("Bearer ")
             .ok_or(StatusCode::UNAUTHORIZED)?;
 
-        let data = decode::<JwtClaims>(token, &self.inner.decoding_key, &self.inner.validation)
+        let key_for_validation: jsonwebtoken::DecodingKey = match &self.inner.key_mode {
+            KeyMode::Static(k) => k.clone(),
+            KeyMode::Jwks(set) => {
+                // Decode just the header to find the kid.
+                let hdr = jsonwebtoken::decode_header(token).map_err(|e| {
+                    tracing::debug!(error = %e, "jwt header decode failed");
+                    StatusCode::UNAUTHORIZED
+                })?;
+                let kid = hdr.kid.as_deref().ok_or_else(|| {
+                    tracing::debug!("jwt missing kid header in JWKS mode");
+                    StatusCode::UNAUTHORIZED
+                })?;
+                set.find(kid).ok_or_else(|| {
+                    tracing::debug!(kid, "kid not in JWKS rotation set");
+                    StatusCode::UNAUTHORIZED
+                })?
+            }
+        };
+
+        let data = decode::<JwtClaims>(token, &key_for_validation, &self.inner.validation)
             .map_err(|e| {
                 tracing::debug!(error = %e, "jwt validation failed");
                 StatusCode::UNAUTHORIZED

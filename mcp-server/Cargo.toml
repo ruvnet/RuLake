@@ -17,7 +17,7 @@
 
 [package]
 name = "ruvector-rulake-mcp"
-version = "0.3.0"
+version = "0.5.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 authors = ["Ruvector Team"]
@@ -66,9 +66,15 @@ regex = { version = "1", default-features = false, features = ["std", "perf"] }
 governor = { version = "0.7", default-features = false, features = ["std", "quanta"] }
 dashmap = "6"
 
+# HTTP client for the JWKS fetch loop (--auth jwt with --jwks-url).
+# Default features include rustls + json; we don't need the native-TLS path.
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+
 # JWT (JWS) validation for `--auth jwt`. ADR-004 §5 SOTA path.
-# `default-features = false` keeps us off the OpenSSL backend.
-jsonwebtoken = { version = "9", default-features = false }
+# `use_pem` enables from_rsa_pem / from_ec_pem (RS256/ES256 — v0.5).
+# Default features pull rustls-friendly crypto; we don't need the
+# OpenSSL backend.
+jsonwebtoken = { version = "9", default-features = false, features = ["use_pem"] }
 
 # Async runtime used by rmcp's stdio transport.
 tokio = { version = "1.39", features = ["rt-multi-thread", "macros", "io-std", "signal", "sync", "net", "time"] }
