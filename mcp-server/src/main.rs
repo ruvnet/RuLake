@@ -10,9 +10,10 @@ use anyhow::Context;
 use jsonwebtoken::Algorithm;
 use ruvector_rulake_mcp::{
     AllowBearerOnPublic, AuditSink, AuthMode, BearerAuth, CapabilitySet, InsecureAllowNoAuth,
-    JwksKeys, JwtAuth, JwtConfig, McpConfig, RuLakeMcpServer,
+    JwksKeys, JwtAuth, JwtConfig, McpConfig, MtlsConfig, RuLakeMcpServer,
 };
 use ruvector_rulake_mcp::auth::JwtKey;
+use std::sync::Arc;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> anyhow::Result<()> {
@@ -139,9 +140,31 @@ async fn build_auth(http: &HttpArgs) -> anyhow::Result<AuthMode> {
             });
             Ok(AuthMode::Jwt(jwt))
         }
+        "mtls" => {
+            let cert_path = http
+                .tls_cert_file
+                .as_ref()
+                .context("--auth mtls requires --tls-cert-file PATH")?;
+            let key_path = http
+                .tls_key_file
+                .as_ref()
+                .context("--auth mtls requires --tls-key-file PATH")?;
+            let ca_path = http
+                .client_ca_file
+                .as_ref()
+                .context("--auth mtls requires --client-ca-file PATH")?;
+            let cfg = MtlsConfig {
+                server_cert_pem: std::fs::read(cert_path)
+                    .with_context(|| format!("loading tls cert: {}", cert_path.display()))?,
+                server_key_pem: std::fs::read(key_path)
+                    .with_context(|| format!("loading tls key: {}", key_path.display()))?,
+                client_ca_pem: std::fs::read(ca_path)
+                    .with_context(|| format!("loading client ca: {}", ca_path.display()))?,
+            };
+            Ok(AuthMode::Mtls(Arc::new(cfg)))
+        }
         other => anyhow::bail!(
-            "unknown --auth mode {other:?} — expected `none` | `bearer` | `jwt` \
-             (mtls + RS256 land in v0.5)"
+            "unknown --auth mode {other:?} — expected `none` | `bearer` | `jwt` | `mtls`"
         ),
     }
 }
@@ -175,6 +198,9 @@ struct HttpArgs {
     jwt_issuer: Option<String>,
     jwt_audience: Option<String>,
     jwt_alg: Option<String>,
+    tls_cert_file: Option<PathBuf>,
+    tls_key_file: Option<PathBuf>,
+    client_ca_file: Option<PathBuf>,
 }
 
 fn parse_args() -> anyhow::Result<Args> {
@@ -197,6 +223,9 @@ fn parse_args() -> anyhow::Result<Args> {
     let mut http_jwt_issuer: Option<String> = None;
     let mut http_jwt_audience: Option<String> = None;
     let mut http_jwt_alg: Option<String> = None;
+    let mut http_tls_cert_file: Option<PathBuf> = None;
+    let mut http_tls_key_file: Option<PathBuf> = None;
+    let mut http_client_ca_file: Option<PathBuf> = None;
     let mut transport_kind: Option<&'static str> = None;
 
     let mut it = std::env::args().skip(1);
@@ -266,6 +295,21 @@ fn parse_args() -> anyhow::Result<Args> {
                 http_jwt_jwks_refresh_secs =
                     Some(s.parse().with_context(|| format!("--jwt-jwks-refresh-secs {s:?}"))?);
             }
+            "--tls-cert-file" => {
+                http_tls_cert_file = Some(PathBuf::from(
+                    it.next().context("--tls-cert-file expects PATH")?,
+                ));
+            }
+            "--tls-key-file" => {
+                http_tls_key_file = Some(PathBuf::from(
+                    it.next().context("--tls-key-file expects PATH")?,
+                ));
+            }
+            "--client-ca-file" => {
+                http_client_ca_file = Some(PathBuf::from(
+                    it.next().context("--client-ca-file expects PATH")?,
+                ));
+            }
             "-h" | "--help" => {
                 print_help();
                 std::process::exit(0);
@@ -292,6 +336,9 @@ fn parse_args() -> anyhow::Result<Args> {
                 jwt_issuer: http_jwt_issuer,
                 jwt_audience: http_jwt_audience,
                 jwt_alg: http_jwt_alg,
+                tls_cert_file: http_tls_cert_file,
+                tls_key_file: http_tls_key_file,
+                client_ca_file: http_client_ca_file,
             }))
         }
         _ => unreachable!(),
@@ -325,7 +372,7 @@ fn print_help() {
          \n\
          HTTP OPTIONS:\n    \
              --bind ADDR:PORT               Bind address. Default 127.0.0.1:7440.\n    \
-             --auth MODE                    `none` (loopback) | `bearer` (dev) | `jwt` (production).\n    \
+             --auth MODE                    `none` (loopback) | `bearer` (dev) | `jwt` (production) | `mtls` (production).\n    \
              --bearer-token-file PATH       Required with --auth bearer.\n    \
              --allow-bearer-on-public       Required to bind --auth bearer to a non-loopback addr.\n    \
                                             BEARER IS DEV ONLY — static tokens leak once → permanent\n    \
@@ -338,7 +385,10 @@ fn print_help() {
              --jwt-jwks-refresh-secs N      JWKS refresh interval. Default 300s.\n    \
              --jwt-issuer URL               Required iss claim (--auth jwt).\n    \
              --jwt-audience URL             Required aud claim per RFC 8707 (--auth jwt).\n    \
-             --jwt-alg ALG                  HS256 (default) | HS384 | HS512 | RS256 | RS384 | RS512 | ES256 | ES384.\n\
+             --jwt-alg ALG                  HS256 (default) | HS384 | HS512 | RS256 | RS384 | RS512 | ES256 | ES384.\n    \
+             --tls-cert-file PATH           Server cert PEM (--auth mtls).\n    \
+             --tls-key-file PATH            Server private key PEM (--auth mtls).\n    \
+             --client-ca-file PATH          CA bundle that issued accepted client certs (--auth mtls).\n\
          \n\
          OAuth 2.1 + mTLS auth, replay protection (MCP-Request-Id +\n\
          session binding), and the full capability set (publish/admin)\n\

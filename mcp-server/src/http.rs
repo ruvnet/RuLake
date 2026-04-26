@@ -27,10 +27,13 @@ use rmcp::transport::streamable_http_server::tower::{
 };
 
 use crate::auth::{BearerAuth, JwtAuth};
+use crate::mtls::{MtlsConfig, build_acceptor as build_mtls_acceptor, principal_for_client_cert};
 use crate::ratelimit::{LayeredRateLimiter, RateLimitDecision};
 use crate::replay::ReplayGuard;
 use crate::server::RuLakeMcpServer;
 use crate::sessions::{SessionBindings, SessionDecision};
+
+use tokio_rustls::TlsAcceptor;
 
 /// Auth mode selected at startup.
 #[derive(Clone)]
@@ -45,6 +48,14 @@ pub enum AuthMode {
     /// `scope` / `scp` claim to the request's CapabilitySet via
     /// `mcp:rulake:read|publish|admin`.
     Jwt(JwtAuth),
+    /// `--auth mtls` — TLS termination at rulake-mcp itself. The
+    /// server presents `server_cert` and requires + validates the
+    /// client cert against `client_ca`. Principal becomes
+    /// `mtls:<cert-fingerprint-prefix>`. Pairs with `--auth jwt`
+    /// transparently: the client cert SHA-256 still flows into the
+    /// session-binding tuple, but the JWT principal wins for the
+    /// audit identity in that combo.
+    Mtls(Arc<MtlsConfig>),
 }
 
 /// Whether the operator opted into binding bearer-mode on a public
@@ -136,6 +147,15 @@ pub async fn serve_with_guards(
     let listener = tokio::net::TcpListener::bind(bind).await?;
     tracing::info!(?bind, mode = ?auth_label(&auth), "rulake-mcp HTTP listening");
 
+    // mTLS: build the TlsAcceptor once at startup (cert load is fail-fast).
+    let tls_acceptor: Option<TlsAcceptor> = match &auth {
+        AuthMode::Mtls(cfg) => Some(build_mtls_acceptor(cfg)?),
+        _ => None,
+    };
+    if tls_acceptor.is_some() {
+        tracing::info!("mTLS enabled — TLS termination at rulake-mcp");
+    }
+
     if matches!(auth, AuthMode::Bearer(_)) && !is_loopback {
         // ADR-004 §5: noisy reminder every 60s while bearer-on-public.
         let warn_loop = tokio::spawn(async {
@@ -160,7 +180,65 @@ pub async fn serve_with_guards(
         let replay = Arc::clone(&replay);
         let rate_limit = Arc::clone(&rate_limit);
         let sessions = Arc::clone(&sessions);
+        let tls_acceptor = tls_acceptor.clone();
         tokio::spawn(async move {
+            // mTLS path: complete the TLS handshake + extract the
+            // client cert SHA-256. The fingerprint flows into the
+            // per-request handler via a connection-level Arc that
+            // each request reads from.
+            let mtls_fingerprint: Option<String> = match tls_acceptor {
+                Some(acceptor) => {
+                    match acceptor.accept(stream).await {
+                        Ok(tls_stream) => {
+                            // Pull client cert chain out of the
+                            // server-side connection. With WebPkiClientVerifier::builder
+                            // (no allow_unauthenticated), rustls
+                            // guarantees ≥1 cert.
+                            let (_io, conn) = tls_stream.get_ref();
+                            let fp = conn
+                                .peer_certificates()
+                                .and_then(|c| c.first())
+                                .map(|c| crate::mtls::cert_sha256_hex(c.as_ref()));
+                            if fp.is_none() {
+                                tracing::warn!(?peer, "mTLS: no client cert");
+                                return;
+                            }
+                            // Continue with the TLS-wrapped stream.
+                            let io = TokioIo::new(tls_stream);
+                            let mtls_fp = fp.clone();
+                            let svc = service_fn(move |req: Request<Incoming>| {
+                                let mcp_service = mcp_service.clone();
+                                let auth = auth.clone();
+                                let replay = Arc::clone(&replay);
+                                let rate_limit = Arc::clone(&rate_limit);
+                                let sessions = Arc::clone(&sessions);
+                                let mtls_fp = mtls_fp.clone();
+                                async move {
+                                    handle(
+                                        req, mcp_service, auth, peer, replay, rate_limit,
+                                        sessions, mtls_fp,
+                                    )
+                                    .await
+                                }
+                            });
+                            if let Err(e) = auto::Builder::new(TokioExecutor::new())
+                                .serve_connection(io, svc)
+                                .await
+                            {
+                                tracing::debug!(?peer, error = %e, "tls connection ended");
+                            }
+                            return;
+                        }
+                        Err(e) => {
+                            tracing::warn!(?peer, error = %e, "mTLS handshake failed");
+                            return;
+                        }
+                    }
+                }
+                None => None,
+            };
+
+            // Plain TCP path (--auth none / bearer / jwt without mTLS).
             let io = TokioIo::new(stream);
             let svc = service_fn(move |req: Request<Incoming>| {
                 let mcp_service = mcp_service.clone();
@@ -168,8 +246,12 @@ pub async fn serve_with_guards(
                 let replay = Arc::clone(&replay);
                 let rate_limit = Arc::clone(&rate_limit);
                 let sessions = Arc::clone(&sessions);
+                let mtls_fp = mtls_fingerprint.clone();
                 async move {
-                    handle(req, mcp_service, auth, peer, replay, rate_limit, sessions).await
+                    handle(
+                        req, mcp_service, auth, peer, replay, rate_limit, sessions, mtls_fp,
+                    )
+                    .await
                 }
             });
             if let Err(e) = auto::Builder::new(TokioExecutor::new())
@@ -187,6 +269,7 @@ fn auth_label(a: &AuthMode) -> &'static str {
         AuthMode::None => "none",
         AuthMode::Bearer(_) => "bearer",
         AuthMode::Jwt(_) => "jwt",
+        AuthMode::Mtls(_) => "mtls",
     }
 }
 
@@ -198,11 +281,18 @@ async fn handle(
     replay: Arc<ReplayGuard>,
     rate_limit: Arc<LayeredRateLimiter>,
     sessions: Arc<SessionBindings>,
+    mtls_fingerprint: Option<String>,
 ) -> Result<Response<BoxBody<Bytes, Infallible>>, Infallible> {
     // 1. Auth gate (where applicable). Resolves to a principal string
     // + optional client_id that flow into the rate-limit, session-
     // binding, and audit layers.
-    let mut principal: String;
+    //
+    // mTLS principal is the per-connection cert fingerprint (already
+    // computed at TLS handshake time). When mTLS combines with another
+    // mode (e.g. mTLS + JWT — transport-level identity + app-level
+    // scopes), the JWT principal wins for capability mapping but the
+    // mTLS fingerprint still flows into the session-binding tuple.
+    let principal: String;
     let client_id: Option<String>;
     match &auth {
         AuthMode::None => {
@@ -235,6 +325,16 @@ async fn handle(
                 return Ok(error_response(status, "auth"));
             }
         },
+        AuthMode::Mtls(_) => {
+            // The TLS handshake already ran in the listener loop. The
+            // client cert SHA-256 was extracted there and threaded in
+            // as `mtls_fingerprint`. Build the mTLS principal from it.
+            principal = mtls_fingerprint
+                .as_deref()
+                .map(|fp| format!("mtls:{}", &fp[..16.min(fp.len())]))
+                .unwrap_or_else(|| format!("mtls:no-fp:{peer}"));
+            client_id = None;
+        }
     }
 
     // 1b. Session binding (ADR-004 §5). Streamable HTTP carries the
@@ -247,7 +347,12 @@ async fn handle(
         .and_then(|h| h.to_str().ok())
         .unwrap_or("")
         .to_string();
-    match sessions.check_or_bind(&session_id, &principal, client_id.as_deref(), None) {
+    match sessions.check_or_bind(
+        &session_id,
+        &principal,
+        client_id.as_deref(),
+        mtls_fingerprint.as_deref(),
+    ) {
         SessionDecision::Allowed { first_sighting } => {
             if first_sighting && !session_id.is_empty() {
                 tracing::info!(

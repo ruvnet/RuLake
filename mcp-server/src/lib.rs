@@ -22,6 +22,7 @@ pub mod auth;
 pub mod config;
 pub mod http;
 pub mod jwks;
+pub mod mtls;
 pub mod planner;
 pub mod policy;
 pub mod ratelimit;
@@ -36,6 +37,8 @@ pub use auth::{BearerAuth, JwtAuth, JwtConfig};
 pub use config::McpConfig;
 pub use http::{AllowBearerOnPublic, AuthMode, InsecureAllowNoAuth};
 pub use jwks::{JwksKeys, spawn_refresh_task as spawn_jwks_refresh};
+pub use mtls::{MtlsConfig, build_acceptor as build_mtls_acceptor, cert_sha256_hex,
+                principal_for_client_cert};
 pub use policy::{Capability, CapabilitySet};
 pub use ratelimit::{LayeredRateLimiter, RateLimitDecision};
 pub use replay::ReplayGuard;

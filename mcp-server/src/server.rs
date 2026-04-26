@@ -574,15 +574,17 @@ impl ServerHandler for RuLakeMcpServer {
         Ok(result)
     }
 
-    /// MCP resources/list — ADR-004 §Resources. v0.2 ships the two
-    /// roll-up resources; per-bundle resources land with the
-    /// allow-list machinery in v0.3.
+    /// MCP resources/list — ADR-004 §Resources. v0.6 adds per-(backend,
+    /// collection) bundle resources alongside the existing stats roll-ups.
+    /// The bundle resource reads through `cache_witness_of` (ADR-005 §4
+    /// cheap path); it does NOT call `BackendAdapter::current_bundle`'s
+    /// default impl which would do a full `pull_vectors`.
     async fn list_resources(
         &self,
         _params: Option<PaginatedRequestParams>,
         _context: RequestContext<rmcp::service::RoleServer>,
     ) -> Result<ListResourcesResult, McpError> {
-        let resources = vec![
+        let mut resources = vec![
             {
                 let mut r = RawResource::new("rulake://stats", "cache stats (rollup)");
                 r.description = Some(
@@ -598,6 +600,18 @@ impl ServerHandler for RuLakeMcpServer {
                 rmcp::model::Annotated::new(r, None)
             },
         ];
+        // Per-(backend, collection) bundle resources for every cached
+        // collection. Reads cheaply from `cache_witness_of`.
+        for (k, _) in self.planner.lake.cache_stats_by_collection() {
+            let (b, c) = (k.0.clone(), k.1.clone());
+            let uri = format!("rulake://bundle/{b}/{c}");
+            let mut r = RawResource::new(uri, format!("bundle witness: {b}/{c}"));
+            r.description = Some(format!(
+                "Witness + provenance for {b}/{c}. Reads the cache pointer; no full pull."
+            ));
+            r.mime_type = Some("application/json".into());
+            resources.push(rmcp::model::Annotated::new(r, None));
+        }
         Ok(ListResourcesResult::with_all_items(resources))
     }
 
@@ -657,6 +671,27 @@ impl RuLakeMcpServer {
                     })
                     .collect();
                 serde_json::to_string(&serde_json::Value::Object(map)).map_err(|e| e.to_string())
+            }
+            uri if uri.starts_with("rulake://bundle/") => {
+                // rulake://bundle/{backend}/{collection}
+                let rest = &uri["rulake://bundle/".len()..];
+                let mut parts = rest.splitn(2, '/');
+                let backend = parts.next().unwrap_or("").to_string();
+                let collection = parts.next().unwrap_or("").to_string();
+                if backend.is_empty() || collection.is_empty() {
+                    return Err(format!("malformed bundle URI: {uri}"));
+                }
+                let key = (backend.clone(), collection.clone());
+                let witness = self.planner.lake.cache_witness_of(&key);
+                let entry_count = self.planner.lake.cache_entry_count();
+                serde_json::to_string(&serde_json::json!({
+                    "backend":          backend,
+                    "collection":       collection,
+                    "witness":          witness,
+                    "witness_present":  witness.is_some(),
+                    "cache_entries":    entry_count,
+                }))
+                .map_err(|e| e.to_string())
             }
             other => Err(format!("unknown resource URI: {other}")),
         }
