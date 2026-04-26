@@ -539,6 +539,172 @@ See [ADR-002](docs/adrs/sdk/ADR-002-python-sdk.md) and [ADR-003](docs/adrs/sdk/A
 
 </details>
 
+### MCP server — `rulake-mcp` (agent-callable governed memory)
+
+Rust-native MCP server in [`mcp-server/`](mcp-server/). Lets any MCP-compatible client (Claude Desktop, Cursor, Cline, Continue, agentic-flow) talk to a live ruLake over **stdio** or **Streamable HTTP**, with the planner deciding *where* to search, *how strict* to be, *whether to refuse*, and emitting a decision trace alongside every answer. Implements [ADR-004](docs/adrs/sdk/ADR-004-rulake-mcp-server.md).
+
+```bash
+# stdio (default — parent-process trust):
+cd mcp-server && cargo build --release
+./target/release/rulake-mcp stdio --config tests/fixtures/mcp.toml
+
+# Streamable HTTP on loopback:
+./target/release/rulake-mcp http --bind 127.0.0.1:7440 --auth none
+
+# HTTP + bearer + capability tier + audit file:
+./target/release/rulake-mcp http \
+    --bind 127.0.0.1:7440 \
+    --auth bearer --bearer-token-file /etc/rulake/token \
+    --capabilities read,publish \
+    --audit-file /var/log/rulake-mcp/audit.jsonl
+```
+
+The public tool is `rulake_query` — submit `intent` (`search` | `verify` | `explain` | `refresh`), `target` (collection or routes), `risk`, `freshness`, `budget`, `policy`. The response carries `data` + `provenance` + `trust_level` + `decision` (chosen_action, reason_code from a closed enum, backends_used, refusals).
+
+<details>
+<summary>🤖 MCP server — full surface, capabilities, transports</summary>
+
+**Tools by capability tier** (`--capabilities` flag — read is default):
+
+| Tier | Tools exposed |
+|---|---|
+| `read` (default) | `rulake_query`, `rulake_list_backends` |
+| `internal` | + the kernel `rulake_query` composes (operator-only, never OAuth-issued) |
+| `publish` | + `rulake_publish_bundle`, `rulake_refresh_from_bundle_dir` (and enables `intent: "refresh"`) |
+| `admin` | + `rulake_save_cache_to_dir`, `rulake_warm_from_dir`, `rulake_invalidate_cache` |
+
+`register_backend` is **never** wire-exposed (backends carry credentials; ADR-004 §4 + CVE-2025-53107/53818).
+
+**Resources** (URI-addressable read-only):
+
+- `rulake://stats` — roll-up cache stats (hit_rate, primes, avg_prime_ms)
+- `rulake://stats/by-backend` — per-backend stats
+- `rulake://bundle/{backend}/{collection}` — v0.4 (witness lookup; backend-implementer contract for cheap `current_bundle()`)
+
+**Transports** (ADR-004 §3):
+
+| Transport | Auth | Status |
+|---|---|---|
+| stdio | parent-process trust | ✅ v0.1 |
+| Streamable HTTP | `--auth none` (loopback only by default) | ✅ v0.2 |
+| Streamable HTTP | `--auth bearer` (file token, dev-only — embarrassing-flag gates public bind) | ✅ v0.2 |
+| Streamable HTTP | `--auth oauth` (OAuth 2.1 + PKCE + RFC 8707 + RFC 9728) | v0.4 |
+| Streamable HTTP | `--auth mtls` | v0.4 |
+
+DNS-rebinding guard via rmcp's `allowed_hosts` (loopback by default). Bearer-on-public requires `--allow-bearer-on-public` AND emits a `WARN` every 60 s.
+
+**Decision trace** — every response carries the same closed-enum `reason_code`:
+
+```text
+CACHE_HIT_FRESH | CACHE_HIT_EVENTUAL | STALE_CACHE_REMOTE_VALID
+COLD_PRIME_THEN_SERVE | WITNESS_MISMATCH_REFUSED
+BUDGET_EXCEEDED_FALLBACK_CACHE | BUDGET_EXCEEDED_REFUSED
+POLICY_REFUSED_RISK | POLICY_REFUSED_ALLOWLIST | POLICY_REFUSED_PATH
+PARTIAL_FEDERATION
+```
+
+Lets ops alerts filter without regex over `decision.reason` prose.
+
+**JSONL audit file** (`--audit-file PATH`, full ADR-004 §7 schema): every line carries `policy_decision` + `decision` blocks — the "explain itself" gate. Schema is OpenLineage-mappable (ADR-155 §M4 swap-the-sink ready).
+
+**Bounded worker pool** — rayon `cores * 2`, bounded flume submit channel of capacity `--max-inflight 64` (the §6 commitment that rejects unbounded `spawn_blocking`).
+
+Wire to Claude Desktop / Cursor over stdio:
+
+```json
+{
+  "mcpServers": {
+    "rulake": {
+      "command": "/path/to/rulake-mcp",
+      "args": ["stdio", "--config", "/path/to/mcp.toml"]
+    }
+  }
+}
+```
+
+Wire to a remote agent over Streamable HTTP:
+
+```json
+{
+  "mcpServers": {
+    "rulake": {
+      "transport": "streamable-http",
+      "url": "https://rulake.example.com/mcp",
+      "headers": { "Authorization": "Bearer <token>" }
+    }
+  }
+}
+```
+
+Build the **distroless Docker image** (`Dockerfile.mcp`):
+
+```bash
+docker build -f Dockerfile.mcp -t rulake-mcp .
+docker run --rm -p 7440:7440 rulake-mcp http --bind 0.0.0.0:7440 --auth none --insecure-allow-no-auth
+```
+
+**21/21 tests pass** (3 audit unit + 11 smoke covering all 4 intents + cap gates + 7 HTTP e2e covering bearer + embarrassing-flag refusals).
+
+</details>
+
+### Cloud backends — `gcs-backend` (Parquet on GCS)
+
+The first cloud backend, in [`gcs-backend/`](gcs-backend/) — reads vector columns from Parquet files on Google Cloud Storage with cache coherence riding GCS's per-object generation token. Implements [ADR-155 §M2](docs/adrs/ADR-155-rulake-datalake-layer.md).
+
+```rust
+use std::sync::Arc;
+use ruvector_rulake::{cache::Consistency, RuLake, BackendAdapter};
+use ruvector_rulake_gcs::{GcsParquetBackend, GcsParquetCollection};
+
+let backend = GcsParquetBackend::open_gcs("gcs-prod", "my-vector-bucket")?;
+backend.register(GcsParquetCollection {
+    name:    "docs".into(),
+    object:  "embeddings/2026-04/docs.parquet".into(),
+    dim:     None,    // None → read from Parquet schema on first pull
+});
+
+let lake = RuLake::new(20, 42)
+    .with_consistency(Consistency::Eventual { ttl_ms: 5_000 });
+lake.register_backend(Arc::new(backend) as Arc<dyn BackendAdapter>)?;
+
+let hits = lake.search_one("gcs-prod", "docs", &query, 10)?;
+```
+
+<details>
+<summary>☁️ GCS backend — schema, auth, deployment</summary>
+
+**Parquet schema contract (v0.1)** — two required columns:
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `INT64` (non-null) | Cast to `u64` by bit pattern. |
+| `vector` | `LIST<FLOAT32>` or `FixedSizeList<FLOAT32, N>` (non-null) | Length = collection's `dim`. |
+
+**Auth** — Application Default Credentials. Run `gcloud auth application-default login` once or set `GOOGLE_APPLICATION_CREDENTIALS=/path/to/sa.json`; the `object_store` crate handles the rest.
+
+**Cache coherence** — `Generation = u64` from the GCS object's generation number. Every `gcloud storage cp` of a Parquet file bumps the generation → ruLake's witness picks up the change automatically through the existing `Generation::Num` variant in `src/bundle.rs:55`.
+
+**Cheap `current_bundle()` override** — the default impl in `src/backend.rs:131` does a full `pull_vectors` to learn the dim, which would melt a remote backend at resource-read rates. We override to do a HEAD on the GCS object (~1 RTT) + a Parquet-footer-only schema read (a few KiB). ADR-004's `rulake://bundle/{backend}/{collection}` resource explicitly forbids the default-impl behaviour for any backend it's pointed at.
+
+**Build + test** (4 offline tests against `object_store::memory::InMemory` + 1 live test gated on env var):
+
+```bash
+cd gcs-backend && cargo build --release
+cargo test --release          # 4/4 offline pass
+
+# Live test — needs gcloud ADC + a real bucket:
+RULAKE_GCS_LIVE_TEST=1 \
+RULAKE_GCS_BUCKET=your-bucket \
+RULAKE_GCS_OBJECT=fixtures/docs-100k.parquet \
+cargo test --release -- --ignored gcs_live
+```
+
+**Why Parquet first, not RVF** (the better-on-paper format): RVF currently has no public per-vector reader API in `vendor/ruvector/crates/rvf/rvf-runtime` — only `query()` (which returns IDs+distances, not vector content). Documented as an upstream gap in [`docs/research/rvf-backend-blocker.md`](docs/research/rvf-backend-blocker.md); a `rvf-backend/` crate lands when the upstream `read_all_vectors()` ships.
+
+**Coming**: `parquet-on-s3` (same code, different `object_store` factory), `BigQueryBackend` (M3 — push-down via BQ Vector Search), `DeltaBackend` / `IcebergBackend` (M5).
+
+</details>
+
 ---
 
 ## How it works
@@ -716,33 +882,61 @@ Per-language details and the cross-cutting story are in the index at
 
 ## Status
 
-**M1 + M1.5 shipped and measured** (2026-04-24)
+**M1 + M1.5 + Audience shells (Python/Node/MCP) + first cloud backend (GCS) shipped** (2026-04-26)
 
 <details>
-<summary>✅ What's done (43 tests passing — 21 unit + 22 integration — zero unsafe in ruLake)</summary>
+<summary>✅ What's done — six sibling crates, zero unsafe in ruLake, all suites green</summary>
 
-- Core abstraction — `BackendAdapter` trait, `VectorCache`, bundle protocol, 3 consistency modes, LRU
-- Two reference backends — `LocalBackend` (in-memory), `FsBackend` (file-based with `ruvec1` format)
+**Core (M1 + M1.5):**
+- `BackendAdapter` trait, `VectorCache`, bundle protocol, 3 consistency modes, LRU
+- Reference backends — `LocalBackend` (in-memory), `FsBackend` (file-based with `ruvec1` format)
 - Optimizations — adaptive per-shard rerank, Arc-concurrency (13.2× concurrent), parallel prime (11× miss-path), AVX-512 VPOPCNTDQ + AVX2 dispatch, Hadamard rotation (3× build, 32× storage)
-- **Persist end-to-end** — `save_cache_to_dir` / `warm_from_dir` with non-dense external ID preservation
+- Persist end-to-end — `save_cache_to_dir` / `warm_from_dir` with non-dense external ID preservation
 - Observability — hit rate, prime durations, per-backend, per-collection attribution, warm-install counter
 - Substrate acceptance test — six-guarantee loop (recall → verify → forget → rehydrate → location-transparency + compact-deferred)
 - Security — path-traversal validation, JSON caps, witness verification, atomic writes
 - `VectorKernel` trait scaffolding (ADR-157)
-- Per-shard over-request — `k' = k + ⌈√(k·ln S)⌉`
-- 4 ADRs — 155 cache-first, 156 substrate, 157 accelerator plane, 158 Hadamard + QVCache positioning
+- 43 core tests (21 unit + 22 integration)
+
+**Audience shells:**
+- **Python SDK** ([`python/`](python/)) — PyO3 + ABI3 wheels, NumPy zero-copy, GIL release on hot paths. **14/14 tests.**
+- **Node.js SDK** ([`node/`](node/)) — napi-rs, Float32Array zero-copy, async-only, `bigint` IDs. **10/10 tests.**
+- **MCP server** ([`mcp-server/`](mcp-server/)) — `rulake-mcp` binary; stdio + Streamable HTTP; bearer auth (dev-only embarrassing-flag); 4 intents (search/verify/explain/refresh); 7 tools across read/internal/publish/admin capability tiers; bounded rayon worker pool; JSONL audit file with §7 schema. **21/21 tests.**
+
+**First cloud backend:**
+- **GCS Parquet** ([`gcs-backend/`](gcs-backend/)) — reads `LIST<FLOAT32>` columns from Parquet on GCS, generation = GCS object generation, cheap `current_bundle()` override. **4/4 offline + 1 live (gated) tests.**
+
+**ADRs:**
+- ADR-001 (standalone repo), ADR-155 (cache-first), ADR-156 (substrate), ADR-157 (accelerator plane), ADR-158 (Hadamard + QVCache positioning), [ADR-002](docs/adrs/sdk/ADR-002-python-sdk.md) (Python SDK), [ADR-003](docs/adrs/sdk/ADR-003-nodejs-typescript-sdk.md) (Node SDK), [ADR-004](docs/adrs/sdk/ADR-004-rulake-mcp-server.md) (MCP server, 1340 lines)
+- Research note: [`docs/research/rvf-backend-blocker.md`](docs/research/rvf-backend-blocker.md) — why RVF-as-backend is upstream-blocked
+
+**CI / release** — six GitHub Actions workflows in [`.github/workflows/`](.github/workflows/):
+- `ci.yml` — every push/PR, all 5 sibling crates
+- `release-python.yml` — ABI3 wheels (5 platforms) → PyPI on tag `python-v*`
+- `release-node.yml` — napi-rs `optionalDependencies` (5 triples) → npm on tag `node-v*`
+- `release-rust.yml` — `cargo publish` → crates.io on tag `rust-v*`
+- `release-docker.yml` — distroless image → ghcr.io/ruvnet/rulake-mcp on tag `mcp-v*`
+- `release-mcp-bin.yml` — prebuilt `rulake-mcp` binaries (5 triples) → GitHub Releases on tag `mcp-v*`
 
 </details>
 
 <details>
-<summary>🗺 M2+ roadmap</summary>
+<summary>🗺 What's next</summary>
 
-- **Backends** — `ParquetBackend` (`arrow` crate), `BigQueryBackend` (storage-read API), `IcebergBackend` (Nessie / Polaris catalog), `DeltaBackend` (CDF coherence)
-- **Wire** — HTTP / gRPC protocol layer with OpenAPI schema
-- **Governance** — RBAC via OIDC/JWT, PII passthrough (reusing `rvf-federation::pii`), OpenLineage emission with witness as lineage-id
-- **Kernels** — GPU in separate crates (`ruvector-rabitq-cuda`, `-rocm`, `-metal`), turbovec-style FastScan 4-bit LUT, WASM SIMD
-- **Acceleration** — mmap'd index persistence via `memmap2`, HNSW layer on top of RabitQ via `hnsw_rs::datamap`
-- **SOTA integrations** — QVCache-style adaptive per-region rerank, SPIRE-style 8B-vector federation
+**Sprint-sized:**
+- MCP server v0.4 — OAuth 2.1 + mTLS, replay protection (`MCP-Request-Id` nonce + session binding), layered rate limiting via `governor`, `rulake://bundle/...` resource, `tools/list` filter by capability
+
+**Real product work:**
+- Persistent disk-backed cache (ADR-155 §M1.5)
+- More cloud backends — `BigQueryBackend` (M3 — push-down via BQ Vector Search), `DeltaBackend` / `IcebergBackend` (M5)
+- Governance / M4 — RBAC, PII, lineage in OpenLineage. The MCP server's audit schema already maps onto this (swap-the-sink, not redesign-the-event-shape)
+
+**Orthogonal:**
+- WASM SDKs (browser / Cloudflare / Deno)
+- HTTP wire client (`rulake.client.HttpRuLake` / `@ruvector/rulake/http`)
+- Java SDK (both SDK ADRs flag v2)
+- rabitq GPU kernel (ADR-157 — scaffolding only today)
+- `rvf-backend/` once upstream `rvf-runtime` ships a public per-vector reader (see research note)
 
 </details>
 
