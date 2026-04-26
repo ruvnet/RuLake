@@ -1,20 +1,26 @@
-# `@ruvector/rulake` — Node.js SDK
+# rulake — Memory Lake for Agentic AI (Node.js / TypeScript)
 
-napi-rs bindings for [`ruvector-rulake`](https://github.com/ruvnet/RuLake) —
-a vector cache + federation intermediary that sits in front of whatever
-data lake already holds your vectors.
+[![npm version](https://img.shields.io/npm/v/rulake.svg)](https://www.npmjs.com/package/rulake)
+[![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT%2FApache--2.0-blue.svg)](https://github.com/ruvnet/RuLake#license)
+[![Repo](https://img.shields.io/badge/repo-ruvnet%2FRuLake-purple.svg)](https://github.com/ruvnet/RuLake)
 
-Implements [ADR-003](../docs/adrs/sdk/ADR-003-nodejs-typescript-sdk.md).
+**Fast, witness-anchored vector memory for LLM agents — without standing up a vector database.**
+
+ruLake sits between your **AI agent** and the **data it remembers** (S3, BigQuery, Snowflake, Parquet, files, RVF). Every retrieval is served from a compressed in-memory cache (RaBitQ 1-bit quantization) at **≈1.02× raw library speed**, anchored by a SHAKE-256 cryptographic **witness** so two agents on two hosts share one byte-exact view of memory.
+
+Native Node.js bindings via [`napi-rs`](https://napi.rs). Implements [ADR-003](https://github.com/ruvnet/RuLake/blob/main/docs/adrs/sdk/ADR-003-nodejs-typescript-sdk.md). The companion [`rulake-mcp`](https://github.com/ruvnet/RuLake/tree/main/mcp-server) binary speaks the [Model Context Protocol](https://modelcontextprotocol.io) so Claude Desktop, Cursor, Cline, and Continue can use this memory directly.
+
+**Use cases**: agent memory · LLM RAG · semantic search · embedding cache · federated retrieval · provenance-anchored AI · MCP tool memory · vector DB alternative · edge AI.
 
 ## Install
 
 ```bash
-npm install @ruvector/rulake     # once published — prebuilt binaries
+npm install rulake     # prebuilt binaries via optionalDependencies
 ```
 
-`npm install` resolves the right per-platform `@ruvector/rulake-<triple>`
-package via `optionalDependencies` and pulls only the matching `.node`
-binary.
+`npm install` resolves the right per-platform `rulake-<triple>` binary
+via `optionalDependencies` and pulls only the matching `.node` binary
+(no Rust toolchain required for end users).
 
 ## Build from source
 
@@ -50,7 +56,7 @@ produce, so switching to it is a no-op.
 ## Usage
 
 ```ts
-import { RuLake, LocalBackend, Bundle, Consistency, RuLakeError } from "@ruvector/rulake";
+import { RuLake, LocalBackend, Bundle, Consistency, RuLakeError } from "rulake";
 
 const lake = new RuLake(20, 42n)
   .withConsistency(Consistency.eventual(5_000))
@@ -100,10 +106,10 @@ console.log(lake.cacheStats().hitRate);
 
 See ADR-003 §"Open questions":
 
-- **WASM build (`@ruvector/rulake-wasm`)** — v2. Browser, Cloudflare
+- **WASM build (`rulake-wasm`)** — v2. Browser, Cloudflare
   Workers, Deno-deploy, Bun. Loses AVX-512 popcnt and rayon parallel
   fan-out, so it's a feature-reduced surface.
-- **HTTP client variant (`@ruvector/rulake/http`)** — v2.
+- **HTTP client variant (`rulake/http`)** — v2.
 - **JS-implemented `BackendAdapter`** — v2.
 
 ## License

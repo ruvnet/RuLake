@@ -18,7 +18,7 @@
 //! compressed index; only the first-query cost differs.
 //!
 //! Run with:
-//!   cargo run -p ruvector-rulake --release --example warm_restart
+//!   cargo run -p rulake --release --example warm_restart
 
 use std::sync::Arc;
 use std::time::Instant;
@@ -27,8 +27,8 @@ use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use rand_distr::{Distribution, Normal};
 
-use ruvector_rulake::cache::Consistency;
-use ruvector_rulake::{LocalBackend, RuLake};
+use rulake::cache::Consistency;
+use rulake::{LocalBackend, RuLake};
 
 const BACKEND_ID: &str = "prod-warehouse";
 const COLLECTION: &str = "memories";

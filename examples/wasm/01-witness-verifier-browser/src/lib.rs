@@ -33,7 +33,7 @@ const GEN_TAG_OPAQUE: u8 = 0x01;
 /// (pre-tag-byte) bundles are NOT compatible with this verifier.
 const SUPPORTED_FORMAT_VERSION: u32 = 2;
 
-/// Wire-format mirror of `ruvector_rulake::bundle::Generation`. `untagged`
+/// Wire-format mirror of `rulake::bundle::Generation`. `untagged`
 /// means a JSON `7` deserializes to `Num(7)` and `"abc"` to `Opaque("abc")`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(untagged)]

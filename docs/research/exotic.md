@@ -54,7 +54,7 @@ surface. Specifically:
 
 ```rust
 use std::sync::Arc;
-use ruvector_rulake::{
+use rulake::{
     cache::Consistency,
     backend::{BackendAdapter, CollectionId, PulledBatch},
     LocalBackend, RuLake,

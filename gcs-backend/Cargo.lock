@@ -1668,6 +1668,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "rulake"
+version = "2.2.0"
+dependencies = [
+ "hex",
+ "rand 0.8.6",
+ "rand_distr",
+ "rayon",
+ "ruvector-rabitq",
+ "serde",
+ "serde_json",
+ "sha3",
+ "thiserror",
+]
+
+[[package]]
 name = "rustc-hash"
 version = "2.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1761,21 +1776,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ruvector-rulake"
-version = "2.2.0"
-dependencies = [
- "hex",
- "rand 0.8.6",
- "rand_distr",
- "rayon",
- "ruvector-rabitq",
- "serde",
- "serde_json",
- "sha3",
- "thiserror",
-]
-
-[[package]]
 name = "ruvector-rulake-gcs"
 version = "0.1.0"
 dependencies = [
@@ -1785,7 +1785,7 @@ dependencies = [
  "futures",
  "object_store",
  "parquet",
- "ruvector-rulake",
+ "rulake",
  "tempfile",
  "tokio",
  "tracing",

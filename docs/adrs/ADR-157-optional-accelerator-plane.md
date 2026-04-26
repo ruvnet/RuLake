@@ -28,7 +28,7 @@ the acceptance gate.
 ## Context
 
 The measured intermediary tax on a cache hit is 1.02× direct RaBitQ
-(`crates/ruvector-rulake/BENCHMARK.md`). The cache is not the
+(`crates/rulake/BENCHMARK.md`). The cache is not the
 bottleneck. The bottleneck when it appears is in the **kernel** —
 RaBitQ popcount scan + exact L2² rerank — which scales with
 `n × D` for scan and `rerank_factor × k × D` for rerank. Both
@@ -52,7 +52,7 @@ laptop and WASM builds either fail or ship dead-weight bindings.
 ## Decision
 
 **An optional accelerator plane: a `VectorKernel` trait in
-`ruvector-rabitq` plus explicit dispatch in `ruvector-rulake`, with
+`ruvector-rabitq` plus explicit dispatch in `rulake`, with
 determinism as a hard gate on witness-sealed output.**
 
 ### Where each piece lives
@@ -64,8 +64,8 @@ determinism as a hard gate on witness-sealed output.**
 | SIMD kernel                        | `ruvector-rabitq`, feature-gated | Portable SIMD via `std::simd` when stable; AVX-512/NEON intrinsics otherwise. |
 | GPU kernels (CUDA, ROCm, Metal)    | **Separate crates** (`ruvector-rabitq-cuda`, etc.) | Each has its own CI matrix, driver dependency, and license footprint. |
 | WASM SIMD                          | Feature-gated in `ruvector-rabitq`   | No new crate; it's the same source compiled with `--target=wasm32-*`.      |
-| Dispatch policy                    | `ruvector-rulake`       | Uses live signals (batch size, hit rate, rerank pressure) only the cache has. |
-| Kernel registration + caps query   | `ruvector-rulake`       | `RuLake::register_kernel(Arc<dyn VectorKernel>)` mirrors `register_backend`. |
+| Dispatch policy                    | `rulake`       | Uses live signals (batch size, hit rate, rerank pressure) only the cache has. |
+| Kernel registration + caps query   | `rulake`       | `RuLake::register_kernel(Arc<dyn VectorKernel>)` mirrors `register_backend`. |
 
 ### Trait shape (normative)
 

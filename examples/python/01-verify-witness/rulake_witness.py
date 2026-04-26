@@ -3,7 +3,7 @@
 Re-derives the SHAKE-256(32) ``rvf_witness`` of a ``table.rulake.json``
 bundle from its other fields. The output of :func:`compute_witness` is
 guaranteed to byte-exactly match what the Rust crate's
-``ruvector_rulake::bundle::compute_witness`` produces (see
+``rulake::bundle::compute_witness`` produces (see
 ``src/bundle.rs`` in the parent repo).
 
 Algorithm (verbatim, witness format v1, current as of bundle
@@ -124,7 +124,7 @@ def compute_witness(
     """Compute the SHAKE-256(32) witness for the given bundle fields.
 
     Returns 64 lowercase hex characters, byte-equal to what
-    ``ruvector_rulake::bundle::compute_witness`` returns in Rust.
+    ``rulake::bundle::compute_witness`` returns in Rust.
     """
     if not isinstance(data_ref, str):
         raise TypeError("data_ref must be str")

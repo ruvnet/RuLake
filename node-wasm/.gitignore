@@ -1,0 +1,6 @@
+target/
+pkg-web/
+pkg-nodejs/
+pkg-bundler/
+node_modules/
+*.log

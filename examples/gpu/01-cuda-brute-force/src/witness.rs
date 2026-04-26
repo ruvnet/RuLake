@@ -1,7 +1,7 @@
 //! Local copy of the ruLake bundle witness algorithm.
 //!
 //! Byte-exactly compatible with `src/bundle.rs::compute_witness` from
-//! the upstream `ruvector-rulake` crate. Reproduced here (rather than
+//! the upstream `rulake` crate. Reproduced here (rather than
 //! depending on the crate) so this example stays a standalone binary
 //! that doesn't drag the full ruLake build into a CUDA-only example.
 //!

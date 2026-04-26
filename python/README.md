@@ -1,15 +1,22 @@
-# ruLake — Python SDK
+# rulake — Memory Lake for Agentic AI (Python)
 
-PyO3 bindings for [`ruvector-rulake`](https://github.com/ruvnet/RuLake) —
-a vector cache + federation intermediary that sits in front of whatever
-data lake already holds your vectors.
+[![PyPI version](https://img.shields.io/pypi/v/rulake.svg)](https://pypi.org/project/rulake/)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT%2FApache--2.0-blue.svg)](https://github.com/ruvnet/RuLake#license)
+[![Repo](https://img.shields.io/badge/repo-ruvnet%2FRuLake-purple.svg)](https://github.com/ruvnet/RuLake)
 
-Implements [ADR-002](../docs/adrs/sdk/ADR-002-python-sdk.md).
+**Fast, witness-anchored vector memory for LLM agents — without standing up a vector database.**
+
+ruLake sits between your **AI agent** and the **data it remembers** (S3, BigQuery, Snowflake, Parquet, files, RVF). Every retrieval is served from a compressed in-memory cache (RaBitQ 1-bit quantization) at **≈1.02× raw library speed**, anchored by a SHAKE-256 cryptographic **witness** so two agents on two hosts share one byte-exact view of memory.
+
+Native Python bindings via [`PyO3`](https://pyo3.rs) and [`maturin`](https://www.maturin.rs). Implements [ADR-002](https://github.com/ruvnet/RuLake/blob/main/docs/adrs/sdk/ADR-002-python-sdk.md). The companion [`rulake-mcp`](https://github.com/ruvnet/RuLake/tree/main/mcp-server) binary speaks the [Model Context Protocol](https://modelcontextprotocol.io) so Claude Desktop, Cursor, Cline, and Continue can use this memory directly.
+
+**Use cases**: LLM RAG · agent memory · semantic search · embedding cache · LangChain / LlamaIndex backend · federated retrieval · provenance-anchored AI · MCP tool memory · scientific reproducibility · regulated retrieval (HIPAA/SOX/MiFID audit) · vector DB alternative.
 
 ## Install
 
 ```bash
-pip install ruvector-rulake     # once published — wheels for cp39+
+pip install rulake     # wheels for cp39+ (manylinux_2_28 / macOS / Windows)
 ```
 
 ## Build from source

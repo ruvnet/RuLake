@@ -81,7 +81,7 @@ from rulake_witness import (
 RUVEC1_MAGIC = b"ruvec1\0\0"
 RUVEC1_HEADER_BYTES = 24
 
-# Mirror of ruvector_rulake::backend::MAX_PULLED_VECTORS / MAX_PULLED_DIM,
+# Mirror of rulake::backend::MAX_PULLED_VECTORS / MAX_PULLED_DIM,
 # which gate the Rust loader. Anything beyond these is hostile or buggy.
 MAX_VECTORS = 10_000_000
 MAX_DIM = 65_536

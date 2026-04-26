@@ -67,7 +67,7 @@ cargo test --release -- --ignored ipfs_live
 
 ```rust
 use std::sync::Arc;
-use ruvector_rulake::{cache::Consistency, RuLake, BackendAdapter};
+use rulake::{cache::Consistency, RuLake, BackendAdapter};
 use ruvector_rulake_ipfs::{IpfsBackend, IpfsCollection, Mode, KuboApiUrl};
 
 // Default — local kubo, no auth.

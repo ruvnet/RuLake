@@ -262,7 +262,7 @@ ruvector-rabitq = { path = "../ruvector-rabitq", version = "2.2" }
 
 Both `serde`, `thiserror`, `rand`, `rand_distr`, `rayon` are also
 declared as `{ workspace = true }`. As imported from
-`ruvnet/RuVector/crates/ruvector-rulake`, the crate works because the
+`ruvnet/RuVector/crates/rulake`, the crate works because the
 parent workspace exists; in this standalone repo it does not.
 
 **Recommendation:** for a standalone `RuLake` repo to build,
@@ -285,7 +285,7 @@ confusion).
 
 | # | Claim location | Issue | Severity |
 |---|---|---|---|
-| G1 | README "Capabilities" #29 — `VectorKernel` trait (ADR-157) | The trait is in `ruvector-rabitq`, not in `ruvector-rulake`, and the ruLake side of dispatch (`RuLake::register_kernel`, kernel selection policy) does not exist. ADR-157 itself says "Proposed — scaffolding-only", but the README presents it as a shipped capability of ruLake. | Medium |
+| G1 | README "Capabilities" #29 — `VectorKernel` trait (ADR-157) | The trait is in `ruvector-rabitq`, not in `rulake`, and the ruLake side of dispatch (`RuLake::register_kernel`, kernel selection policy) does not exist. ADR-157 itself says "Proposed — scaffolding-only", but the README presents it as a shipped capability of ruLake. | Medium |
 | G2 | README "Capabilities" #25-#30 (kernels block) | All six items live in `ruvector-rabitq`, not in this crate. ruLake inherits them transitively but doesn't own any of them. README should label the section "via ruvector-rabitq". | Low |
 | G3 | README "Capabilities" #30 — Hadamard rotation | There is **no** `RuLake` API to opt into Hadamard. Operators must build a `RabitqPlusIndex` directly (as `bin/rulake-demo.rs:75` does); ruLake's `new()` always uses Haar-default via the rabitq crate. | Low-Medium |
 | G4 | ADR-155 §3 — single governance choke point | RBAC / PII enforcement / lineage emission is M4 roadmap. The bundle has `pii_policy: Option<String>` and `lineage_id: Option<String>` fields but nothing in this crate enforces or emits them. | Low (consistent with ADR roadmap) |

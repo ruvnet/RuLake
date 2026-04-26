@@ -1,7 +1,7 @@
 {
-  "name": "@ruvector/rulake",
+  "name": "rulake",
   "version": "2.2.0",
-  "description": "ruLake — vector cache + federation intermediary, Node.js bindings (ADR-003)",
+  "description": "Memory Lake for Agentic AI — fast, witness-anchored vector memory for LLM agents. Cache layer for RAG, semantic search, federated retrieval over S3/BigQuery/Parquet, MCP-compatible. Node.js bindings.",
   "type": "module",
   "main": "index.cjs",
   "module": "index.mjs",
@@ -11,12 +11,19 @@
       "types": "./index.d.ts",
       "import": "./index.mjs",
       "require": "./index.cjs"
+    },
+    "./http": {
+      "types": "./http.d.ts",
+      "import": "./http.mjs",
+      "default": "./http.mjs"
     }
   },
   "files": [
     "index.mjs",
     "index.cjs",
     "index.d.ts",
+    "http.mjs",
+    "http.d.ts",
     "binding.cjs",
     "rulake.linux-x64-gnu.node",
     "rulake.linux-arm64-gnu.node",
@@ -34,13 +41,43 @@
     "url": "https://github.com/ruvnet/RuLake"
   },
   "keywords": [
+    "ai",
+    "agent",
+    "agentic",
+    "agent-memory",
+    "llm",
+    "rag",
+    "retrieval-augmented-generation",
     "vector",
-    "search",
+    "vector-search",
+    "vector-database",
+    "semantic-search",
+    "embedding",
+    "embeddings",
+    "embedding-cache",
     "ann",
+    "approximate-nearest-neighbor",
     "rabitq",
+    "quantization",
     "cache",
+    "memory",
     "datalake",
-    "rag"
+    "lakehouse",
+    "federation",
+    "mcp",
+    "model-context-protocol",
+    "claude",
+    "anthropic",
+    "openai",
+    "langchain",
+    "llamaindex",
+    "provenance",
+    "witness",
+    "edge-ai",
+    "rust",
+    "napi",
+    "napi-rs",
+    "ruvector"
   ],
   "scripts": {
     "build": "napi build --platform --release",
@@ -60,6 +97,14 @@
         "x86_64-pc-windows-msvc"
       ]
     }
+  },
+  "optionalDependencies": {
+    "rulake-linux-x64-gnu": "2.2.0",
+    "rulake-linux-arm64-gnu": "2.2.0",
+    "rulake-darwin-x64": "2.2.0",
+    "rulake-darwin-arm64": "2.2.0",
+    "rulake-win32-x64-msvc": "2.2.0",
+    "rulake-wasm": "2.2.0"
   },
   "devDependencies": {
     "@napi-rs/cli": "^2.18.4"

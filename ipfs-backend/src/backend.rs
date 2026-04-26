@@ -6,9 +6,9 @@ use std::sync::{Arc, RwLock};
 
 use serde::Deserialize;
 
-use ruvector_rulake::backend::{BackendAdapter, CollectionId, PulledBatch};
-use ruvector_rulake::bundle::{Generation, RuLakeBundle};
-use ruvector_rulake::error::{Result, RuLakeError};
+use rulake::backend::{BackendAdapter, CollectionId, PulledBatch};
+use rulake::bundle::{Generation, RuLakeBundle};
+use rulake::error::{Result, RuLakeError};
 
 // ─── Config types ────────────────────────────────────────────────────
 

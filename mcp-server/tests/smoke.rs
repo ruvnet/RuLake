@@ -10,7 +10,7 @@
 
 use std::sync::Arc;
 
-use ruvector_rulake::{LocalBackend, RuLake, BackendAdapter};
+use rulake::{LocalBackend, RuLake, BackendAdapter};
 use ruvector_rulake_mcp::RuLakeMcpServer;
 
 /// Build an in-memory ruLake with one collection of N×D vectors.
@@ -173,7 +173,7 @@ async fn backpressure_inflight_cap_carries_inflight_numbers() {
 
 #[tokio::test]
 async fn tools_list_filtered_by_capability_set() {
-    use ruvector_rulake::{LocalBackend, RuLake, BackendAdapter};
+    use rulake::{LocalBackend, RuLake, BackendAdapter};
     use ruvector_rulake_mcp::CapabilitySet;
 
     let lake = RuLake::new(20, 42);
@@ -240,7 +240,7 @@ async fn tools_list_filtered_by_capability_set() {
 
 #[tokio::test]
 async fn rbac_denies_unallowed_collection() {
-    use ruvector_rulake::{LocalBackend, RuLake, BackendAdapter};
+    use rulake::{LocalBackend, RuLake, BackendAdapter};
     use ruvector_rulake_mcp::AllowList;
     use ruvector_rulake_mcp::config::AllowBlock;
     use ruvector_rulake_mcp::planner::Planner;
@@ -459,7 +459,7 @@ async fn verify_intent_via_backend_returns_real_dim_and_witness() {
 
 #[tokio::test]
 async fn verify_intent_succeeds_on_valid_bundle() {
-    use ruvector_rulake::RuLakeBundle;
+    use rulake::RuLakeBundle;
     use tempfile::TempDir;
 
     let (lake, _, _) = make_lake(100, 16);
@@ -478,7 +478,7 @@ async fn verify_intent_succeeds_on_valid_bundle() {
         16,
         42,
         20,
-        ruvector_rulake::Generation::Num(1),
+        rulake::Generation::Num(1),
     );
     bundle.write_to_dir(dir.path()).unwrap();
 

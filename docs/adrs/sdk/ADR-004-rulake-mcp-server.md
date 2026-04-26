@@ -182,7 +182,7 @@ name = "rulake-mcp"
 path = "src/main.rs"
 
 [dependencies]
-ruvector-rulake = { path = ".." }
+rulake = { path = ".." }
 rmcp            = { version = "1.5", features = ["server", "transport-io", "transport-streamable-http-server", "auth"] }
 rmcp-macros     = "1.5"
 tokio           = { version = "1", features = ["rt-multi-thread", "macros", "signal", "fs"] }
@@ -223,7 +223,7 @@ via `path = ".."`. The MCP server slots in as the third sibling.
 | Option | Verdict |
 |---|---|
 | `mcp-server/` sibling crate | **Pick.** Mirrors `python/` and `node/`. One binary `cargo install`s; ships in CI like the SDK wheels. |
-| `bin/rulake-mcp` inside the main crate | Reject. Forces every ruLake user (incl. people who only want `cargo add ruvector-rulake`) to pull tokio + rmcp + hyper + rustls into their dep graph. ~50 transitive deps; a serving-process build just for the library doubles. |
+| `bin/rulake-mcp` inside the main crate | Reject. Forces every ruLake user (incl. people who only want `cargo add rulake`) to pull tokio + rmcp + hyper + rustls into their dep graph. ~50 transitive deps; a serving-process build just for the library doubles. |
 | `crates/rulake-mcp/` workspace member | Reject. Requires a root workspace, which ADR-001 §2 explicitly rejects. |
 | `examples/rust/05-mcp-server/` | Reject for v1 production. Examples are not where we ask operators to point their `cargo install`. The TypeScript demo at `examples/nodejs/04-mcp-tool/` stays as a *demo*, and its README will gain a "for production use, see `mcp-server/`" pointer. |
 
@@ -765,7 +765,7 @@ server's job is to propagate, not duplicate:
 | Control bytes in arg strings | propagated from `validate_filename` |
 
 The MCP server's `policy::validate_search_args` consults these
-constants directly (`use ruvector_rulake::backend::MAX_PULLED_DIM`),
+constants directly (`use rulake::backend::MAX_PULLED_DIM`),
 so a future bump in `src/backend.rs` lifts the cap everywhere with no
 duplicate edit.
 
@@ -972,7 +972,7 @@ verbatim into `mcp-server/README.md`:
 
 Reject. The TS demo is brute-force exact L2 over a snapshot directory
 because the Node side has no RaBitQ decoder (per `examples/nodejs/04-mcp-tool/README.md`).
-A 957 QPS / 100k-vector workload (`ruvector-rulake::BENCHMARK.md`)
+A 957 QPS / 100k-vector workload (`rulake::BENCHMARK.md`)
 collapses to single-digit QPS in pure JS. The TS path is a demo, not a
 serving binary.
 
@@ -983,7 +983,7 @@ manually means we own every spec change as an engineering ticket.
 `rmcp` is the official SDK and it tracks the spec — using it costs us
 a dep, owning it costs us an indefinite roadmap commitment.
 
-### C. Ship MCP as `rulake-mcp` *inside* the main `ruvector-rulake` crate
+### C. Ship MCP as `rulake-mcp` *inside* the main `rulake` crate
 
 Reject. Bringing tokio + hyper + rustls + rmcp into the dep graph of
 every library consumer (per ADR-002 the Python SDK depends on

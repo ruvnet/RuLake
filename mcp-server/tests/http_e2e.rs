@@ -14,7 +14,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use ruvector_rulake::{LocalBackend, RuLake, BackendAdapter};
+use rulake::{LocalBackend, RuLake, BackendAdapter};
 use ruvector_rulake_mcp::{
     AllowBearerOnPublic, AuthMode, BearerAuth, InsecureAllowNoAuth, RuLakeMcpServer,
 };
@@ -390,8 +390,8 @@ fn make_admin_server() -> ruvector_rulake_mcp::RuLakeMcpServer {
     .unwrap()
 }
 
-fn make_lake() -> ruvector_rulake::RuLake {
-    use ruvector_rulake::{LocalBackend, RuLake, BackendAdapter};
+fn make_lake() -> rulake::RuLake {
+    use rulake::{LocalBackend, RuLake, BackendAdapter};
     let lake = RuLake::new(20, 42);
     let be = std::sync::Arc::new(LocalBackend::new("local"));
     be.put_collection(

@@ -11,11 +11,11 @@ use object_store::{ObjectMeta, ObjectStore, ObjectStoreExt, gcp::GoogleCloudStor
 use parquet::arrow::ParquetRecordBatchStreamBuilder;
 use parquet::arrow::async_reader::ParquetObjectReader;
 
-use ruvector_rulake::backend::{
+use rulake::backend::{
     BackendAdapter, CollectionId, PulledBatch, MAX_PULLED_DIM,
 };
-use ruvector_rulake::bundle::{Generation, RuLakeBundle};
-use ruvector_rulake::error::{Result, RuLakeError};
+use rulake::bundle::{Generation, RuLakeBundle};
+use rulake::error::{Result, RuLakeError};
 
 // ─── Config ────────────────────────────────────────────────────────────
 

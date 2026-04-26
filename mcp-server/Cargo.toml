@@ -13,7 +13,7 @@
 # - witness-fail-closed wherever bundles are touched
 #
 # Standalone Cargo package per ADR-001 (no root workspace; the parent
-# ruvector-rulake crate is reached via `path = ".."`).
+# rulake crate is reached via `path = ".."`).
 
 [package]
 name = "ruvector-rulake-mcp"
@@ -30,7 +30,7 @@ path = "src/main.rs"
 
 [dependencies]
 # The ruLake crate the server wraps. Per ADR-001, sibling-crate path-dep.
-ruvector-rulake = { path = ".." }
+rulake = { path = "..", version = "2.2.0" }
 
 # Official Rust MCP SDK (Anthropic, modelcontextprotocol/rust-sdk).
 # `server` feature enables the request/response handler scaffolding;

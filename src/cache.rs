@@ -225,7 +225,7 @@ struct CacheEntry {
     /// would require widening rabitq's internal `ids: Vec<u32>` to
     /// `Vec<u64>` (loses cache-line density) OR exposing a position
     /// iterator from rabitq. Both are cross-crate changes and the
-    /// memory-audit follow-up explicitly scoped us to `ruvector-rulake`
+    /// memory-audit follow-up explicitly scoped us to `rulake`
     /// only — so we keep the split and document it here. At n=1 M with
     /// u64 ids this is 8 MB/entry; entry counts are bounded by
     /// `max_entries`, so the waste is capped, not unbounded.

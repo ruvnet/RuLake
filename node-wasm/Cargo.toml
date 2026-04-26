@@ -1,0 +1,49 @@
+# ruLake — WASM build (browsers, Cloudflare Workers, Deno, Bun, Node.js fallback).
+#
+# Standalone Cargo package — empty [workspace] so the wasm32 build doesn't
+# pull in the host crate's std::sync::Mutex / rayon deps. Compiles the
+# *substrate* (witness, bundle parse / serialize, length-prefixed
+# domain-separated SHAKE-256) — the parts that work cleanly in single-
+# threaded WASM. The full RuLake search path needs std::sync + rayon and
+# is intentionally NOT included here (a v2 task per ADR-003 §"WASM build").
+#
+# Build:
+#   ./build.sh                 # wasm-pack build --target web/nodejs/bundler
+# Test:
+#   node --test tests/
+
+[workspace]
+
+[package]
+name        = "rulake-wasm"
+version     = "2.2.0"
+edition     = "2021"
+license     = "MIT OR Apache-2.0"
+authors     = ["Ruvector Team"]
+repository  = "https://github.com/ruvnet/RuLake"
+description = "ruLake — Memory Lake for Agentic AI, WASM build (browsers, Cloudflare Workers, Deno, Bun)"
+readme      = "README.md"
+publish     = false  # npm-published, not crates.io
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+wasm-bindgen        = "0.2"
+serde               = { version = "1.0", features = ["derive"] }
+serde_json          = "1.0"
+serde-wasm-bindgen  = "0.6"
+sha3                = "0.10"
+hex                 = "0.4"
+
+[profile.release]
+opt-level     = "s"
+lto           = true
+codegen-units = 1
+panic         = "abort"
+strip         = true
+
+# wasm-pack 0.14's bundled wasm-opt rejects rustc's bulk-memory ops.
+# build.sh applies system wasm-opt (binaryen) post-pass when present.
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false

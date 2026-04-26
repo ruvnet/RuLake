@@ -97,7 +97,7 @@ def test_version_reads_cargo_toml(tmp_path: Path) -> None:
     cargo = tmp_path / "Cargo.toml"
     cargo.write_text(
         '[package]\n'
-        'name = "ruvector-rulake"\n'
+        'name = "rulake"\n'
         'version = "9.9.9"\n'
         '\n[dependencies]\n'
         'foo = "1.0"\n',
@@ -112,7 +112,7 @@ def test_version_skips_non_package_blocks(tmp_path: Path) -> None:
         '[dependencies]\n'
         'foo = { version = "1.2.3" }\n'
         '\n[package]\n'
-        'name = "ruvector-rulake"\n'
+        'name = "rulake"\n'
         'version = "2.2.0"\n',
         encoding="utf-8",
     )
@@ -155,7 +155,7 @@ def test_missing_binary_and_no_cargo_raises(tmp_path: Path, monkeypatch: pytest.
     monkeypatch.delenv("RULAKE_DEMO_BINARY", raising=False)
     # Force a synthetic cargo_root with no target/ subdir.
     fake_root = tmp_path
-    (fake_root / "Cargo.toml").write_text("[package]\nname='ruvector-rulake'\nversion='0.0.1'\n",
+    (fake_root / "Cargo.toml").write_text("[package]\nname='rulake'\nversion='0.0.1'\n",
                                           encoding="utf-8")
     w = Rulake(cargo_root=fake_root, binary=None)
     with pytest.raises(RulakeError, match="cargo|not in PATH|not found"):

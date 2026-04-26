@@ -6,7 +6,7 @@
 //! cache coherent with whatever the publisher has signed off.
 //!
 //! Run with:
-//!   cargo run --release -p ruvector-rulake --example sidecar_daemon
+//!   cargo run --release -p rulake --example sidecar_daemon
 //!
 //! The example simulates a full deployment in one process:
 //!   - A "publisher" backend with a collection of vectors
@@ -22,7 +22,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use ruvector_rulake::{cache::Consistency, LocalBackend, RefreshResult, RuLake};
+use rulake::{cache::Consistency, LocalBackend, RefreshResult, RuLake};
 
 fn main() {
     println!("=== ruLake sidecar daemon demo ===\n");

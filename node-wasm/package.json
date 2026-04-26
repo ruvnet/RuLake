@@ -1,0 +1,61 @@
+{
+  "name": "rulake-wasm",
+  "version": "2.2.0",
+  "description": "Memory Lake for Agentic AI — WASM build for browsers, Cloudflare Workers, Deno, Bun. Same witness-anchored memory model as `rulake` (Node.js bindings), feature-reduced surface for edge runtimes (no AVX-512, no rayon).",
+  "type": "module",
+  "main": "pkg-nodejs/rulake_wasm.js",
+  "module": "pkg-bundler/rulake_wasm.js",
+  "browser": "pkg-web/rulake_wasm.js",
+  "types": "pkg-bundler/rulake_wasm.d.ts",
+  "exports": {
+    ".": {
+      "types": "./pkg-bundler/rulake_wasm.d.ts",
+      "browser": "./pkg-web/rulake_wasm.js",
+      "deno": "./pkg-bundler/rulake_wasm.js",
+      "worker": "./pkg-web/rulake_wasm.js",
+      "bun": "./pkg-bundler/rulake_wasm.js",
+      "import": "./pkg-bundler/rulake_wasm.js",
+      "require": "./pkg-nodejs/rulake_wasm.js",
+      "default": "./pkg-bundler/rulake_wasm.js"
+    },
+    "./web": {
+      "types": "./pkg-web/rulake_wasm.d.ts",
+      "default": "./pkg-web/rulake_wasm.js"
+    },
+    "./nodejs": {
+      "types": "./pkg-nodejs/rulake_wasm.d.ts",
+      "default": "./pkg-nodejs/rulake_wasm.js"
+    },
+    "./bundler": {
+      "types": "./pkg-bundler/rulake_wasm.d.ts",
+      "default": "./pkg-bundler/rulake_wasm.js"
+    }
+  },
+  "files": [
+    "pkg-web/",
+    "pkg-nodejs/",
+    "pkg-bundler/",
+    "README.md"
+  ],
+  "keywords": [
+    "ai", "agent", "agentic", "agent-memory",
+    "llm", "rag", "vector", "vector-search", "semantic-search",
+    "embedding", "embedding-cache", "ann", "rabitq",
+    "wasm", "webassembly", "browser",
+    "cloudflare-workers", "deno", "bun", "edge",
+    "mcp", "model-context-protocol",
+    "provenance", "witness", "rulake"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ruvnet/RuLake.git",
+    "directory": "node-wasm"
+  },
+  "homepage": "https://github.com/ruvnet/RuLake#wasm",
+  "bugs": "https://github.com/ruvnet/RuLake/issues",
+  "license": "MIT OR Apache-2.0",
+  "author": "Ruvector Team",
+  "engines": {
+    "node": ">=18"
+  }
+}

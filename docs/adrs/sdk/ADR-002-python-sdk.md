@@ -33,7 +33,7 @@ the same submodule-and-no-root-workspace discipline.
 
 ## Context
 
-The Rust crate `ruvector-rulake` (this repo) ships the cache + router +
+The Rust crate `rulake` (this repo) ships the cache + router +
 bundle protocol. The audience that buys "vector cache in front of my
 existing lake" is overwhelmingly Python-first: data engineers, ML
 platform teams, RAG application authors. Telling them to write Rust
@@ -41,7 +41,7 @@ to evaluate ruLake is a non-starter.
 
 We need a Python SDK that:
 
-1. **Hides Rust**, so a Python team installs `pip install ruvector-rulake`,
+1. **Hides Rust**, so a Python team installs `pip install rulake`,
    imports it, and runs the demo on their own Parquet/BigQuery data.
 2. **Preserves the 1.02× cache-hit tax**. The whole pitch from
    `BENCHMARK.md` is "abstraction is free". A binding that copies the
@@ -85,7 +85,7 @@ surface, with **NumPy zero-copy** for vectors, **GIL release** on every
 search/prime path, **ABI3 wheels** for forward compatibility, and a
 **sync-first** API in v1 with async wrappers in v2.
 
-The crate name on PyPI is `ruvector-rulake` (matches the Rust crate
+The crate name on PyPI is `rulake` (matches the Rust crate
 name on crates.io for discoverability). The import name is `rulake`
 (short, idiomatic, matches the product name).
 
@@ -121,7 +121,7 @@ The `python/Cargo.toml` shape:
 
 ```toml
 [package]
-name = "ruvector-rulake-py"
+name = "rulake-py"
 version = "2.2.0"
 edition = "2021"
 publish = false  # built and shipped by maturin, not crates.io
@@ -131,7 +131,7 @@ name = "rulake"
 crate-type = ["cdylib"]  # Python extension module
 
 [dependencies]
-ruvector-rulake = { path = ".." }     # the cache+router crate (this repo)
+rulake = { path = ".." }     # the cache+router crate (this repo)
 pyo3            = { version = "0.22", features = ["abi3-py39", "extension-module"] }
 numpy           = "0.22"               # PyArray + ndarray interop
 ```
@@ -149,7 +149,7 @@ requires = ["maturin>=1.5,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "ruvector-rulake"
+name = "rulake"
 version = "2.2.0"
 requires-python = ">=3.9"
 license = { text = "MIT OR Apache-2.0" }
@@ -297,7 +297,7 @@ with ThreadPoolExecutor(max_workers=16) as ex:
 
 This is the same pattern used by `psycopg2`, `lxml`, and every other
 GIL-releasing binding. The performance ceiling is the underlying
-crate's concurrent QPS (`ruvector-rulake::BENCHMARK.md` shows
+crate's concurrent QPS (`rulake::BENCHMARK.md` shows
 8 threads × 50 queries holds correctness and hit-rate).
 
 ### 5. ABI3 wheels distributed via PyPI
@@ -434,7 +434,7 @@ threads never touch the GIL. Not worth shipping in v1 — `LocalBackend`
 
 ### Positive
 
-- `pip install ruvector-rulake` Just Works for the default Python
+- `pip install rulake` Just Works for the default Python
   audience (3.9+ on Linux/macOS/Windows). No Rust toolchain required.
 - The 1.02× tax survives the binding. Vectors are zero-copied;
   results are small structs; the GIL is released around the scan.
@@ -483,7 +483,7 @@ threads never touch the GIL. Not worth shipping in v1 — `LocalBackend`
 
 ```text
 $ cd python && maturin develop --release
-   Compiling ruvector-rulake-py …
+   Compiling rulake-py …
    Built wheel for CPython 3.12 — abi3-py39 — manylinux_2_28_x86_64
 $ python -c "
 import numpy as np, rulake

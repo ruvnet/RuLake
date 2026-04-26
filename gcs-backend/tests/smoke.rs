@@ -20,7 +20,7 @@ use object_store::{ObjectStore, ObjectStoreExt, memory::InMemory, path::Path as 
 use parquet::arrow::ArrowWriter;
 use parquet::file::properties::WriterProperties;
 
-use ruvector_rulake::backend::{BackendAdapter, PulledBatch};
+use rulake::backend::{BackendAdapter, PulledBatch};
 use ruvector_rulake_gcs::{GcsParquetBackend, GcsParquetCollection};
 
 fn build_parquet(n: usize, dim: usize) -> Bytes {

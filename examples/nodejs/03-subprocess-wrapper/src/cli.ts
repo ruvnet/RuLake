@@ -22,7 +22,7 @@ async function main(argv: string[]): Promise<void> {
 
   if (cmd === "version") {
     const r = new Rulake();
-    process.stdout.write(`ruvector-rulake ${r.version()}\n`);
+    process.stdout.write(`rulake ${r.version()}\n`);
     process.stdout.write(`binary: ${r.binary ?? "(cargo fallback)"}\n`);
     return;
   }

@@ -68,7 +68,7 @@ narrow:
   mechanism*, not the product shape.
 
 The measured cache-hit path in `RuLake::search_one` is 1.02× the direct
-`RabitqPlusIndex::search` cost (`ruvector-rulake::BENCHMARK.md`). The
+`RabitqPlusIndex::search` cost (`rulake::BENCHMARK.md`). The
 abstraction layer is not a bottleneck; we can afford orchestration,
 governance, and routing on top.
 
@@ -120,7 +120,7 @@ Key shape decisions:
    the rest of the ecosystem already depends on.
 
 6. **The portable unit is the bundle sidecar `table.rulake.json`,
-   not the UDF.** Implemented in `ruvector_rulake::bundle::RuLakeBundle`:
+   not the UDF.** Implemented in `rulake::bundle::RuLakeBundle`:
    carries `(data_ref, dim, rotation_seed, rerank_factor, generation,
    rvf_witness, pii_policy, lineage_id)` with a SHAKE-256 witness over
    the preceding fields. Two instances of ruLake observing the same
@@ -137,13 +137,13 @@ See [`docs/research/ruLake/07-implementation-plan.md`](../research/ruLake/07-imp
 for the full breakdown.
 
 - **M1 (weeks 1–2) — shipped on branch, measured:** the
-  `ruvector-rulake` crate scaffold with `BackendAdapter` trait,
+  `rulake` crate scaffold with `BackendAdapter` trait,
   `LocalBackend` + `FsBackend`, RaBitQ-cache glue, witness-addressed
   cache with cross-backend sharing, LRU eviction over unpinned
   entries, rayon parallel fan-out with **adaptive per-shard rerank**,
   bundle sidecar protocol (publish + refresh, atomic FS persistence),
   and hit-rate / prime-time instrumentation. 28 tests passing.
-  Acceptance numbers from `crates/ruvector-rulake/BENCHMARK.md`:
+  Acceptance numbers from `crates/rulake/BENCHMARK.md`:
 
   - Intermediary tax on LocalBackend: 1.02× at n=100k (2,854 QPS
     cache-hit vs 2,854 QPS direct RaBitQ under concurrent clients).
@@ -332,7 +332,7 @@ as a mode flag for customers who cannot tolerate cache staleness.
 - ~~**Per-collection vs per-backend cache.**~~ **Resolved:** One pool,
   witness-addressed. Per-collection quotas are an M4 governance
   feature if a customer needs "hot collection" guarantees.
-- ~~**Crate placement.**~~ **Resolved:** `crates/ruvector-rulake/` — a
+- ~~**Crate placement.**~~ **Resolved:** `crates/rulake/` — a
   top-level workspace member (not under `crates/rvf/`). Keeps rvf core
   `no_std`-friendly, matches the rabitq crate's location.
 - ~~**Cache sidecar daemon protocol.**~~ **Resolved:**

@@ -19,7 +19,7 @@ use rand::{Rng, SeedableRng};
 use rand_distr::{Distribution, Normal, Uniform};
 
 use ruvector_rabitq::{AnnIndex, RabitqPlusIndex};
-use ruvector_rulake::{cache::Consistency, FsBackend, LocalBackend, RuLake};
+use rulake::{cache::Consistency, FsBackend, LocalBackend, RuLake};
 
 fn clustered(n: usize, d: usize, n_clusters: usize, seed: u64) -> Vec<Vec<f32>> {
     let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
@@ -250,7 +250,7 @@ fn two_backends_share_cache_when_witness_matches() {
     // `current_bundle()` to report a shared `data_ref`, so two distinct
     // `LocalBackend` instances look like two pointers into the same
     // logical dataset.
-    use ruvector_rulake::{BackendAdapter, Generation, PulledBatch, RuLakeBundle, RuLakeError};
+    use rulake::{BackendAdapter, Generation, PulledBatch, RuLakeBundle, RuLakeError};
     use std::sync::RwLock;
 
     struct SharedLocalBackend {
@@ -359,7 +359,7 @@ fn dimension_mismatch_returns_error() {
     let err = lake.search_one("tiny", "c", &bad_query, 1).unwrap_err();
     assert!(matches!(
         err,
-        ruvector_rulake::RuLakeError::DimensionMismatch { .. }
+        rulake::RuLakeError::DimensionMismatch { .. }
     ));
 }
 
@@ -369,7 +369,7 @@ fn unknown_backend_returns_error() {
     let err = lake.search_one("nope", "nope", &[0.0; 4], 1).unwrap_err();
     assert!(matches!(
         err,
-        ruvector_rulake::RuLakeError::UnknownBackend(_)
+        rulake::RuLakeError::UnknownBackend(_)
     ));
 }
 
@@ -480,7 +480,7 @@ fn unknown_collection_returns_error() {
     // Error surfaces via the backend's generation() call.
     assert!(matches!(
         err,
-        ruvector_rulake::RuLakeError::UnknownCollection { .. }
+        rulake::RuLakeError::UnknownCollection { .. }
     ));
 }
 
@@ -682,11 +682,11 @@ fn publish_bundle_roundtrips_through_disk() {
     let written = lake.publish_bundle(&key, &tmp).unwrap();
     assert_eq!(
         written.file_name().unwrap(),
-        ruvector_rulake::RuLakeBundle::SIDECAR_FILENAME
+        rulake::RuLakeBundle::SIDECAR_FILENAME
     );
 
     // Reader side: a third party picks up the sidecar, verifies witness.
-    let read = ruvector_rulake::RuLakeBundle::read_from_dir(&tmp).unwrap();
+    let read = rulake::RuLakeBundle::read_from_dir(&tmp).unwrap();
     let published = lake.cache_witness_of(&key);
     // Publishing does NOT prime the cache — publish just emits the
     // current bundle, so the cache witness is still None here.
@@ -704,7 +704,7 @@ fn publish_bundle_roundtrips_through_disk() {
 
 #[test]
 fn refresh_from_bundle_dir_reports_all_three_states() {
-    use ruvector_rulake::RefreshResult;
+    use rulake::RefreshResult;
 
     let mut tmp = std::env::temp_dir();
     let nanos = std::time::SystemTime::now()
@@ -784,7 +784,7 @@ fn brain_substrate_acceptance_recall_verify_forget_rehydrate() {
     // If this test stays green on every commit, the "agent-facing
     // memory substrate" claim is not just aspirational — it's mechanical.
 
-    use ruvector_rulake::{RefreshResult, RuLakeBundle};
+    use rulake::{RefreshResult, RuLakeBundle};
 
     let d = 16;
     let n = 100;
@@ -1057,7 +1057,7 @@ fn frozen_consistency_never_rechecks_after_prime() {
     let refresh = lake.refresh_from_bundle_dir(&key, &tmp_dir).unwrap();
     assert_eq!(
         refresh,
-        ruvector_rulake::RefreshResult::Invalidated,
+        rulake::RefreshResult::Invalidated,
         "explicit refresh must still be able to invalidate a Frozen cache"
     );
     let _ = std::fs::remove_dir_all(&tmp_dir);
@@ -1199,7 +1199,7 @@ fn warm_from_dir_skips_backend_and_returns_bit_exact_results() {
     assert_eq!(written.file_name().unwrap(), "index.rbpx");
     // Sidecar must exist alongside.
     assert!(tmp
-        .join(ruvector_rulake::RuLakeBundle::SIDECAR_FILENAME)
+        .join(rulake::RuLakeBundle::SIDECAR_FILENAME)
         .exists());
 
     // Step 4: fresh RuLake, no backend. Same seed + rerank_factor so

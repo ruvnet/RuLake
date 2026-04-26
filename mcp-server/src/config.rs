@@ -80,8 +80,8 @@ impl Default for ConsistencyConfig {
 }
 
 impl ConsistencyConfig {
-    pub fn into_runtime(self) -> ruvector_rulake::cache::Consistency {
-        use ruvector_rulake::cache::Consistency;
+    pub fn into_runtime(self) -> rulake::cache::Consistency {
+        use rulake::cache::Consistency;
         match self {
             Self::Fresh => Consistency::Fresh,
             Self::Eventual { ttl_ms } => Consistency::Eventual { ttl_ms },

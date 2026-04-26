@@ -14,7 +14,7 @@ use std::sync::Arc;
 use rmcp::schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use ruvector_rulake::{RuLake, SearchResult};
+use rulake::{RuLake, SearchResult};
 
 use crate::allow::AllowList;
 use crate::policy::Capability;
@@ -401,7 +401,7 @@ impl Planner {
         let dir = std::path::PathBuf::from(&r.bundle_dir);
         let submit = self
             .workers
-            .submit(move || -> Result<Vec<(String, ruvector_rulake::RefreshResult)>, ruvector_rulake::RuLakeError> {
+            .submit(move || -> Result<Vec<(String, rulake::RefreshResult)>, rulake::RuLakeError> {
                 let mut out = Vec::with_capacity(routes_for_run.len());
                 for (b, c) in &routes_for_run {
                     let key = (b.clone(), c.clone());
@@ -427,7 +427,7 @@ impl Planner {
             .iter()
             .map(|(b, r)| format!("{b}={:?}", r))
             .collect();
-        let any_invalidated = outcomes.iter().any(|(_, r)| matches!(r, ruvector_rulake::RefreshResult::Invalidated));
+        let any_invalidated = outcomes.iter().any(|(_, r)| matches!(r, rulake::RefreshResult::Invalidated));
         let reason_code = if any_invalidated {
             ReasonCode::StaleCacheRemoteValid
         } else {
@@ -496,7 +496,7 @@ impl Planner {
         let bundle_dir = v.bundle_dir.clone().map(std::path::PathBuf::from);
         let submit = self
             .workers
-            .submit(move || -> Result<VerifyOutcome, ruvector_rulake::RuLakeError> {
+            .submit(move || -> Result<VerifyOutcome, rulake::RuLakeError> {
                 let bundle = if via_backend {
                     // v0.7: real BackendAdapter path. Picks the first
                     // route, calls RuLake::current_bundle (which
@@ -507,7 +507,7 @@ impl Planner {
                     // synthesis. The bundle's dim, witness, and
                     // generation are all real.
                     let (b, c) = routes_for_run.first().ok_or_else(|| {
-                        ruvector_rulake::RuLakeError::InvalidParameter(
+                        rulake::RuLakeError::InvalidParameter(
                             "verify via_backend: no routes resolved".into(),
                         )
                     })?;
@@ -515,11 +515,11 @@ impl Planner {
                 } else {
                     // Disk path (back-compat default).
                     let dir = bundle_dir.ok_or_else(|| {
-                        ruvector_rulake::RuLakeError::InvalidParameter(
+                        rulake::RuLakeError::InvalidParameter(
                             "verify intent: either bundle_dir or via_backend=true required".into(),
                         )
                     })?;
-                    ruvector_rulake::RuLakeBundle::read_from_dir(&dir)?
+                    rulake::RuLakeBundle::read_from_dir(&dir)?
                 };
                 let recomputed_ok = bundle.verify_witness();
                 let cache_witness = routes_for_run.first().and_then(|(b, c)| {
@@ -800,7 +800,7 @@ impl Planner {
         let routes_for_run = routes.clone();
         let submit = self
             .workers
-            .submit(move || -> Result<Vec<SearchResult>, ruvector_rulake::RuLakeError> {
+            .submit(move || -> Result<Vec<SearchResult>, rulake::RuLakeError> {
                 if routes_for_run.len() == 1 {
                     let (b, c) = &routes_for_run[0];
                     lake.search_one(b, c, &vector, effective_k)

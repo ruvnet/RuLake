@@ -44,7 +44,7 @@ f64→f32 down-cast, partitioned-table fan-out, multi-file collections.
 
 ```rust
 use std::sync::Arc;
-use ruvector_rulake::{cache::Consistency, RuLake, BackendAdapter};
+use rulake::{cache::Consistency, RuLake, BackendAdapter};
 use ruvector_rulake_gcs::{GcsParquetBackend, GcsParquetCollection};
 
 let backend = GcsParquetBackend::open_gcs("gcs-prod", "my-vector-bucket")?;

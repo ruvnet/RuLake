@@ -22,7 +22,7 @@ repository = "https://github.com/ruvnet/RuLake"
 description = "IPFS BackendAdapter for ruLake — bundle distribution + content addressing (ADR-005)"
 
 [dependencies]
-ruvector-rulake = { path = ".." }
+rulake = { path = "..", version = "2.2.0" }
 
 # Note: we deliberately don't use `ipfs-api-backend-hyper` for v0.1.
 # It transitively pulls multihash 0.17 → core2 0.4 (yanked). Kubo's

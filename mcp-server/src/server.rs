@@ -25,7 +25,7 @@ use rmcp::{
 };
 use serde::{Deserialize, Serialize};
 
-use ruvector_rulake::{LocalBackend, RuLake, BackendAdapter, FsBackend};
+use rulake::{LocalBackend, RuLake, BackendAdapter, FsBackend};
 
 use crate::allow::AllowList;
 use crate::audit::{AuditEntry, AuditSink, PolicyDecision, now_ts};
@@ -370,9 +370,9 @@ impl RuLakeMcpServer {
             .map_err(|e| McpError::internal_error(format!("RULAKE_DEGRADED: {e}"), None))?
             .map_err(|e| McpError::internal_error(format!("RULAKE_INTERNAL: {e}"), None))?;
         let status = match res {
-            ruvector_rulake::RefreshResult::UpToDate => "up_to_date",
-            ruvector_rulake::RefreshResult::Invalidated => "invalidated",
-            ruvector_rulake::RefreshResult::BundleMissing => "bundle_missing",
+            rulake::RefreshResult::UpToDate => "up_to_date",
+            rulake::RefreshResult::Invalidated => "invalidated",
+            rulake::RefreshResult::BundleMissing => "bundle_missing",
         };
         Ok(Json(RefreshResponse { status: status.into() }))
     }

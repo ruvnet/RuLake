@@ -248,7 +248,7 @@ repository = "https://github.com/ruvnet/RuLake"
 description = "IPFS BackendAdapter for ruLake — content-addressed bundles via kubo"
 
 [dependencies]
-ruvector-rulake = { path = ".." }
+rulake = { path = ".." }
 
 # Default kubo RPC client. with-hyper-rustls feature gives us a TLS
 # client that works against a kubo behind Caddy/nginx with TLS;

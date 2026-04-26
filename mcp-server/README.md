@@ -1,7 +1,7 @@
 # `rulake-mcp` — ruLake MCP server
 
 Implements [ADR-004](../docs/adrs/sdk/ADR-004-rulake-mcp-server.md) — the
-control-plane / decision-layer over [`ruvector-rulake`](..) for
+control-plane / decision-layer over [`rulake`](..) for
 agent-callable governed memory.
 
 ## Status: v0.3 (production-shaped surface)
@@ -46,7 +46,7 @@ cargo build --release
 
 Per [ADR-001](../docs/adrs/ADR-001-standalone-repo-strategy.md) this is
 a sibling Cargo package — no root workspace; the parent
-`ruvector-rulake` is reached via `path = ".."`.
+`rulake` is reached via `path = ".."`.
 
 ## Run
 

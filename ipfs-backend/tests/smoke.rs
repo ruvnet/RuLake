@@ -21,8 +21,8 @@ use hyper::service::service_fn;
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use hyper_util::server::conn::auto;
 
-use ruvector_rulake::backend::BackendAdapter;
-use ruvector_rulake::bundle::{Generation, RuLakeBundle};
+use rulake::backend::BackendAdapter;
+use rulake::bundle::{Generation, RuLakeBundle};
 use ruvector_rulake_ipfs::{IpfsBackend, IpfsCollection, KuboApiUrl, Mode};
 
 const FAKE_CID: &str = "bafybeifaketestcidforipfsbackendsmokeonlyy";

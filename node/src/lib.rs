@@ -1,6 +1,6 @@
 //! ruLake — Node.js bindings (ADR-003).
 //!
-//! Wraps the public surface of `ruvector-rulake` with napi-rs.
+//! Wraps the public surface of `rulake` with napi-rs.
 //!
 //! # Design rules (from ADR-003)
 //!
@@ -29,8 +29,8 @@ use std::sync::Arc;
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 
-use ruvector_rulake::cache::Consistency as RsConsistency;
-use ruvector_rulake::{
+use rulake::cache::Consistency as RsConsistency;
+use rulake::{
     BackendAdapter, FsBackend as RsFs, Generation as RsGeneration, LocalBackend as RsLocal,
     RefreshResult as RsRefreshResult, RuLake as RsRuLake, RuLakeBundle as RsBundle,
     RuLakeError as RsErr,
@@ -106,8 +106,8 @@ pub struct SearchResult {
     pub score: f64,
 }
 
-impl From<ruvector_rulake::SearchResult> for SearchResult {
-    fn from(h: ruvector_rulake::SearchResult) -> Self {
+impl From<rulake::SearchResult> for SearchResult {
+    fn from(h: rulake::SearchResult) -> Self {
         Self {
             backend: h.backend,
             collection: h.collection,
@@ -137,8 +137,8 @@ pub struct CacheStats {
     pub avg_prime_ms: Option<f64>,
 }
 
-impl From<ruvector_rulake::CacheStats> for CacheStats {
-    fn from(s: ruvector_rulake::CacheStats) -> Self {
+impl From<rulake::CacheStats> for CacheStats {
+    fn from(s: rulake::CacheStats) -> Self {
         let hit_rate = {
             let total = s.hits + s.misses;
             if total == 0 { None } else { Some(s.hits as f64 / total as f64) }

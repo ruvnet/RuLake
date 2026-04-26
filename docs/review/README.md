@@ -1,6 +1,6 @@
 # ruLake — Deep Review (M1 + M1.5)
 
-Three-part code-level review of the standalone `ruvector-rulake` crate
+Three-part code-level review of the standalone `rulake` crate
 as imported into this repo. Reviewers sourced everything from `src/`,
 `tests/`, `examples/`, `Cargo.toml`, `BENCHMARK.md`, and the four ADRs
 under `docs/adrs/` — no external benchmarks were run; the goal was

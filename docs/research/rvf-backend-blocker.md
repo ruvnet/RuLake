@@ -13,7 +13,7 @@ Strong, on the merits:
    compressed representation. A `RvfBackend::pull_*` path that yielded
    the compressed codes directly would skip the encode step on the
    cache prime path — the dominant cost per
-   [`crates/ruvector-rulake/BENCHMARK.md`](../../vendor/ruvector/crates/ruvector-rulake/BENCHMARK.md)'s
+   [`crates/rulake/BENCHMARK.md`](../../vendor/ruvector/crates/rulake/BENCHMARK.md)'s
    "cold-prime time" block.
 2. **Native witness chain.** Every RVF file carries a `FileIdentity`
    (`vendor/ruvector/crates/rvf/rvf-types/src/lineage.rs:62`) with

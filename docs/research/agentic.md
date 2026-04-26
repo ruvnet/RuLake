@@ -321,7 +321,7 @@ whatever cognitive policy the consumer defines.
 
 ```rust
 use std::sync::Arc;
-use ruvector_rulake::{
+use rulake::{
     LocalBackend, FsBackend, RuLake,
     cache::Consistency,
     RuLakeBundle, Generation,
@@ -621,17 +621,17 @@ Code:
 
 ```rust
 use std::sync::Arc;
-use ruvector_rulake::{LocalBackend, RuLake, cache::Consistency};
+use rulake::{LocalBackend, RuLake, cache::Consistency};
 
 /// One ruLake per agent. The shared backends are constructed once
 /// at the swarm level and Arc-shared into each agent's lake.
 struct Swarm {
     /// Shared, read-mostly. One Arc per backend, cloned into each
     /// agent's RuLake.
-    code_backend:    Arc<dyn ruvector_rulake::BackendAdapter>,
-    test_backend:    Arc<dyn ruvector_rulake::BackendAdapter>,
-    design_backend:  Arc<dyn ruvector_rulake::BackendAdapter>,
-    pattern_backend: Arc<dyn ruvector_rulake::BackendAdapter>,
+    code_backend:    Arc<dyn rulake::BackendAdapter>,
+    test_backend:    Arc<dyn rulake::BackendAdapter>,
+    design_backend:  Arc<dyn rulake::BackendAdapter>,
+    pattern_backend: Arc<dyn rulake::BackendAdapter>,
     /// One per agent. Each gets its own scratchpad backend.
     agents: Vec<AgentLake>,
 }
@@ -640,7 +640,7 @@ struct AgentLake {
     id: String,
     lake: RuLake,
     /// Private to this agent.
-    scratchpad: Arc<dyn ruvector_rulake::BackendAdapter>,
+    scratchpad: Arc<dyn rulake::BackendAdapter>,
 }
 
 impl Swarm {
@@ -849,7 +849,7 @@ cost being skipped — the cached search itself is unchanged.
 ```rust
 use std::sync::Arc;
 use std::time::Duration;
-use ruvector_rulake::{
+use rulake::{
     LocalBackend, FsBackend, RuLake,
     cache::Consistency,
     RefreshResult,
@@ -937,7 +937,7 @@ impl LongRunningAgent {
         });
     }
 
-    fn query(&self, q: &[f32], k: usize) -> ruvector_rulake::Result<Vec<_>> {
+    fn query(&self, q: &[f32], k: usize) -> rulake::Result<Vec<_>> {
         // Hot path: 1.02× direct rabitq cost
         // (docs/review/performance.md §1).
         self.lake.search_one("kb", "main", q, k)
@@ -1043,7 +1043,7 @@ candidates across all servers.
 
 ```rust
 use std::sync::Arc;
-use ruvector_rulake::{LocalBackend, FsBackend, RuLake, cache::Consistency};
+use rulake::{LocalBackend, FsBackend, RuLake, cache::Consistency};
 
 struct ToolRouter {
     lake: RuLake,

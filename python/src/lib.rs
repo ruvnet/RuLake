@@ -1,6 +1,6 @@
 //! ruLake — Python bindings (ADR-002).
 //!
-//! Wraps the public surface of `ruvector-rulake` with PyO3 + numpy.
+//! Wraps the public surface of `rulake` with PyO3 + numpy.
 //!
 //! # Design rules (from ADR-002)
 //!
@@ -33,8 +33,8 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyType};
 
-use ruvector_rulake::cache::Consistency as RsConsistency;
-use ruvector_rulake::{
+use rulake::cache::Consistency as RsConsistency;
+use rulake::{
     BackendAdapter, CacheStats as RsCacheStats, FsBackend as RsFs, Generation as RsGeneration,
     LocalBackend as RsLocal, PerBackendStats as RsPerBackend, RefreshResult as RsRefreshResult,
     RuLake as RsRuLake, RuLakeBundle as RsBundle, RuLakeError as RsErr, SearchResult as RsHit,

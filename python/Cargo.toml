@@ -1,14 +1,14 @@
 # ruLake — Python SDK (PyO3 binding)
 #
 # Implements ADR-002. Standalone Cargo package — does not declare a
-# workspace; cargo discovers the parent ruvector-rulake crate via the
+# workspace; cargo discovers the parent rulake crate via the
 # `path = ".."` dep, and the vendored ruvector-rabitq via that crate's
 # own dep on `vendor/ruvector/...` (ADR-001).
 #
 # Build:  maturin develop --release
 # Test:   cd .. && python -m pytest python/tests
 [package]
-name = "ruvector-rulake-py"
+name = "rulake-py"
 version = "2.2.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
@@ -27,7 +27,7 @@ crate-type = ["cdylib"]
 [dependencies]
 # The cache + router crate one directory up. This is the whole point —
 # every `pyo3` wrapper here is a thin shim over the public Rust surface.
-ruvector-rulake = { path = ".." }
+rulake = { path = "..", version = "2.2.0" }
 # PyO3 — abi3-py39 keeps one wheel working across CPython 3.9–3.13.
 # The `extension-module` feature is required when building a Python
 # extension (otherwise we'd link libpython at build time, breaking

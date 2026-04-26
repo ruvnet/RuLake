@@ -1,4 +1,4 @@
-# ruvector-rulake — Benchmarks
+# rulake — Benchmarks
 
 > **Translated for agent builders:** these numbers tell you how fast
 > your agent's memory lookups will be, what they'll cost, and where
@@ -11,7 +11,7 @@
 All numbers produced by a **single reproducible run** of
 
 ```bash
-cargo run --release -p ruvector-rulake --bin rulake-demo
+cargo run --release -p rulake --bin rulake-demo
 ```
 
 on a commodity Ryzen-class laptop, release build, deterministic seeds;
@@ -192,7 +192,7 @@ Each adds a small, bounded layer of overhead.
 
 | Surface | What it adds | Tax target (vs direct Rust) | Status |
 |---|---|---|---|
-| **Rust direct** (`cargo add ruvector-rulake`) | nothing — in-process call | 1.00× (baseline) | measured ([above](#headline-localbackend-same-dataset-as-ruvector-rabitq)) |
+| **Rust direct** (`cargo add rulake`) | nothing — in-process call | 1.00× (baseline) | measured ([above](#headline-localbackend-same-dataset-as-ruvector-rabitq)) |
 | **Python SDK** ([`python/`](python/), PyO3) | NumPy zero-copy borrow + GIL release | **≤ 1.10×** ([ADR-002 §Verification](docs/adrs/sdk/ADR-002-python-sdk.md)) — ~1 µs FFI per call | budget; bench gate ships in v0.4 |
 | **Node.js SDK** ([`node/`](node/), napi-rs) | one Float32Array memcpy across `await` (~3 µs at D=768) | **≤ 1.10×** ([ADR-003 §Verification](docs/adrs/sdk/ADR-003-nodejs-typescript-sdk.md)) | budget; bench gate ships in v0.4 |
 | **MCP server stdio** ([`mcp-server/`](mcp-server/), `rulake-mcp`) | JSON-RPC framing + serde + planner pass | **≤ 1.20×** ([ADR-004 §Verification](docs/adrs/sdk/ADR-004-rulake-mcp-server.md)) | budget; bench gate ships in v0.4 |

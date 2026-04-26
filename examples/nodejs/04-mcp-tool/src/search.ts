@@ -9,7 +9,7 @@
  * vectors, exact L2 is fine and matches the brute-force baseline the
  * Rust crate's tests use.
  *
- * The shape of the result mirrors `ruvector_rulake::SearchResult`
+ * The shape of the result mirrors `rulake::SearchResult`
  * (`{ id, score }`) so an agent that reads this and an agent that
  * reads HTTP responses from a Rust ruLake see the same thing.
  *

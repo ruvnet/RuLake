@@ -171,7 +171,7 @@ def _locate_cargo_root(start: Path) -> Optional[Path]:
         cargo = cur / "Cargo.toml"
         if cargo.is_file():
             text = cargo.read_text(encoding="utf-8", errors="replace")
-            if "ruvector-rulake" in text:
+            if "rulake" in text:
                 return cur
         if cur.parent == cur:
             return None

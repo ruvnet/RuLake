@@ -140,7 +140,7 @@ The `node/Cargo.toml` shape:
 
 ```toml
 [package]
-name = "ruvector-rulake-node"
+name = "rulake-node"
 version = "2.2.0"
 edition = "2021"
 publish = false  # built and shipped by @napi-rs/cli, not crates.io
@@ -149,7 +149,7 @@ publish = false  # built and shipped by @napi-rs/cli, not crates.io
 crate-type = ["cdylib"]
 
 [dependencies]
-ruvector-rulake = { path = ".." }
+rulake = { path = ".." }
 napi            = { version = "2.16", default-features = false, features = ["napi8", "async"] }
 napi-derive     = "2.16"
 
@@ -239,7 +239,7 @@ use napi_derive::napi;
 
 #[napi]
 pub struct RuLake {
-    inner: ruvector_rulake::RuLake,
+    inner: rulake::RuLake,
 }
 
 #[napi]
@@ -247,7 +247,7 @@ impl RuLake {
     #[napi(constructor)]
     pub fn new(opts: RuLakeOpts) -> Result<Self> {
         Ok(Self {
-            inner: ruvector_rulake::RuLake::new(
+            inner: rulake::RuLake::new(
                 opts.rerank_factor as usize,
                 opts.rotation_seed.get_u64().1,
             ),

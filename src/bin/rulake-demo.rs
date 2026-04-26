@@ -19,7 +19,7 @@ use rand::SeedableRng;
 use rand_distr::{Distribution, Normal, Uniform};
 
 use ruvector_rabitq::{AnnIndex, RabitqPlusIndex, RandomRotationKind};
-use ruvector_rulake::{cache::Consistency, LocalBackend, RuLake, SearchResult};
+use rulake::{cache::Consistency, LocalBackend, RuLake, SearchResult};
 
 fn clustered(n: usize, d: usize, n_clusters: usize, seed: u64) -> Vec<Vec<f32>> {
     use rand::Rng as _;

@@ -4,7 +4,7 @@
 
 **Accepted (2026-04-25)** — implemented in commit that introduces this ADR.
 Supersedes the implicit "lives inside the RuVector workspace" assumption that
-the source carried over from `ruvnet/RuVector/crates/ruvector-rulake`.
+the source carried over from `ruvnet/RuVector/crates/rulake`.
 
 ## Context
 
@@ -94,7 +94,7 @@ cargo loads the rabitq path-dep, it walks up from
 `vendor/ruvector/Cargo.toml`'s `[workspace]` independently. Rabitq inherits
 from upstream's workspace; ruLake uses concrete pins.
 
-`cargo run -p ruvector-rulake …` still works because cargo accepts `-p NAME`
+`cargo run -p rulake …` still works because cargo accepts `-p NAME`
 in a single-package context if `NAME` matches the current package.
 
 ### 3. Pin every dependency concretely in the root `Cargo.toml`
@@ -150,14 +150,14 @@ Package-level metadata (`version`, `edition`, `license`, `authors`,
 $ cargo build
    ...
    Compiling ruvector-rabitq v2.2.0 (vendor/ruvector/crates/ruvector-rabitq)
-   Compiling ruvector-rulake v2.2.0 (.)
+   Compiling rulake v2.2.0 (.)
     Finished `dev` profile in 3.62s
 
 $ cargo test --release
    ...
    21 passed; 0 failed   (unit)
    22 passed; 0 failed   (federation_smoke integration)
-   Doc-tests ruvector_rulake: 0 passed; 0 failed
+   Doc-tests rulake: 0 passed; 0 failed
 
 $ cargo run --release --bin rulake-demo -- --fast
    ruLake (Fresh)        prime= 4.4 ms   qps= 19161   tax=1.00×

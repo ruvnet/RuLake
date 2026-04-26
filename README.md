@@ -1,6 +1,6 @@
 # ruLake — A Memory Lake for Agentic AI
 
-[![Crates.io](https://img.shields.io/crates/v/ruvector-rulake.svg)](https://crates.io/crates/ruvector-rulake)
+[![Crates.io](https://img.shields.io/crates/v/rulake.svg)](https://crates.io/crates/rulake)
 [![Rust 1.89+](https://img.shields.io/badge/rust-1.89%2B-orange.svg)](https://www.rust-lang.org)
 [![RuVector](https://img.shields.io/badge/part_of-ruvector-purple.svg)](https://github.com/ruvnet/ruvector)
 [![ruv.io](https://img.shields.io/badge/ruv.io-website-purple.svg)](https://ruv.io)
@@ -18,34 +18,35 @@ Agentic systems are built on **contrastive AI** — embeddings that put similar 
 
 #### Why agents in particular
 
-- **One MCP tool, one decision layer.** [`rulake-mcp`](mcp-server/) (ADR-004) speaks the [Model Context Protocol](https://modelcontextprotocol.io). Claude Desktop, Cursor, Cline, Continue, agentic-flow — they all get a single `rulake_query` tool that takes intent (`search` / `verify` / `explain` / `refresh`), risk, freshness budget, and policy, and returns the answer plus a **decision trace** (chosen_action, reason_code, backends_used, refusals). The agent says *what* it wants; ruLake decides *where to look, how strict to be, whether to refuse*.
-- **Trust by witness, not vibes.** Every result carries the SHAKE-256 hex of the underlying bundle. Two agents, two hosts, same data → same witness → same answer, byte-exact. No "the model hallucinated again" debates.
-- **Honest refusals beat confident lies.** Stale cache + missing remote witness? `WITNESS_MISMATCH_REFUSED`, empty data, agent retries narrower. Better than serving a stale answer with a high score.
+- **One tool. The agent asks; ruLake decides.** Plug [`rulake-mcp`](mcp-server/) into Claude Desktop, Cursor, Cline, Continue, or agentic-flow and your agent gets a single `rulake_query` tool. The agent says what it wants ("find similar to X", "verify this answer is still current", "explain why you picked these"), ruLake figures out where to look, how strict to be, and whether to refuse — and returns a short trace of how it decided. Built on the open [Model Context Protocol](https://modelcontextprotocol.io).
+- **Same answer everywhere, provably.** Every result comes with a small fingerprint (a SHAKE-256 hash) of the data it was drawn from. Two agents on two different machines querying the same data get the **same fingerprint** and the **same byte-for-byte answer**. No more "the model hallucinated again" guessing — you can prove what it saw.
+- **It says no when it should.** If the local copy is stale and the source can't be reached, ruLake refuses with a clear reason instead of serving an old answer dressed up as a new one. The agent retries with a narrower question. Saying "I don't know" is a feature, not a bug.
 
 #### Performance, cost, footprint
 
-| | What it delivers |
+| | What you get |
 |---|---|
-| **Latency** | 1.02× raw RaBitQ ≈ ~1 ms cache-hit at n=100k, D=128. Measured, not promised. |
-| **Throughput** | 957 QPS single-thread, **2,854 QPS concurrent** (Arc-drop-lock + AVX-512 VPOPCNTDQ). |
-| **Compression** | 1-bit RaBitQ — **32× smaller** than f32 vectors at D=128. RAM footprint stays small even at millions of vectors. |
-| **Cost** | **$0.** MIT/Apache-2.0, no service to host, no per-query fee, no metered API. Run it next to your agent. |
-| **Backends** | LocalBackend (RAM), FsBackend (disk), GcsParquetBackend (Parquet on GCS). BigQuery, S3, Iceberg, Delta on the M2–M5 roadmap. |
-| **Surfaces** | Rust crate · Python wheel (`pip install`) · Node.js (`npm install`) · `rulake-mcp` binary · Docker image. |
+| **Latency** | About **1 millisecond per query** at 100,000 vectors. The cache layer adds essentially zero overhead — measured at 1.02× raw RaBitQ speed, not promised. |
+| **Throughput** | **~2,800 queries per second** with multiple agents hitting it at once on a single host (Arc-drop-lock + AVX-512). Single-thread baseline is ~960 QPS. |
+| **Memory** | **32× smaller than raw float vectors.** A million 128-dim embeddings fits in ~16 MB of RAM instead of ~512 MB. Scales to millions of vectors on a laptop. |
+| **Cost** | **$0.** Open source (MIT or Apache-2.0), no hosted service, no per-query fee, no metered API. Run it next to your agent. |
+| **Where the data lives** | Today: in-memory, on disk, or on Google Cloud Storage as Parquet. Coming: BigQuery, S3, Iceberg, Delta. Pick whichever your data already sits in. |
+| **How you use it** | Rust crate · Python (`pip install rulake`) · Node.js (`npm install rulake`) · `rulake-mcp` binary · Docker image. |
 
 #### Edge, browser, and the small-footprint story
 
 ruLake is built to run wherever the agent runs — including small places.
 
-- **Today** — small static binary (the demo + `rulake-mcp` are ~5 MB stripped), distroless Docker, and a Streamable HTTP transport that fits behind any reverse proxy. Runs on a Raspberry Pi or an EC2 t4g.nano, not just a serving cluster.
-- **Coming (v0.4 / v0.5)** — `@ruvector/rulake-wasm` for **browsers, Cloudflare Workers, Deno-deploy, Bun**. Same witness-anchored memory model, feature-reduced surface (no AVX-512, no rayon — they don't exist on the edge anyway). The `optionalDependencies` shape ([ADR-003](docs/adrs/sdk/ADR-003-nodejs-typescript-sdk.md) §A) is already wired so the WASM package drops in without breaking npm consumers.
+- **Server side** — small static binary (the demo + `rulake-mcp` are ~5 MB stripped), distroless Docker, Streamable HTTP transport that fits behind any reverse proxy. Runs on a Raspberry Pi or an EC2 t4g.nano, not just a serving cluster.
+- **Edge runtimes (shipped)** — [`rulake-wasm`](node-wasm/) builds for **browsers, Cloudflare Workers, Deno-deploy, Bun, and Node.js fallback**. Same witness-anchored memory model with a feature-reduced surface (no AVX-512, no rayon — they don't exist on the edge anyway). ~149 KB compiled. Wired as an `optionalDependencies` peer of `rulake` per [ADR-003 §A](docs/adrs/sdk/ADR-003-nodejs-typescript-sdk.md): npm consumers on edge platforms get it transparently.
+- **HTTP client variant (shipped)** — `import { RuLakeHttp } from "rulake/http"` gives you a fetch-based MCP-Streamable-HTTP client. Edge runtimes that can't load any binary (extreme-cold-start Workers, browser ServiceWorkers) still consume a remote `rulake-mcp` server through one tool, and round-trip the witness for local re-verification with `rulake-wasm`.
 - **Why it matters** — agent memory at the edge means the personal AI doesn't round-trip your private context to a far-away cluster. Latency is local; cost is zero per query; the witness story keeps it verifiable.
 
 ```bash
 # Three install paths, three audiences. Pick one.
-cargo add ruvector-rulake                      # Rust
-pip   install ruvector-rulake                  # Python (wheels coming to PyPI)
-npm   install @ruvector/rulake                 # Node.js / TypeScript
+cargo add rulake                      # Rust
+pip   install rulake                  # Python (wheels coming to PyPI)
+npm   install rulake                  # Node.js / TypeScript
 ```
 
 Open source. ❤️ Free forever.
@@ -216,7 +217,7 @@ ruLake is the **substrate** for agent brain memory systems. The brain decides wh
 All numbers reproducible via:
 
 ```bash
-cargo run --release -p ruvector-rulake --bin rulake-demo
+cargo run --release -p rulake --bin rulake-demo
 ```
 
 Commodity Ryzen-class laptop, deterministic seeds, release build.
@@ -287,12 +288,12 @@ docker run --rm rulake --fast
 
 ```toml
 [dependencies]
-ruvector-rulake = "2.2"  # once published; until then use `git = "https://github.com/ruvnet/RuLake"`
+rulake = "2.2"  # once published; until then use `git = "https://github.com/ruvnet/RuLake"`
 ```
 
 ```rust
 use std::sync::Arc;
-use ruvector_rulake::{cache::Consistency, LocalBackend, RuLake};
+use rulake::{cache::Consistency, LocalBackend, RuLake};
 
 // 1. Point ruLake at a backend.
 let backend = Arc::new(LocalBackend::new("my-backend"));
@@ -376,7 +377,7 @@ Full example: [`examples/sidecar_daemon.rs`](examples/sidecar_daemon.rs).
 <summary>🧱 Writing a custom backend</summary>
 
 ```rust
-use ruvector_rulake::backend::{BackendAdapter, CollectionId, PulledBatch};
+use rulake::backend::{BackendAdapter, CollectionId, PulledBatch};
 
 struct ParquetBackend { /* ... */ }
 
@@ -392,7 +393,7 @@ See [`src/fs_backend.rs`](src/fs_backend.rs) for a 250-line reference implementa
 
 </details>
 
-### Python — `pip install ruvector-rulake`
+### Python — `pip install rulake`
 
 PyO3 bindings live in [`python/`](python/). Wheels (cp39+, manylinux_2_28 / macOS / Windows) per [ADR-002](docs/adrs/sdk/ADR-002-python-sdk.md).
 
@@ -715,7 +716,7 @@ The first cloud backend, in [`gcs-backend/`](gcs-backend/) — reads vector colu
 
 ```rust
 use std::sync::Arc;
-use ruvector_rulake::{cache::Consistency, RuLake, BackendAdapter};
+use rulake::{cache::Consistency, RuLake, BackendAdapter};
 use ruvector_rulake_gcs::{GcsParquetBackend, GcsParquetCollection};
 
 let backend = GcsParquetBackend::open_gcs("gcs-prod", "my-vector-bucket")?;
@@ -903,16 +904,16 @@ Per-backend and per-collection views via `cache_stats_by_backend()` / `cache_sta
 
 ```bash
 # End-to-end sidecar daemon (publisher + reader + coherence loop)
-cargo run --release -p ruvector-rulake --example sidecar_daemon
+cargo run --release -p rulake --example sidecar_daemon
 
 # Save → ship → warm-restart cycle
-cargo run --release -p ruvector-rulake --example warm_restart
+cargo run --release -p rulake --example warm_restart
 
 # Benchmark harness (~2 minutes)
-cargo run --release -p ruvector-rulake --bin rulake-demo
+cargo run --release -p rulake --bin rulake-demo
 
 # Fast mode (~5 seconds, just n=5k)
-cargo run --release -p ruvector-rulake --bin rulake-demo -- --fast
+cargo run --release -p rulake --bin rulake-demo -- --fast
 ```
 
 </details>
@@ -1030,7 +1031,7 @@ ruLake is explicitly **not** a vector database — it doesn't own storage. It's 
 |------------------------|----------------------------------------------------|
 | [`ruvector-rvf`](https://github.com/ruvnet/ruvector/tree/main/crates/rvf) | Durable segment format — appendable, witness-signed vector storage |
 | [`ruvector-rabitq`](https://github.com/ruvnet/ruvector/tree/main/crates/ruvector-rabitq) | Rotation-based 1-bit quantization kernel |
-| [`ruvector-rulake`](https://github.com/ruvnet/ruvector/tree/main/crates/ruvector-rulake) | **this crate** — cache, coherence, federation, governance |
+| [`rulake`](https://github.com/ruvnet/ruvector/tree/main/crates/rulake) | **this crate** — cache, coherence, federation, governance |
 
 RVF is your durable truth. rabitq is your compressor. ruLake is the execution layer.
 
@@ -1049,7 +1050,7 @@ at your option.
 
 ## Links
 
-- Main development: [ruvnet/ruvector — `crates/ruvector-rulake`](https://github.com/ruvnet/ruvector/tree/main/crates/ruvector-rulake)
+- Main development: [ruvnet/ruvector — `crates/rulake`](https://github.com/ruvnet/ruvector/tree/main/crates/rulake)
 - ADRs: [ADR-155](docs/adrs/ADR-155-rulake-datalake-layer.md) · [ADR-156](docs/adrs/ADR-156-rulake-as-memory-substrate.md) · [ADR-157](docs/adrs/ADR-157-optional-accelerator-plane.md) · [ADR-158](docs/adrs/ADR-158-optional-rotation-and-qvcache-positioning.md) · [ADR-001 (this repo's standalone strategy)](docs/adrs/ADR-001-standalone-repo-strategy.md)
 - Research: [`docs/research/ruLake/`](https://github.com/ruvnet/ruvector/tree/main/docs/research/ruLake) (lives in upstream RuVector — not vendored)
 - Benchmarks: [`BENCHMARK.md`](BENCHMARK.md)
