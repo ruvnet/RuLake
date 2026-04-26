@@ -280,28 +280,70 @@ pub use lake::{RefreshResult, RuLake, SearchResult};
 ```jsonc
 // Tool: rulake_query  (capability: read by default; publish/admin escalate the intent set)
 {
-  "tool":  "rulake_query",
+  "tool":   "rulake_query",
   "intent": "search | verify | explain | refresh",
+
+  // `target.routes` carries (backend, collection) pairs — matches
+  // `RuLake::search_federated`'s `&[(&str, &str)]` signature so a
+  // federated query can hit DIFFERENT collections across backends.
+  // `target.collection` (singular) is shorthand for "expand to one
+  // route per allowed backend"; planner picks backends when neither
+  // is given (subject to `budget.max_backends`).
   "target": {
-    "collection":  "memories",                 // required
-    "backends":    ["local", "fs-prod"]        // optional; planner picks if omitted
+    "collection": "memories",                            // shorthand; OR …
+    "routes":     [["local", "memories"], ["fs-prod", "memories"]],
+    "backends":   ["local", "fs-prod"]                   // optional; ignored if `routes` set
   },
-  "query":  { "vector": [/* f32, len ≤ 8192 */], "k": 10 },
-  "risk":   "low | medium | high",             // bounds the budget the planner can spend
-  "freshness_ms": 5000,                        // upper bound on staleness; planner picks Consistency
+
+  // Per-intent argument blocks. Exactly one must match `intent`.
+  "search":  { "vector": [/* f32, len ≤ 8192 */], "k": 10 },
+  "verify":  { "bundle_dir": "/srv/rulake/snapshots/memories" },
+  "explain": { "last_n_decisions": 25, "include_per_collection_stats": true },
+  "refresh": { "bundle_dir": "/srv/rulake/snapshots/memories" },
+
+  // Risk shapes the budget the planner is allowed to spend (table below).
+  "risk":         "low | medium | high",
+  "freshness_ms": 5000,                        // upper bound on staleness
   "budget": {
-    "max_latency_ms": 50,
-    "max_backends":   3,
-    "max_results":    20,
-    "max_rerank":     20
+    "max_latency_ms":      50,
+    "max_backends":         3,
+    "max_results":         20,
+    "max_rerank":          20,
+    "force_global_rerank": false               // wraps search_federated_with_rerank
   },
   "policy": {
     "witness_required":     true,
     "allow_partial":        false,
-    "min_collections_hit":  1
+    "min_collections_hit":  1                  // ≤ len(routes) when `routes` given, else 1
   }
 }
 ```
+
+**`risk` semantics** (unambiguous mapping; planner refuses to spend
+beyond the corresponding budget cap):
+
+| `risk`   | Default budget cap | Implied policy floor                                | Implied audit class |
+|----------|--------------------|-----------------------------------------------------|---------------------|
+| `low`    | `latency ≤ 20 ms`  | `witness_required: true` is forced (override-able only by admin token) | `routine` |
+| `medium` | `latency ≤ 100 ms` | `witness_required` honored as request specifies     | `routine` |
+| `high`   | `latency ≤ 500 ms` | `allow_partial: true` is forced; degradation accepted | `flagged` (audit alert tier) |
+
+Risk is the *single knob the calling agent owns* — it lets the agent
+declare upfront how the planner should behave when budget vs
+correctness conflict. Without it the planner has to second-guess
+intent on every call.
+
+**Precedence when fields conflict**:
+
+- `policy.witness_required: true` always wins over `freshness_ms` —
+  a verified-stale answer is preferred to an unverified-fresh one,
+  and refusal is preferred to either if neither is reachable in budget.
+- `risk: low` *forces* `witness_required: true` regardless of the
+  request value (a low-risk caller asking for unverified data is a
+  configuration error, not a request to be honored).
+- `budget.max_latency_ms` always caps; if a check cannot complete
+  within it, the call is refused (search) or downgraded to cache-only
+  (search with `allow_partial: true`).
 
 The response carries the answer **plus the decision the planner made**
 so the caller can audit and the calling agent can adapt:
@@ -322,6 +364,7 @@ so the caller can audit and the calling agent can adapt:
   "decision": {
     "intent":            "search",
     "chosen_action":     "search_federated",
+    "reason_code":       "STALE_CACHE_REMOTE_VALID",   // machine-readable; enum, see table
     "reason":            "cache stale on local backend; witness valid on fs-prod",
     "backends_planned":  ["local", "fs-prod"],
     "backends_used":     ["fs-prod"],
@@ -329,10 +372,27 @@ so the caller can audit and the calling agent can adapt:
     "budget_used_ms":    1.7,
     "budget_cap_ms":     50,
     "degraded":          false,
-    "refusals":          []                 // e.g. ["local: witness_mismatch"]
+    "refusals":          []                            // e.g. [{"route":["local","memories"], "code":"WITNESS_MISMATCH"}]
   }
 }
 ```
+
+**`reason_code` enum** (closed set; new values bump ADR but never the
+wire schema, so machine consumers can pin alert filters):
+
+| `reason_code` | When emitted |
+|---|---|
+| `CACHE_HIT_FRESH` | Cache hit; coherence check passed (or skipped under `Eventual` within TTL). |
+| `CACHE_HIT_EVENTUAL` | Cache hit; check skipped per `Consistency::Eventual { ttl_ms }`. |
+| `STALE_CACHE_REMOTE_VALID` | Local cache was stale; one or more remote backends had valid witnesses; planner chose those. |
+| `COLD_PRIME_THEN_SERVE` | Cache missed entirely; planner pulled from backend, primed, served. |
+| `WITNESS_MISMATCH_REFUSED` | Witness check failed on every reachable backend; refused. |
+| `BUDGET_EXCEEDED_FALLBACK_CACHE` | `max_latency_ms` would be exceeded by the coherence check; served from cache with `degraded: true` (only when `allow_partial: true`). |
+| `BUDGET_EXCEEDED_REFUSED` | Same as above but `allow_partial: false`; refused. |
+| `POLICY_REFUSED_RISK` | `risk` floor (e.g. `low` requires witness) and request couldn't satisfy it. |
+| `POLICY_REFUSED_ALLOWLIST` | `(backend, collection)` not on the operator allow-list for this principal. |
+| `POLICY_REFUSED_PATH` | Path argument escaped the allow-listed roots. |
+| `PARTIAL_FEDERATION` | Some routes succeeded, others refused; result is the merge per `policy.min_collections_hit`. |
 
 `trust_level: verified` means **every served row was witness-verified
 against the planner-resolved bundle for its backend**. `unverified`
@@ -365,10 +425,16 @@ cheapest plan that satisfies the policy and stays inside the budget.
 - `freshness_ms` requires a check the budget can't afford.
 - A collection whose policy says "never serve to risk=low".
 
-A refused call returns the same response shape with
-`trust_level: "unverified"` and an empty `data`, plus
-`decision.refusals` populated. It is **never** an error in MCP
-protocol terms — the call succeeded; the *intent* was refused.
+**Two distinct refusal shapes** (don't conflate):
+
+| Refusal mode | MCP-protocol shape | When | What the caller sees |
+|---|---|---|---|
+| **Planner policy refusal** (allow-list miss, risk floor, budget cap with `allow_partial: false`) | `result.isError: false`, `data: []`, `decision.reason_code: POLICY_REFUSED_*` or `BUDGET_EXCEEDED_REFUSED` | Decision made *before* RuLake work runs. | The call succeeded at the protocol layer; the *intent* was refused. The caller's calling agent can branch on `reason_code`. |
+| **Witness-fail-closed** (a tool that touches an on-disk bundle finds a witness mismatch) | `result.isError: true`, body carries expected vs actual witness, `code: "WITNESS_MISMATCH"` | The bundle on disk is **inconsistent with the witness it claims to have** — either tampering or corruption. | This is a *protocol-level* error because the data the caller asked for doesn't exist in any trusted form. Audit + alert. |
+
+The split matters because the calling agent's response differs:
+policy refusals invite a narrower retry; witness failures should
+escalate to the operator, not be retried.
 
 #### 4b. The internal kernel (not on the wire by default)
 
@@ -380,28 +446,52 @@ the rare ops case where an operator wants a direct probe (`is the
 search path even alive?`) without the policy machinery in the way.
 For agents, the only call is `rulake_query`.
 
-| Internal tool | Composed by | Capability to expose |
+**Read-side kernel** (gated by `internal` capability — operator-only,
+not OAuth-issued; only granted via `--capabilities read,internal` on
+the binary command line):
+
+| Internal tool | Wraps (`src/lake.rs`) | Composed by `rulake_query` intent |
 |---|---|---|
-| `rulake_search_one` | `intent: "search"` (single-backend plan) | `internal` |
-| `rulake_search_federated` | `intent: "search"` (multi-backend plan) | `internal` |
-| `rulake_search_batch` | `intent: "search"` (batched plan) | `internal` |
-| `rulake_cache_stats` | `intent: "explain"` | `internal` |
-| `rulake_cache_witness_of` | `intent: "verify"` | `internal` |
-| `rulake_bundle_info` | `intent: "verify"` | `internal` |
-| `rulake_verify_witness` | `intent: "verify"` | `internal` |
-| `rulake_list_backends` | (used by planner; safe to expose) | `internal` |
-| `rulake_publish_bundle` | `intent: "refresh"` (publish capability) | `publish` |
-| `rulake_refresh_from_bundle_dir` | `intent: "refresh"` | `publish` |
-| `rulake_save_cache_to_dir` | not via `rulake_query` | `admin` |
-| `rulake_warm_from_dir` | not via `rulake_query` | `admin` |
-| `rulake_invalidate_cache` | not via `rulake_query` | `admin` |
-| `rulake_register_backend` | not exposed | **never** (backends carry credentials, code paths, network access) |
+| `rulake_search_one` | `search_one`             | `search` (single-backend plan) |
+| `rulake_search_federated` | `search_federated` | `search` (multi-backend plan; default per-shard rerank) |
+| `rulake_search_federated_with_rerank` | `search_federated_with_rerank` | `search` when `budget.force_global_rerank: true` |
+| `rulake_search_batch` | `search_batch`           | `search` (batched plan, batch ≤ 256) |
+| `rulake_cache_stats` | `cache_stats`             | `explain` (rolls up; pairs with `rulake://stats`) |
+| `rulake_cache_stats_by_backend` | `cache_stats_by_backend` | `explain` (per-backend) |
+| `rulake_cache_stats_by_collection` | `cache_stats_by_collection` | `explain` (per-collection — the planner's own input) |
+| `rulake_cache_witness_of` | `cache_witness_of`   | `verify` (cheap pointer check, no I/O) |
+| `rulake_cache_entry_count` | `cache_entry_count` | `explain` (total cache entries; LRU sizing input) |
+| `rulake_cache_refcount_of` | `cache_refcount_of` | `explain` (witness-key refcount; cross-backend share diagnostic) |
+| `rulake_bundle_info` | `RuLakeBundle::read_from_dir` | `verify` (path under allow-listed root) |
+| `rulake_verify_witness` | `RuLakeBundle::verify_witness` | `verify` (recompute SHAKE-256, compare) |
+| `rulake_list_backends` | `backend_ids`            | (used by planner; always safe to expose) |
+
+**Mutation tools** (NOT in the `internal` capability — separately
+gated by `publish` or `admin`, AND require an OAuth scope on HTTP):
+
+| Mutation tool | Wraps (`src/lake.rs`) | Capability | OAuth scope | Composed by |
+|---|---|---|---|---|
+| `rulake_publish_bundle` | `publish_bundle` | `publish` | `mcp:rulake:publish` | `intent: "refresh"` (write side) |
+| `rulake_refresh_from_bundle_dir` | `refresh_from_bundle_dir` | `publish` | `mcp:rulake:publish` | `intent: "refresh"` (read side) |
+| `rulake_save_cache_to_dir` | `save_cache_to_dir` | `admin` | `mcp:rulake:admin` | not via `rulake_query` |
+| `rulake_warm_from_dir` | `warm_from_dir` | `admin` | `mcp:rulake:admin` | not via `rulake_query` |
+| `rulake_invalidate_cache` | `invalidate_cache` | `admin` | `mcp:rulake:admin` | not via `rulake_query` |
+
+**Never exposed** (no capability, no scope, no flag, ever):
+
+| Tool | Wraps | Why |
+|---|---|---|
+| `rulake_register_backend` | `register_backend` | Backends carry credentials, code paths, network access. Startup-config concern, not a runtime tool. (CVE-2025-53107/53818 exact attack class.) |
+| `rulake_with_consistency` / `rulake_with_max_cache_entries` | constructors | Process-wide config; reconfiguring at runtime invalidates every in-flight call's reasoning. Restart the process. |
 
 Default invocation is `--capabilities read` → exposes only
-`rulake_query`. The internal kernel is `--capabilities read,internal`.
-Mutation is `read,publish` or `read,publish,admin`. The principle:
-**one wire surface per audience tier**. Agents see one tool; ops sees
-the kernel; operators see everything.
+`rulake_query`. `--capabilities read,internal` adds the read-side
+kernel. `--capabilities read,publish` adds the publish mutation tools
+and accepts the publish OAuth scope. `--capabilities read,publish,admin`
+adds the admin tools. **`internal` is operator-only** — it has no
+OAuth scope and is silently dropped from the granted set on any HTTP
+auth path. The principle: agents see one tool; ops sees the read
+kernel; operators see everything.
 
 #### 4c. Progressive trust as token TTL + capability + scope
 
@@ -471,13 +561,28 @@ escalate.
 #### Resources
 
 MCP resources are URI-addressable read-only data. The `rulake://`
-scheme is registered with three exposers:
+scheme is registered with these exposers:
 
-| URI | Source | Notes |
-|---|---|---|
-| `rulake://stats` | `RuLake::cache_stats` | One-shot JSON, refreshed on every `resources/read`. Cheap. |
-| `rulake://stats/by-backend` | `cache_stats_by_backend` | Per-backend stats. |
-| `rulake://bundle/{backend}/{collection}` | `BackendAdapter::current_bundle` | The live witness for the (backend, collection). Doesn't expose vector data — bundle metadata only. |
+| URI | Source | Caching | Notes |
+|---|---|---|---|
+| `rulake://stats` | `RuLake::cache_stats` | 200 ms TTL | Roll-up. The TTL absorbs poll-storms (an agent that reads stats per query); the freshness floor is well under one search round-trip. |
+| `rulake://stats/by-backend` | `cache_stats_by_backend` | 200 ms TTL | Per-backend. Same TTL rationale. |
+| `rulake://stats/by-collection` | `cache_stats_by_collection` | 200 ms TTL | Per-collection — matches the planner's own input. |
+| `rulake://bundle/{backend}/{collection}` | `BackendAdapter::current_bundle` (cached pointer) | **must not call default impl** | The live witness for the (backend, collection). Returns the cached witness from `cache_witness_of`; on cache miss returns a `404`-style empty resource rather than triggering the default `current_bundle` impl. Vector data is never exposed. |
+
+**Performance note on `rulake://bundle/...`:** the default
+`BackendAdapter::current_bundle` impl in `src/backend.rs:131` does a
+full `pull_vectors` to learn the dim. Calling it on every resource
+read would melt a remote backend (e.g. BigQuery scans the table
+every read). The MCP server therefore **never invokes the default
+impl from a resource read** — it consults the in-memory cache via
+`cache_witness_of`, returns empty when the cache hasn't seen the
+collection, and lets the operator decide whether a planner-driven
+`intent: "verify"` call should warm it (which goes through the
+budget + capability gate). Real backends (Parquet, BigQuery) MUST
+override `current_bundle` with a pull-free path before they're safe
+to expose this resource for; this is a backend-implementer contract,
+documented here and in the M2 backend ADRs.
 
 Resource subscriptions (notify on change) are deliberately **not**
 exposed in v1. The cache mutates on every search; a per-mutation
@@ -486,8 +591,8 @@ behaviour today that benefits from it. Reopen if a real consumer
 arrives.
 
 Collection-listing resources (`rulake://collections/{backend}`) are
-gated by the same allow-list as `rulake_search_one` — even *naming*
-your collections is information leakage if the deployment serves
+gated by the same allow-list as the search path — even *naming* your
+collections is information leakage if the deployment serves
 multi-tenant workloads.
 
 #### Prompts
@@ -776,6 +881,7 @@ an auditor can answer not only "what did the agent ask for" but
   },
   "decision": {
     "chosen_action":     "search_federated",
+    "reason_code":       "STALE_CACHE_REMOTE_VALID",
     "reason":            "cache stale on local backend; witness valid on fs-prod",
     "backends_planned":  ["local", "fs-prod"],
     "backends_used":     ["fs-prod"],
