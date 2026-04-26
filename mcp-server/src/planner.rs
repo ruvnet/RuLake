@@ -16,6 +16,8 @@ use serde::{Deserialize, Serialize};
 
 use ruvector_rulake::{RuLake, SearchResult};
 
+use crate::allow::AllowList;
+use crate::policy::Capability;
 use crate::workers::{SubmitError, WorkerPool};
 
 // ─── Wire schemas (mirror ADR-004 §4a) ────────────────────────────────
@@ -301,6 +303,8 @@ pub struct Planner {
     pub workers: WorkerPool,
     pub backend_ids: Vec<String>,
     pub consistency_label: String,
+    /// RBAC allow-list — empty = unrestricted (v0.3 backwards-compat).
+    pub allow: AllowList,
 }
 
 impl Planner {
@@ -326,7 +330,12 @@ impl Planner {
         let r = req
             .refresh
             .ok_or_else(|| PlanError::Internal("intent=refresh requires `refresh` block".into()))?;
-        let routes = match self.resolve_routes(&req.target, req.budget.max_backends as usize) {
+        // refresh requires Publish cap on every route (mutates cache).
+        let routes = match self.resolve_routes_for_cap(
+            &req.target,
+            req.budget.max_backends as usize,
+            Capability::Publish,
+        ) {
             Ok(rs) => rs,
             Err(PlanError::Refused(resp)) => return Ok(resp),
             Err(e) => return Err(e),
@@ -740,6 +749,18 @@ impl Planner {
         target: &Target,
         max_backends: usize,
     ) -> Result<Vec<(String, String)>, PlanError> {
+        // For route resolution alone we apply the Read cap check; the
+        // per-intent dispatchers escalate to Publish (refresh) etc.
+        // before they actually call mutation tools.
+        self.resolve_routes_for_cap(target, max_backends, Capability::Read)
+    }
+
+    fn resolve_routes_for_cap(
+        &self,
+        target: &Target,
+        max_backends: usize,
+        required_cap: Capability,
+    ) -> Result<Vec<(String, String)>, PlanError> {
         let routes: Vec<(String, String)> = if !target.routes.is_empty() {
             target
                 .routes
@@ -768,13 +789,48 @@ impl Planner {
             ));
         };
 
+        // 1. Backend must be registered.
         for (b, _) in &routes {
             if !self.backend_ids.contains(b) {
                 return Err(PlanError::Refused(self.build_refusal(
                     &format!("backend {b:?} not registered"),
                     ReasonCode::PolicyRefusedAllowlist,
                     vec![b.clone()],
-                    vec![],
+                    vec![Refusal {
+                        route: [b.clone(), "*".into()],
+                        code: "BACKEND_NOT_REGISTERED".into(),
+                    }],
+                    std::time::Instant::now(),
+                    100,
+                )));
+            }
+        }
+
+        // 2. RBAC allow-list — every route × required cap must match.
+        // Empty allow-list short-circuits to grant (v0.3 compat).
+        if !self.allow.is_empty() {
+            let mut refusals: Vec<Refusal> = Vec::new();
+            for (b, c) in &routes {
+                if let Err(denied) = self.allow.check(b, c, required_cap) {
+                    refusals.push(Refusal {
+                        route: [b.clone(), c.clone()],
+                        code: format!("ALLOWLIST_DENIED_{:?}", denied.reason),
+                    });
+                }
+            }
+            if !refusals.is_empty() {
+                let backends: Vec<String> = routes.iter().map(|(b, _)| b.clone()).collect();
+                let msg = format!(
+                    "RBAC denied {} of {} route(s) for cap `{}`",
+                    refusals.len(),
+                    routes.len(),
+                    required_cap.label(),
+                );
+                return Err(PlanError::Refused(self.build_refusal(
+                    &msg,
+                    ReasonCode::PolicyRefusedAllowlist,
+                    backends,
+                    refusals,
                     std::time::Instant::now(),
                     100,
                 )));

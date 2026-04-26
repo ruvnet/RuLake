@@ -32,6 +32,37 @@ pub struct McpConfig {
     /// planner's tie-break ("first registered wins" in v0.1).
     #[serde(default)]
     pub backends: Vec<BackendConfig>,
+
+    /// RBAC allow-list (ADR-004 §5). Empty = no per-collection
+    /// restriction (only the capability-tier gate fires). When
+    /// populated, every (backend, collection, capability) tuple
+    /// must match at least one block.
+    #[serde(default, rename = "allow")]
+    pub allow: Vec<AllowBlock>,
+}
+
+/// One [[allow]] block in mcp.toml.
+///
+/// ```toml
+/// [[allow]]
+/// backend    = "lake-prod"
+/// collection = "docs.*"      # regex
+/// caps       = ["read"]
+/// ```
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AllowBlock {
+    /// Backend id (exact match — backends are operator-controlled and
+    /// finite, regex is overkill).
+    pub backend: String,
+    /// Collection regex anchored implicitly (we wrap in `^…$` at
+    /// compile time so `docs.*` matches `docs`, `docs.public`, but
+    /// NOT `secret-docs.public`).
+    pub collection: String,
+    /// Capabilities granted by this block. `read` is always implied.
+    /// `["read", "publish"]` lets a principal call publish-tier tools
+    /// against this (backend, collection) pair.
+    #[serde(default)]
+    pub caps: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]

@@ -58,6 +58,18 @@ bytes = "1"
 # de-facto Rust idiom for timing-safe comparisons.
 subtle = "2"
 
+# Per-collection allow-list regex compilation (RBAC, ADR-004 §5).
+regex = { version = "1", default-features = false, features = ["std", "perf"] }
+
+# Layered rate limiting per ADR-004 §6 — (transport, principal),
+# (principal, backend, collection), (transport).
+governor = { version = "0.7", default-features = false, features = ["std", "quanta"] }
+dashmap = "6"
+
+# JWT (JWS) validation for `--auth jwt`. ADR-004 §5 SOTA path.
+# `default-features = false` keeps us off the OpenSSL backend.
+jsonwebtoken = { version = "9", default-features = false }
+
 # Async runtime used by rmcp's stdio transport.
 tokio = { version = "1.39", features = ["rt-multi-thread", "macros", "io-std", "signal", "sync", "net", "time"] }
 

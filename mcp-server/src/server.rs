@@ -27,6 +27,7 @@ use serde::{Deserialize, Serialize};
 
 use ruvector_rulake::{LocalBackend, RuLake, BackendAdapter, FsBackend};
 
+use crate::allow::AllowList;
 use crate::audit::{AuditEntry, AuditSink, PolicyDecision, now_ts};
 use crate::config::{BackendConfig, McpConfig};
 use crate::planner::{PlanError, Planner, QueryRequest, QueryResponse};
@@ -92,6 +93,10 @@ impl RuLakeMcpServer {
         }
 
         let workers = WorkerPool::new(config.workers, config.max_inflight)?;
+        let allow = AllowList::from_blocks(&config.allow)?;
+        if !allow.is_empty() {
+            tracing::info!(blocks = config.allow.len(), "RBAC allow-list active");
+        }
 
         Ok(Self {
             planner: Arc::new(Planner {
@@ -99,6 +104,7 @@ impl RuLakeMcpServer {
                 workers,
                 backend_ids,
                 consistency_label,
+                allow,
             }),
             capabilities: Arc::new(CapabilitySet::default()),
             audit: AuditSink::stderr(),
@@ -123,6 +129,7 @@ impl RuLakeMcpServer {
                 workers,
                 backend_ids,
                 consistency_label,
+                allow: AllowList::empty(),
             }),
             capabilities: Arc::new(CapabilitySet::default()),
             audit: AuditSink::stderr(),

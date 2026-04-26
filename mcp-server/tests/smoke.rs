@@ -117,6 +117,71 @@ async fn budget_max_results_caps_k() {
     assert_eq!(resp.data.len(), 10, "budget.max_results must cap k");
 }
 
+// ─── v0.4: per-collection RBAC (allow-list) ───────────────────────────
+
+#[tokio::test]
+async fn rbac_denies_unallowed_collection() {
+    use ruvector_rulake::{LocalBackend, RuLake, BackendAdapter};
+    use ruvector_rulake_mcp::AllowList;
+    use ruvector_rulake_mcp::config::AllowBlock;
+    use ruvector_rulake_mcp::planner::Planner;
+    use ruvector_rulake_mcp::WorkerPool;
+
+    let lake = RuLake::new(20, 42);
+    let be = std::sync::Arc::new(LocalBackend::new("local"));
+    be.put_collection("docs", 8, vec![0u64], vec![vec![0.0_f32; 8]]).unwrap();
+    be.put_collection("secret", 8, vec![0u64], vec![vec![0.0_f32; 8]]).unwrap();
+    let dyn_be: std::sync::Arc<dyn BackendAdapter> = be;
+    lake.register_backend(dyn_be).unwrap();
+
+    // Allow only `docs`, NOT `secret`.
+    let allow = AllowList::from_blocks(&[AllowBlock {
+        backend: "local".into(),
+        collection: "docs".into(),
+        caps: vec!["read".into()],
+    }])
+    .unwrap();
+
+    let workers = WorkerPool::new(0, 64).unwrap();
+    let planner = Planner {
+        lake: std::sync::Arc::new(lake),
+        workers,
+        backend_ids: vec!["local".into()],
+        consistency_label: "Fresh".into(),
+        allow,
+    };
+
+    // 1. Allowed collection works.
+    let req_ok = serde_json::from_value(serde_json::json!({
+        "intent": "search",
+        "target": { "collection": "docs" },
+        "search": { "vector": vec![0.0_f32; 8], "k": 1 }
+    }))
+    .unwrap();
+    let r1 = planner.handle(req_ok).await.expect("ok");
+    assert!(!r1.data.is_empty(), "allowed route returns data");
+    assert_ne!(r1.decision.chosen_action, "refused");
+
+    // 2. Denied collection refuses with reason_code = PolicyRefusedAllowlist.
+    let req_denied = serde_json::from_value(serde_json::json!({
+        "intent": "search",
+        "target": { "routes": [["local", "secret"]] },
+        "search": { "vector": vec![0.0_f32; 8], "k": 1 }
+    }))
+    .unwrap();
+    let r2 = planner.handle(req_denied).await.expect("planner returns refusal as Ok");
+    assert!(r2.data.is_empty(), "denied route → empty data");
+    let code = format!("{:?}", r2.decision.reason_code);
+    assert!(
+        code.contains("PolicyRefusedAllowlist"),
+        "expected PolicyRefusedAllowlist, got {code}"
+    );
+    assert!(
+        r2.decision.refusals.iter().any(|r| r.code.contains("ALLOWLIST_DENIED")),
+        "refusals must name the rule that denied"
+    );
+}
+
 // ─── v0.3d: capability gating ─────────────────────────────────────────
 
 #[tokio::test]

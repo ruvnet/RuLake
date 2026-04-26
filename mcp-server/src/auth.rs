@@ -9,10 +9,15 @@
 //! Constant-time compare via `subtle::ConstantTimeEq` so a timing
 //! attack can't lift the token character-by-character.
 
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use http::{HeaderMap, StatusCode};
+use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
+use serde::{Deserialize, Serialize};
 use subtle::ConstantTimeEq;
+
+use crate::policy::{Capability, CapabilitySet};
 
 /// Bearer-token verifier. Cheap to clone (Arc-wrapped state).
 #[derive(Clone)]
@@ -94,4 +99,309 @@ fn short_fingerprint(token: &[u8]) -> String {
     let mut h = DefaultHasher::new();
     token.hash(&mut h);
     format!("{:016x}", h.finish())
+}
+
+// ─── JWT bearer (OAuth-style scope→capability mapping) ──────────────
+//
+// `--auth jwt` mode. The operator points at a JWKS file with the
+// allowed signing keys; the server validates each request's `Bearer
+// <jwt>` against:
+//   - JWS signature (HS256 / RS256 / ES256 — matches jsonwebtoken's
+//     default Validation alg list for the loaded key)
+//   - exp / nbf (jsonwebtoken handles automatically)
+//   - iss claim (operator-supplied)
+//   - aud claim (must include the server's resource identifier per
+//     RFC 8707 Resource Indicators)
+//   - scope / scp claim → mapped to capabilities:
+//        mcp:rulake:read     → Capability::Read
+//        mcp:rulake:publish  → Capability::Read + Publish
+//        mcp:rulake:admin    → Capability::Read + Publish + Admin
+//
+// This is the SOTA auth path. The full OAuth 2.1 client flow (PKCE
+// authorization-code, RFC 9728 PRM, DCR) is the *client* responsibility
+// — this is the server's token-validation half.
+
+/// Operator config for the JWT verifier.
+#[derive(Debug, Clone)]
+pub struct JwtConfig {
+    /// PEM-encoded RSA/EC public key OR raw HMAC secret.
+    pub key: JwtKey,
+    /// Required iss claim. Tokens without a matching iss are rejected.
+    pub issuer: String,
+    /// Required aud claim — the server's resource identifier (RFC 8707).
+    pub audience: String,
+    /// Algorithms the key supports. Typically a single value; the
+    /// `alg` header must match one of these.
+    pub algorithms: Vec<Algorithm>,
+}
+
+#[derive(Debug, Clone)]
+pub enum JwtKey {
+    /// HMAC secret (HS256/HS384/HS512). Fine when the operator and
+    /// the IdP share trust; production deployments using public-key
+    /// algorithms (RS256/ES256) land in v0.5 alongside the JWKS
+    /// fetch loop and the `use_pem` feature flag flip.
+    Hmac(Vec<u8>),
+}
+
+#[derive(Clone)]
+pub struct JwtAuth {
+    inner: Arc<JwtInner>,
+}
+
+struct JwtInner {
+    decoding_key: DecodingKey,
+    validation: Validation,
+    audience: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct JwtClaims {
+    /// Subject — used as audit `principal`.
+    sub: String,
+    /// Either a space-separated string ("scope") or an array ("scp").
+    /// We accept both; whichever is present wins.
+    #[serde(default)]
+    scope: Option<String>,
+    #[serde(default)]
+    scp: Option<Vec<String>>,
+    /// jsonwebtoken validates iss/aud/exp from these.
+    iss: String,
+    /// `aud` may be a string or array; we accept both via Value.
+    #[serde(default)]
+    aud: Option<serde_json::Value>,
+    /// Optional client_id — useful for audit attribution.
+    #[serde(default)]
+    client_id: Option<String>,
+}
+
+impl JwtAuth {
+    pub fn new(config: JwtConfig) -> Self {
+        let decoding_key = match config.key {
+            JwtKey::Hmac(bytes) => DecodingKey::from_secret(&bytes),
+        };
+        let mut validation = Validation::new(
+            *config.algorithms.first().unwrap_or(&Algorithm::HS256),
+        );
+        validation.algorithms = config.algorithms;
+        validation.set_issuer(&[config.issuer.clone()]);
+        validation.set_audience(&[config.audience.clone()]);
+        Self {
+            inner: Arc::new(JwtInner {
+                decoding_key,
+                validation,
+                audience: config.audience,
+            }),
+        }
+    }
+
+    /// Validate `Authorization: Bearer <jwt>`. Returns the audit
+    /// principal + the capability set the token's scopes grant.
+    pub fn verify(&self, headers: &HeaderMap) -> Result<JwtPrincipal, StatusCode> {
+        let header = headers
+            .get(http::header::AUTHORIZATION)
+            .ok_or(StatusCode::UNAUTHORIZED)?
+            .to_str()
+            .map_err(|_| StatusCode::UNAUTHORIZED)?;
+        let token = header
+            .strip_prefix("Bearer ")
+            .ok_or(StatusCode::UNAUTHORIZED)?;
+
+        let data = decode::<JwtClaims>(token, &self.inner.decoding_key, &self.inner.validation)
+            .map_err(|e| {
+                tracing::debug!(error = %e, "jwt validation failed");
+                StatusCode::UNAUTHORIZED
+            })?;
+        let claims = data.claims;
+
+        let scopes: HashSet<String> = if let Some(scp) = claims.scp.clone() {
+            scp.into_iter().collect()
+        } else if let Some(scope) = claims.scope.clone() {
+            scope.split_whitespace().map(|s| s.to_string()).collect()
+        } else {
+            HashSet::new()
+        };
+        let caps = scopes_to_caps(&scopes);
+        Ok(JwtPrincipal {
+            principal: format!("oauth:{}", claims.sub),
+            client_id: claims.client_id,
+            scopes,
+            capabilities: caps,
+            audience: self.inner.audience.clone(),
+        })
+    }
+}
+
+/// What the JWT verifier returns on success.
+#[derive(Debug, Clone)]
+pub struct JwtPrincipal {
+    /// `oauth:<sub>` — used as audit principal.
+    pub principal: String,
+    pub client_id: Option<String>,
+    pub scopes: HashSet<String>,
+    /// Capabilities derived from the scope list. Always includes Read
+    /// when at least one mcp:rulake:* scope is present.
+    pub capabilities: CapabilitySet,
+    pub audience: String,
+}
+
+/// `mcp:rulake:read|publish|admin` → CapabilitySet.
+pub fn scopes_to_caps(scopes: &HashSet<String>) -> CapabilitySet {
+    let mut csv = String::new();
+    let push = |csv: &mut String, label: &str| {
+        if !csv.is_empty() {
+            csv.push(',');
+        }
+        csv.push_str(label);
+    };
+    if scopes.contains("mcp:rulake:read") {
+        push(&mut csv, "read");
+    }
+    if scopes.contains("mcp:rulake:publish") {
+        push(&mut csv, "publish");
+    }
+    if scopes.contains("mcp:rulake:admin") {
+        push(&mut csv, "admin");
+    }
+    if csv.is_empty() {
+        CapabilitySet::default()
+    } else {
+        CapabilitySet::from_csv(&csv).unwrap_or_default()
+    }
+}
+
+#[cfg(test)]
+mod jwt_tests {
+    use super::*;
+    use jsonwebtoken::{EncodingKey, Header, encode};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn now_secs() -> u64 {
+        SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()
+    }
+
+    fn sign(claims: &serde_json::Value, secret: &[u8]) -> String {
+        let header = Header::new(Algorithm::HS256);
+        encode(&header, claims, &EncodingKey::from_secret(secret)).unwrap()
+    }
+
+    #[test]
+    fn jwt_accepts_valid_token_with_publish_scope() {
+        let secret = b"test-secret-32-bytes-long-okay-pls!".to_vec();
+        let auth = JwtAuth::new(JwtConfig {
+            key: JwtKey::Hmac(secret.clone()),
+            issuer: "https://idp.example".into(),
+            audience: "https://rulake.example/mcp".into(),
+            algorithms: vec![Algorithm::HS256],
+        });
+        let claims = serde_json::json!({
+            "sub": "alice",
+            "iss": "https://idp.example",
+            "aud": "https://rulake.example/mcp",
+            "exp": now_secs() + 60,
+            "scope": "mcp:rulake:read mcp:rulake:publish",
+            "client_id": "claude-desktop/1.4",
+        });
+        let token = sign(&claims, &secret);
+        let mut h = HeaderMap::new();
+        h.insert(http::header::AUTHORIZATION, format!("Bearer {token}").parse().unwrap());
+
+        let p = auth.verify(&h).expect("token must validate");
+        assert_eq!(p.principal, "oauth:alice");
+        assert_eq!(p.client_id.as_deref(), Some("claude-desktop/1.4"));
+        assert!(p.capabilities.has(Capability::Read));
+        assert!(p.capabilities.has(Capability::Publish));
+        assert!(!p.capabilities.has(Capability::Admin));
+    }
+
+    #[test]
+    fn jwt_rejects_wrong_audience() {
+        let secret = b"test-secret-32-bytes-long-okay-pls!".to_vec();
+        let auth = JwtAuth::new(JwtConfig {
+            key: JwtKey::Hmac(secret.clone()),
+            issuer: "https://idp.example".into(),
+            audience: "https://rulake.example/mcp".into(),
+            algorithms: vec![Algorithm::HS256],
+        });
+        let claims = serde_json::json!({
+            "sub": "alice",
+            "iss": "https://idp.example",
+            "aud": "https://OTHER.example/mcp",   // wrong audience
+            "exp": now_secs() + 60,
+            "scope": "mcp:rulake:read",
+        });
+        let token = sign(&claims, &secret);
+        let mut h = HeaderMap::new();
+        h.insert(http::header::AUTHORIZATION, format!("Bearer {token}").parse().unwrap());
+        assert_eq!(auth.verify(&h).unwrap_err(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[test]
+    fn jwt_rejects_expired() {
+        let secret = b"test-secret-32-bytes-long-okay-pls!".to_vec();
+        let auth = JwtAuth::new(JwtConfig {
+            key: JwtKey::Hmac(secret.clone()),
+            issuer: "https://idp.example".into(),
+            audience: "https://rulake.example/mcp".into(),
+            algorithms: vec![Algorithm::HS256],
+        });
+        let claims = serde_json::json!({
+            "sub": "alice",
+            "iss": "https://idp.example",
+            "aud": "https://rulake.example/mcp",
+            // Default jsonwebtoken leeway is 60s — go further into the past.
+            "exp": now_secs() - 600,
+            "scope": "mcp:rulake:read",
+        });
+        let token = sign(&claims, &secret);
+        let mut h = HeaderMap::new();
+        h.insert(http::header::AUTHORIZATION, format!("Bearer {token}").parse().unwrap());
+        assert_eq!(auth.verify(&h).unwrap_err(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[test]
+    fn jwt_rejects_wrong_signature() {
+        let secret = b"test-secret-32-bytes-long-okay-pls!".to_vec();
+        let other  = b"WRONG-secret-32-bytes-long-okay-OK?".to_vec();
+        let auth = JwtAuth::new(JwtConfig {
+            key: JwtKey::Hmac(secret.clone()),
+            issuer: "https://idp.example".into(),
+            audience: "https://rulake.example/mcp".into(),
+            algorithms: vec![Algorithm::HS256],
+        });
+        let claims = serde_json::json!({
+            "sub": "alice",
+            "iss": "https://idp.example",
+            "aud": "https://rulake.example/mcp",
+            "exp": now_secs() + 60,
+            "scope": "mcp:rulake:read",
+        });
+        let token = sign(&claims, &other);   // signed with the wrong key
+        let mut h = HeaderMap::new();
+        h.insert(http::header::AUTHORIZATION, format!("Bearer {token}").parse().unwrap());
+        assert_eq!(auth.verify(&h).unwrap_err(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[test]
+    fn scope_array_form_works() {
+        let secret = b"test-secret-32-bytes-long-okay-pls!".to_vec();
+        let auth = JwtAuth::new(JwtConfig {
+            key: JwtKey::Hmac(secret.clone()),
+            issuer: "https://idp.example".into(),
+            audience: "https://rulake.example/mcp".into(),
+            algorithms: vec![Algorithm::HS256],
+        });
+        let claims = serde_json::json!({
+            "sub": "alice",
+            "iss": "https://idp.example",
+            "aud": "https://rulake.example/mcp",
+            "exp": now_secs() + 60,
+            "scp": ["mcp:rulake:read", "mcp:rulake:admin"],
+        });
+        let token = sign(&claims, &secret);
+        let mut h = HeaderMap::new();
+        h.insert(http::header::AUTHORIZATION, format!("Bearer {token}").parse().unwrap());
+        let p = auth.verify(&h).unwrap();
+        assert!(p.capabilities.has(Capability::Admin));
+    }
 }
