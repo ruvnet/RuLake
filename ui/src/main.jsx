@@ -33,6 +33,9 @@ async function bootstrap() {
   const httpMod = await import('./lib/http.js');
   window.RuLakeHttp = httpMod.RuLakeHttp;
   window.RuLakeHttpError = httpMod.RuLakeHttpError;
+  // Search dispatcher — picks Worker or main-thread per the user's
+  // Storage settings toggle. Pinned as window.RULakeSearch.
+  await import('./lib/searchOffload.js');
   await import('./components/tweaks-panel.jsx');
   await import('./components/components.jsx');
   await import('./components/modals.jsx');

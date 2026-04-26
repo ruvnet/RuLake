@@ -504,25 +504,46 @@ function PlaygroundScreen() {
     let topKLen = 0;
     let witnessOk = true;
     let witnessHex = '';
+    let transport = 'main';
     try {
       const W = window.RULakeWasm;
-      if (W && W.searchL2 && W.computeWitness) {
-        // Synthesize a small fixture corpus deterministically — proves
-        // the wasm hot path works end-to-end without server data.
-        const dim = 128;
-        const n = 256;
-        const r = RULAKE.mulberry32(0xc0ffee);
-        const vectors = new Float32Array(n * dim);
-        for (let i = 0; i < n * dim; i++) vectors[i] = r() * 2 - 1;
-        const ids = new Float64Array(n);
-        for (let i = 0; i < n; i++) ids[i] = i;
-        const queryVec = new Float32Array(dim);
-        for (let i = 0; i < dim; i++) queryVec[i] = r() * 2 - 1;
+      const Search = window.RULakeSearch;
+      // Read user's Workers toggle from IndexedDB (set in Storage card).
+      let useWorker = false;
+      if (window.RuStore) {
+        const kvRows = await window.RuStore.list('kv').catch(() => []);
+        const settingsRow = kvRows.find(r => r.label === 'storage-settings');
+        useWorker = !!(settingsRow?.settings?.workersEnabled);
+      }
+      // Synthesize a small fixture corpus deterministically — proves
+      // the search hot path works end-to-end without server data.
+      const dim = 128;
+      const n = 256;
+      const r = RULAKE.mulberry32(0xc0ffee);
+      const vectors = new Float32Array(n * dim);
+      for (let i = 0; i < n * dim; i++) vectors[i] = r() * 2 - 1;
+      const ids = new Float64Array(n);
+      for (let i = 0; i < n; i++) ids[i] = i;
+      const queryVec = new Float32Array(dim);
+      for (let i = 0; i < dim; i++) queryVec[i] = r() * 2 - 1;
+
+      if (Search && Search.searchOffload) {
+        const result = await Search.searchOffload({
+          vectors, ids, dim, query: queryVec, k, useWorker,
+        });
+        searchMs = result.ms;
+        topKLen = (result.hits || []).length;
+        transport = result.transport;
+      } else if (W && W.searchL2) {
         const tSearch = performance.now();
         const hits = await W.searchL2(vectors, ids, dim, queryVec, k);
         searchMs = Math.round(performance.now() - tSearch);
         topKLen = (hits || []).length;
+      } else {
+        topKLen = k;
+      }
 
+      if (W && W.computeWitness) {
         const tW = performance.now();
         witnessHex = await W.computeWitness(
           'demo://playground/' + target,
@@ -531,8 +552,6 @@ function PlaygroundScreen() {
         witnessMs = Math.round(performance.now() - tW);
         witnessOk = /^[0-9a-f]{64}$/.test(witnessHex);
       } else {
-        // wasm not available yet — degrade gracefully.
-        topKLen = k;
         witnessOk = true;
       }
     } catch (e) {
@@ -543,13 +562,13 @@ function PlaygroundScreen() {
     setRunning(false); setVerifying(false); setVerified(witnessOk);
     window.toast && window.toast.ok(
       witnessOk ? 'Witness MATCH' : 'Witness MISMATCH',
-      `${target} · search ${searchMs}ms · witness ${witnessMs}ms · k=${topKLen}`,
+      `${target} · search ${searchMs}ms (${transport}) · witness ${witnessMs}ms · k=${topKLen}`,
     );
     if (window.RuStore) {
       window.RuStore.appendAudit({
         ts: new Date().toISOString().slice(11,19),
         principal: 'jules@ruv', tool: 'rulake_query', target, k: topKLen, ms: totalMs,
-        code: witnessOk ? 'OK_VERIFIED' : 'WITNESS_MISMATCH_REFUSED',
+        code: witnessOk ? `OK_VERIFIED_${transport.toUpperCase()}` : 'WITNESS_MISMATCH_REFUSED',
         outcome: witnessOk ? 'ok' : 'refused',
       });
     }
