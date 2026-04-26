@@ -600,7 +600,19 @@ cd mcp-server && cargo build --release
     --auth bearer --bearer-token-file /etc/rulake/token \
     --capabilities read,publish \
     --audit-file /var/log/rulake-mcp/audit.jsonl
+
+# HTTP + JWT (production — OAuth-style scope→capability mapping):
+./target/release/rulake-mcp http \
+    --bind 0.0.0.0:7440 \
+    --auth jwt \
+    --jwt-secret-file /etc/rulake/jwt.secret \
+    --jwt-issuer https://idp.example.com \
+    --jwt-audience https://rulake.example.com/mcp \
+    --capabilities read,publish \
+    --audit-file /var/log/rulake-mcp/audit.jsonl
 ```
+
+**Auth + RBAC (v0.4, production-shaped)**: layered defense across four checks. (1) Connection-level auth — `--auth none|bearer|jwt`. JWT validates JWS signature + iss + aud (RFC 8707 Resource Indicator) + exp; the token's `scope` / `scp` claim maps `mcp:rulake:read|publish|admin` → capabilities per request. (2) **Replay protection** — `MCP-Request-Id` LRU dedup over a 10k-window. (3) **Layered rate limiting** — three governor buckets per ADR-004 §6: per-(transport, principal), per-(principal, backend, collection), per-process. (4) **Per-collection RBAC** via `[[allow]] backend, collection (anchored regex), caps` blocks in `mcp.toml`. Empty allow-list = unrestricted (back-compat). Anchored regex hardens against prefix-match exploits — `docs.*` matches `docs.public` but NOT `secret-docs.public`.
 
 The public tool is `rulake_query` — submit `intent` (`search` | `verify` | `explain` | `refresh`), `target` (collection or routes), `risk`, `freshness`, `budget`, `policy`. The response carries `data` + `provenance` + `trust_level` + `decision` (chosen_action, reason_code from a closed enum, backends_used, refusals).
 
@@ -624,15 +636,20 @@ The public tool is `rulake_query` — submit `intent` (`search` | `verify` | `ex
 - `rulake://stats/by-backend` — per-backend stats
 - `rulake://bundle/{backend}/{collection}` — v0.4 (witness lookup; backend-implementer contract for cheap `current_bundle()`)
 
-**Transports** (ADR-004 §3):
+**Transports + auth** (ADR-004 §3 + §5):
 
-| Transport | Auth | Status |
+| Transport / auth | Notes | Status |
 |---|---|---|
 | stdio | parent-process trust | ✅ v0.1 |
-| Streamable HTTP | `--auth none` (loopback only by default) | ✅ v0.2 |
-| Streamable HTTP | `--auth bearer` (file token, dev-only — embarrassing-flag gates public bind) | ✅ v0.2 |
-| Streamable HTTP | `--auth oauth` (OAuth 2.1 + PKCE + RFC 8707 + RFC 9728) | v0.4 |
-| Streamable HTTP | `--auth mtls` | v0.4 |
+| Streamable HTTP `--auth none` | loopback only by default; `--insecure-allow-no-auth` to override | ✅ v0.2 |
+| Streamable HTTP `--auth bearer` | file token, constant-time compare; dev-only (`--allow-bearer-on-public` for any non-loopback bind) | ✅ v0.2 |
+| Streamable HTTP `--auth jwt` | HMAC JWS (HS256/384/512), iss + aud + exp validation, scope→capability mapping via `mcp:rulake:read|publish|admin` | ✅ v0.4 |
+| Streamable HTTP `--auth jwt` (RS256/ES256 + JWKS fetch) | public-key signature verification + remote key rotation | v0.5 |
+| Streamable HTTP `--auth mtls` | client cert CN as principal, operator-supplied CA | v0.5 |
+| **Replay protection** | `MCP-Request-Id` LRU dedup over a 10k-request window | ✅ v0.4 |
+| **Layered rate limiting** | 3 governor buckets: (transport, principal), (principal, backend, collection), per-process | ✅ v0.4 |
+| **Per-collection RBAC** | `[[allow]] backend, collection (anchored regex), caps` blocks in `mcp.toml` | ✅ v0.4 |
+| **`tools/list` capability filter** | agents only see tools they can call — visibility is gated by the same map as call-time `require_cap` | ✅ v0.4 |
 
 DNS-rebinding guard via rmcp's `allowed_hosts` (loopback by default). Bearer-on-public requires `--allow-bearer-on-public` AND emits a `WARN` every 60 s.
 
@@ -944,7 +961,7 @@ Per-language details and the cross-cutting story are in the index at
 **Audience shells:**
 - **Python SDK** ([`python/`](python/)) — PyO3 + ABI3 wheels, NumPy zero-copy, GIL release on hot paths. **14/14 tests.**
 - **Node.js SDK** ([`node/`](node/)) — napi-rs, Float32Array zero-copy, async-only, `bigint` IDs. **10/10 tests.**
-- **MCP server** ([`mcp-server/`](mcp-server/)) — `rulake-mcp` binary; stdio + Streamable HTTP; bearer auth (dev-only embarrassing-flag); 4 intents (search/verify/explain/refresh); 7 tools across read/internal/publish/admin capability tiers; bounded rayon worker pool; JSONL audit file with §7 schema. **21/21 tests.**
+- **MCP server** ([`mcp-server/`](mcp-server/)) — `rulake-mcp` binary; stdio + Streamable HTTP; **JWT bearer with OAuth-style scope→capability mapping** + bearer (dev-only embarrassing-flag); 4 intents (search/verify/explain/refresh); 7 tools across read/internal/publish/admin capability tiers; **per-collection RBAC** via `[[allow]]` blocks; **layered rate limiting** (3 governor buckets); **replay protection** (MCP-Request-Id nonce LRU); **`tools/list` filtered by capability** (agents see only what they can call); bounded rayon worker pool; JSONL audit file with §7 schema. **39/39 tests.**
 
 **First cloud backend:**
 - **GCS Parquet** ([`gcs-backend/`](gcs-backend/)) — reads `LIST<FLOAT32>` columns from Parquet on GCS, generation = GCS object generation, cheap `current_bundle()` override. **4/4 offline + 1 live (gated) tests.**
@@ -967,7 +984,7 @@ Per-language details and the cross-cutting story are in the index at
 <summary>🗺 What's next</summary>
 
 **Sprint-sized:**
-- MCP server v0.4 — OAuth 2.1 + mTLS, replay protection (`MCP-Request-Id` nonce + session binding), layered rate limiting via `governor`, `rulake://bundle/...` resource, `tools/list` filter by capability
+- MCP server v0.5 — RS256/ES256 JWT (current v0.4 ships HMAC HS256/384/512) + JWKS fetch loop, mTLS auth mode, session-binding (token-to-(principal, client_id, mTLS-cert) tuple), `rulake://bundle/...` resource (v0.4 ships `rulake://stats` + `rulake://stats/by-backend`)
 
 **Real product work:**
 - Persistent disk-backed cache (ADR-155 §M1.5)

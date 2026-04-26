@@ -117,6 +117,73 @@ async fn budget_max_results_caps_k() {
     assert_eq!(resp.data.len(), 10, "budget.max_results must cap k");
 }
 
+// ─── v0.4: tools/list capability filter ───────────────────────────────
+
+#[tokio::test]
+async fn tools_list_filtered_by_capability_set() {
+    use ruvector_rulake::{LocalBackend, RuLake, BackendAdapter};
+    use ruvector_rulake_mcp::CapabilitySet;
+
+    let lake = RuLake::new(20, 42);
+    let be = std::sync::Arc::new(LocalBackend::new("local"));
+    let dyn_be: std::sync::Arc<dyn BackendAdapter> = be;
+    lake.register_backend(dyn_be).unwrap();
+    let lake = std::sync::Arc::new(lake);
+
+    // Read-only mode: should see only rulake_query + rulake_list_backends.
+    let read_only = RuLakeMcpServer::from_lake_with_caps(
+        std::sync::Arc::clone(&lake),
+        "Fresh".into(),
+        vec!["local".into()],
+        64,
+        CapabilitySet::default(),
+    )
+    .unwrap();
+    let names = list_tool_names_via_handler(&read_only).await;
+    assert_eq!(names, vec!["rulake_list_backends", "rulake_query"]);
+
+    // read,publish: + 2 publish tools.
+    let publish = RuLakeMcpServer::from_lake_with_caps(
+        std::sync::Arc::clone(&lake),
+        "Fresh".into(),
+        vec!["local".into()],
+        64,
+        CapabilitySet::from_csv("read,publish").unwrap(),
+    )
+    .unwrap();
+    let names = list_tool_names_via_handler(&publish).await;
+    assert!(names.contains(&"rulake_publish_bundle".to_string()));
+    assert!(names.contains(&"rulake_refresh_from_bundle_dir".to_string()));
+    assert!(!names.contains(&"rulake_invalidate_cache".to_string()), "admin tool must stay hidden");
+
+    // read,publish,admin: all 7.
+    let admin = RuLakeMcpServer::from_lake_with_caps(
+        std::sync::Arc::clone(&lake),
+        "Fresh".into(),
+        vec!["local".into()],
+        64,
+        CapabilitySet::from_csv("read,publish,admin").unwrap(),
+    )
+    .unwrap();
+    let names = list_tool_names_via_handler(&admin).await;
+    assert_eq!(names.len(), 7, "admin sees all 7 tools, got {names:?}");
+    for required in &[
+        "rulake_query", "rulake_list_backends",
+        "rulake_publish_bundle", "rulake_refresh_from_bundle_dir",
+        "rulake_save_cache_to_dir", "rulake_warm_from_dir",
+        "rulake_invalidate_cache",
+    ] {
+        assert!(names.iter().any(|n| n == required), "missing {required}");
+    }
+
+    async fn list_tool_names_via_handler(s: &RuLakeMcpServer) -> Vec<String> {
+        // Probe the filter via the test-only accessor that mirrors
+        // the ServerHandler::list_tools implementation. The wire-
+        // level path is also verified at the binary smoke step.
+        s.list_tools_filtered()
+    }
+}
+
 // ─── v0.4: per-collection RBAC (allow-list) ───────────────────────────
 
 #[tokio::test]

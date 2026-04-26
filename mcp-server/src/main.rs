@@ -7,10 +7,12 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 
 use anyhow::Context;
+use jsonwebtoken::Algorithm;
 use ruvector_rulake_mcp::{
     AllowBearerOnPublic, AuditSink, AuthMode, BearerAuth, CapabilitySet, InsecureAllowNoAuth,
-    McpConfig, RuLakeMcpServer,
+    JwtAuth, JwtConfig, McpConfig, RuLakeMcpServer,
 };
+use ruvector_rulake_mcp::auth::JwtKey;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> anyhow::Result<()> {
@@ -71,9 +73,41 @@ fn build_auth(http: &HttpArgs) -> anyhow::Result<AuthMode> {
                 .with_context(|| format!("loading bearer token: {}", path.display()))?;
             Ok(AuthMode::Bearer(bearer))
         }
+        "jwt" => {
+            let secret_path = http
+                .jwt_secret_file
+                .as_ref()
+                .context("--auth jwt requires --jwt-secret-file PATH (HMAC bytes)")?;
+            let issuer = http
+                .jwt_issuer
+                .clone()
+                .context("--auth jwt requires --jwt-issuer URL")?;
+            let audience = http
+                .jwt_audience
+                .clone()
+                .context("--auth jwt requires --jwt-audience URL (RFC 8707 Resource Indicator)")?;
+            let secret = std::fs::read(secret_path)
+                .with_context(|| format!("loading jwt secret: {}", secret_path.display()))?;
+            let alg = match http.jwt_alg.as_deref().unwrap_or("HS256") {
+                "HS256" => Algorithm::HS256,
+                "HS384" => Algorithm::HS384,
+                "HS512" => Algorithm::HS512,
+                other => anyhow::bail!(
+                    "unknown --jwt-alg {other:?} — v0.4 supports HS256|HS384|HS512 \
+                     (RS256/ES256 + JWKS fetch land in v0.5)"
+                ),
+            };
+            let jwt = JwtAuth::new(JwtConfig {
+                key: JwtKey::Hmac(secret),
+                issuer,
+                audience,
+                algorithms: vec![alg],
+            });
+            Ok(AuthMode::Jwt(jwt))
+        }
         other => anyhow::bail!(
-            "unknown --auth mode {other:?} — expected `none` or `bearer` \
-             (oauth + mtls land in v0.3)"
+            "unknown --auth mode {other:?} — expected `none` | `bearer` | `jwt` \
+             (mtls + RS256 land in v0.5)"
         ),
     }
 }
@@ -99,6 +133,10 @@ struct HttpArgs {
     bearer_token_file: Option<PathBuf>,
     allow_bearer_on_public: bool,
     insecure_allow_no_auth: bool,
+    jwt_secret_file: Option<PathBuf>,
+    jwt_issuer: Option<String>,
+    jwt_audience: Option<String>,
+    jwt_alg: Option<String>,
 }
 
 fn parse_args() -> anyhow::Result<Args> {
@@ -113,6 +151,10 @@ fn parse_args() -> anyhow::Result<Args> {
     let mut http_token_file: Option<PathBuf> = None;
     let mut http_allow_bearer_on_public = false;
     let mut http_insecure_allow_no_auth = false;
+    let mut http_jwt_secret_file: Option<PathBuf> = None;
+    let mut http_jwt_issuer: Option<String> = None;
+    let mut http_jwt_audience: Option<String> = None;
+    let mut http_jwt_alg: Option<String> = None;
     let mut transport_kind: Option<&'static str> = None;
 
     let mut it = std::env::args().skip(1);
@@ -147,6 +189,20 @@ fn parse_args() -> anyhow::Result<Args> {
             }
             "--allow-bearer-on-public" => http_allow_bearer_on_public = true,
             "--insecure-allow-no-auth" => http_insecure_allow_no_auth = true,
+            "--jwt-secret-file" => {
+                http_jwt_secret_file = Some(PathBuf::from(
+                    it.next().context("--jwt-secret-file expects PATH")?,
+                ));
+            }
+            "--jwt-issuer" => {
+                http_jwt_issuer = Some(it.next().context("--jwt-issuer expects URL")?);
+            }
+            "--jwt-audience" => {
+                http_jwt_audience = Some(it.next().context("--jwt-audience expects URL")?);
+            }
+            "--jwt-alg" => {
+                http_jwt_alg = Some(it.next().context("--jwt-alg expects HS256|HS384|HS512")?);
+            }
             "-h" | "--help" => {
                 print_help();
                 std::process::exit(0);
@@ -165,6 +221,10 @@ fn parse_args() -> anyhow::Result<Args> {
                 bearer_token_file: http_token_file,
                 allow_bearer_on_public: http_allow_bearer_on_public,
                 insecure_allow_no_auth: http_insecure_allow_no_auth,
+                jwt_secret_file: http_jwt_secret_file,
+                jwt_issuer: http_jwt_issuer,
+                jwt_audience: http_jwt_audience,
+                jwt_alg: http_jwt_alg,
             }))
         }
         _ => unreachable!(),
@@ -198,12 +258,16 @@ fn print_help() {
          \n\
          HTTP OPTIONS:\n    \
              --bind ADDR:PORT               Bind address. Default 127.0.0.1:7440.\n    \
-             --auth MODE                    `none` (loopback only) or `bearer`.\n    \
+             --auth MODE                    `none` (loopback) | `bearer` (dev) | `jwt` (production).\n    \
              --bearer-token-file PATH       Required with --auth bearer.\n    \
              --allow-bearer-on-public       Required to bind --auth bearer to a non-loopback addr.\n    \
                                             BEARER IS DEV ONLY — static tokens leak once → permanent\n    \
-                                            access. Migrate to OAuth (v0.3) for production.\n    \
-             --insecure-allow-no-auth       Required to bind --auth none to a non-loopback addr.\n\
+                                            access. Use --auth jwt for production.\n    \
+             --insecure-allow-no-auth       Required to bind --auth none to a non-loopback addr.\n    \
+             --jwt-secret-file PATH         HMAC secret for JWS validation (--auth jwt).\n    \
+             --jwt-issuer URL               Required iss claim (--auth jwt). Tokens with mismatched iss are rejected.\n    \
+             --jwt-audience URL             Required aud claim per RFC 8707 (--auth jwt).\n    \
+             --jwt-alg ALG                  HS256 (default) | HS384 | HS512. RS256/ES256 land in v0.5.\n\
          \n\
          OAuth 2.1 + mTLS auth, replay protection (MCP-Request-Id +\n\
          session binding), and the full capability set (publish/admin)\n\

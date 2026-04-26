@@ -16,7 +16,7 @@ use rmcp::{
         wrapper::{Json, Parameters},
     },
     model::{
-        Implementation, ListResourcesResult, PaginatedRequestParams, RawResource,
+        Implementation, ListResourcesResult, ListToolsResult, PaginatedRequestParams, RawResource,
         ReadResourceRequestParams, ReadResourceResult, ResourceContents, ServerCapabilities,
         ServerInfo,
     },
@@ -156,6 +156,22 @@ impl RuLakeMcpServer {
     #[doc(hidden)]
     pub fn planner(&self) -> &Planner {
         &self.planner
+    }
+
+    /// Test-only mirror of the `list_tools` capability filter — lets a
+    /// smoke test verify the filter without standing up a full MCP
+    /// session. Same logic as the ServerHandler's `list_tools` method.
+    #[doc(hidden)]
+    pub fn list_tools_filtered(&self) -> Vec<String> {
+        let mut names: Vec<String> = self
+            .tool_router
+            .list_all()
+            .into_iter()
+            .filter(|t| self.capabilities.has(required_cap_for_tool(&t.name)))
+            .map(|t| t.name.to_string())
+            .collect();
+        names.sort();
+        names
     }
 
     /// Drive the server over stdio. Blocks until the peer (Claude
@@ -427,6 +443,25 @@ fn require_cap(caps: &CapabilitySet, required: Capability) -> Result<(), McpErro
         .map_err(|refused| McpError::invalid_request(refused.to_string(), None))
 }
 
+/// The single source of truth for tool→capability mapping. ADR-004 §4b.
+/// Used by both the per-call gate (in each tool fn) AND the
+/// `tools/list` visibility filter.
+fn required_cap_for_tool(name: &str) -> Capability {
+    match name {
+        // Public surface — read tier.
+        "rulake_query" | "rulake_list_backends" => Capability::Read,
+        // Mutation tools — publish/admin tiers.
+        "rulake_publish_bundle" | "rulake_refresh_from_bundle_dir" => Capability::Publish,
+        "rulake_save_cache_to_dir"
+        | "rulake_warm_from_dir"
+        | "rulake_invalidate_cache" => Capability::Admin,
+        // Anything else (future internal-kernel tools etc.) defaults
+        // to internal — invisible by default until --capabilities
+        // internal is granted. Safer than defaulting to Read.
+        _ => Capability::Internal,
+    }
+}
+
 // ─── Mutation-tool arg/response shapes ────────────────────────────────
 
 #[derive(Debug, Deserialize, Serialize, rmcp::schemars::JsonSchema)]
@@ -511,6 +546,32 @@ impl ServerHandler for RuLakeMcpServer {
                 .into(),
         );
         init
+    }
+
+    /// `tools/list` — filtered by the server's effective capability
+    /// set. ADR-004 §4 ("agents see one tool; ops sees the kernel;
+    /// operators see everything"). The `--capabilities read` default
+    /// exposes only `rulake_query` + `rulake_list_backends`; adding
+    /// `publish` reveals the publish-tier tools, and so on.
+    ///
+    /// Enforcement is dual: the visibility filter here, AND the
+    /// per-tool `require_cap` gate inside each handler. An adversary
+    /// who knows tool names cannot bypass the filter to call them.
+    async fn list_tools(
+        &self,
+        _params: Option<PaginatedRequestParams>,
+        _ctx: RequestContext<rmcp::service::RoleServer>,
+    ) -> Result<ListToolsResult, McpError> {
+        let caps = Arc::clone(&self.capabilities);
+        let tools: Vec<rmcp::model::Tool> = self
+            .tool_router
+            .list_all()
+            .into_iter()
+            .filter(|t| caps.has(required_cap_for_tool(&t.name)))
+            .collect();
+        let mut result = ListToolsResult::default();
+        result.tools = tools;
+        Ok(result)
     }
 
     /// MCP resources/list — ADR-004 §Resources. v0.2 ships the two
