@@ -1,0 +1,84 @@
+# Continuous integration — every push and PR.
+#
+# Builds and tests every shipped crate so a green main is "everything
+# works on Linux x86_64". Per-platform release builds live in the
+# release-* workflows.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  rust:
+    name: Rust — ${{ matrix.crate }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The five sibling Cargo packages per ADR-001.
+        crate: [".", "mcp-server", "gcs-backend", "python", "node"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive   # ADR-001 requires vendor/ruvector
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ matrix.crate }}
+      - name: Build
+        working-directory: ${{ matrix.crate }}
+        run: cargo build --release
+      - name: Test
+        # The python/ + node/ crates have no Rust-side tests of their
+        # own (their tests run in pytest / node --test). Skip in those
+        # rows; the release-python / release-node workflows cover them.
+        if: matrix.crate != 'python' && matrix.crate != 'node'
+        working-directory: ${{ matrix.crate }}
+        run: cargo test --release
+
+  python-tests:
+    name: Python SDK — pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install maturin + test deps
+        run: pip install maturin pytest numpy
+      - name: Build + test
+        working-directory: python
+        run: |
+          maturin develop --release
+          pytest tests/ -v
+
+  node-tests:
+    name: Node SDK — node --test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Build native binding
+        working-directory: node
+        run: |
+          cargo build --release
+          cp target/release/libruvector_rulake_node.so rulake.linux-x64-gnu.node
+      - name: Run smoke tests
+        working-directory: node
+        run: node --test __test__/smoke.test.mjs

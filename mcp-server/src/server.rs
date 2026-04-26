@@ -15,7 +15,12 @@ use rmcp::{
         router::tool::ToolRouter,
         wrapper::{Json, Parameters},
     },
-    model::{Implementation, ServerCapabilities, ServerInfo},
+    model::{
+        Implementation, ListResourcesResult, PaginatedRequestParams, RawResource,
+        ReadResourceRequestParams, ReadResourceResult, ResourceContents, ServerCapabilities,
+        ServerInfo,
+    },
+    service::RequestContext,
     tool, tool_handler, tool_router,
 };
 use serde::{Deserialize, Serialize};
@@ -183,15 +188,109 @@ impl ServerHandler for RuLakeMcpServer {
         info.title = Some("ruLake MCP server".into());
         info.website_url = Some("https://github.com/ruvnet/RuLake".into());
 
-        let mut init = ServerInfo::new(ServerCapabilities::builder().enable_tools().build());
+        let mut init = ServerInfo::new(
+            ServerCapabilities::builder()
+                .enable_tools()
+                .enable_resources()
+                .build(),
+        );
         init.server_info = info;
         init.instructions = Some(
-            "ruLake MCP server (ADR-004 v0.1). One public tool: rulake_query \
-             (intent=search). Pass {target.collection|routes, search:{vector,k}, ...}. \
-             The response carries a decision trace alongside the data."
+            "ruLake MCP server (ADR-004 v0.2). Public tool: rulake_query \
+             (intent=search|verify|explain). Resources: rulake://stats, \
+             rulake://stats/by-backend. The response carries a decision trace \
+             alongside the data; resources carry the cache-first KPI rollup."
                 .into(),
         );
         init
+    }
+
+    /// MCP resources/list — ADR-004 §Resources. v0.2 ships the two
+    /// roll-up resources; per-bundle resources land with the
+    /// allow-list machinery in v0.3.
+    async fn list_resources(
+        &self,
+        _params: Option<PaginatedRequestParams>,
+        _context: RequestContext<rmcp::service::RoleServer>,
+    ) -> Result<ListResourcesResult, McpError> {
+        let resources = vec![
+            {
+                let mut r = RawResource::new("rulake://stats", "cache stats (rollup)");
+                r.description = Some(
+                    "Roll-up cache stats: hits, misses, primes, hit_rate, avg_prime_ms.".into(),
+                );
+                r.mime_type = Some("application/json".into());
+                rmcp::model::Annotated::new(r, None)
+            },
+            {
+                let mut r = RawResource::new("rulake://stats/by-backend", "cache stats per backend");
+                r.description = Some("Per-backend cache stats: hits/misses/primes per backend id.".into());
+                r.mime_type = Some("application/json".into());
+                rmcp::model::Annotated::new(r, None)
+            },
+        ];
+        Ok(ListResourcesResult::with_all_items(resources))
+    }
+
+    /// MCP resources/read — serve the JSON body for a known URI.
+    async fn read_resource(
+        &self,
+        params: ReadResourceRequestParams,
+        _context: RequestContext<rmcp::service::RoleServer>,
+    ) -> Result<ReadResourceResult, McpError> {
+        let body = self.read_resource_json(&params.uri).map_err(|e| {
+            McpError::invalid_params(format!("RULAKE_RESOURCE: {e}"), None)
+        })?;
+        let contents = ResourceContents::text(body, params.uri);
+        Ok(ReadResourceResult::new(vec![contents]))
+    }
+}
+
+impl RuLakeMcpServer {
+    /// Synchronous, lock-only resource read. v0.2 returns fresh stats
+    /// on every read; the 200 ms TTL caching from ADR-004 §Resources
+    /// is a v0.3 optimization (the lock-and-clone cost is sub-microsecond
+    /// today so the TTL only matters at extreme poll rates).
+    fn read_resource_json(&self, uri: &str) -> Result<String, String> {
+        match uri {
+            "rulake://stats" => {
+                let s = self.planner.lake.cache_stats();
+                serde_json::to_string(&serde_json::json!({
+                    "hits":           s.hits,
+                    "misses":         s.misses,
+                    "primes":         s.primes,
+                    "invalidations":  s.invalidations,
+                    "shared_hits":    s.shared_hits,
+                    "total_prime_ms": s.total_prime_ms,
+                    "last_prime_ms":  s.last_prime_ms,
+                    "warm_installs":  s.warm_installs,
+                    "hit_rate":       s.hit_rate(),
+                    "avg_prime_ms":   s.avg_prime_ms(),
+                }))
+                .map_err(|e| e.to_string())
+            }
+            "rulake://stats/by-backend" => {
+                let by = self.planner.lake.cache_stats_by_backend();
+                let map: serde_json::Map<String, serde_json::Value> = by
+                    .into_iter()
+                    .map(|(k, v)| {
+                        (
+                            k,
+                            serde_json::json!({
+                                "hits":          v.hits,
+                                "misses":        v.misses,
+                                "primes":        v.primes,
+                                "invalidations": v.invalidations,
+                                "shared_hits":   v.shared_hits,
+                                "hit_rate":      v.hit_rate(),
+                            }),
+                        )
+                    })
+                    .collect();
+                serde_json::to_string(&serde_json::Value::Object(map)).map_err(|e| e.to_string())
+            }
+            other => Err(format!("unknown resource URI: {other}")),
+        }
     }
 }
 

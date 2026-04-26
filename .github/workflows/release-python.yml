@@ -1,0 +1,108 @@
+# Release Python SDK — ABI3 wheels per ADR-002 §5.
+#
+# Triggered manually (workflow_dispatch) or on a tag matching
+# `python-v*` (e.g. python-v2.2.0). Builds five wheels:
+# - manylinux_2_28 x86_64
+# - manylinux_2_28 aarch64
+# - macOS x86_64 (Intel)
+# - macOS aarch64 (Apple Silicon)
+# - Windows x86_64
+# - sdist (always)
+#
+# Publishes to PyPI when PYPI_API_TOKEN is set in repo secrets.
+
+name: release-python
+
+on:
+  push:
+    tags:
+      - "python-v*"
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish to PyPI"
+        type: boolean
+        default: false
+
+env:
+  CARGO_TERM_COLOR: always
+  PACKAGE_DIR: python
+
+jobs:
+  build:
+    name: build (${{ matrix.platform.target }})
+    runs-on: ${{ matrix.platform.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - { os: ubuntu-latest,    target: x86_64-unknown-linux-gnu,  manylinux: 2_28, name: linux-x86_64 }
+          - { os: ubuntu-latest,    target: aarch64-unknown-linux-gnu, manylinux: 2_28, name: linux-aarch64 }
+          - { os: macos-13,         target: x86_64-apple-darwin,                       name: macos-x86_64 }
+          - { os: macos-14,         target: aarch64-apple-darwin,                      name: macos-aarch64 }
+          - { os: windows-latest,   target: x86_64-pc-windows-msvc,                    name: windows-x86_64 }
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build wheel via maturin-action
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: ${{ env.PACKAGE_DIR }}
+          target: ${{ matrix.platform.target }}
+          manylinux: ${{ matrix.platform.manylinux || 'auto' }}
+          args: --release --out dist
+          # ADR-002 requires ABI3-py39: one wheel per platform per release.
+          # `extension-module` is set in pyproject.toml.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.platform.name }}
+          path: ${{ env.PACKAGE_DIR }}/dist/*.whl
+
+  sdist:
+    name: build sdist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive    # critical — pyproject.toml [tool.maturin].include pulls vendored sources
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build sdist
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: ${{ env.PACKAGE_DIR }}
+          command: sdist
+          args: --out dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: ${{ env.PACKAGE_DIR }}/dist/*.tar.gz
+
+  publish:
+    name: publish to PyPI
+    needs: [build, sdist]
+    runs-on: ubuntu-latest
+    # Only publish on tag push or explicit workflow_dispatch with publish=true.
+    if: |
+      startsWith(github.ref, 'refs/tags/python-v') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'true')
+    environment:
+      name: pypi
+      url: https://pypi.org/p/ruvector-rulake
+    permissions:
+      id-token: write       # OIDC trusted publishing (preferred over PYPI_API_TOKEN)
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
+          # Falls back to PYPI_API_TOKEN secret if OIDC isn't configured.
+          # password: ${{ secrets.PYPI_API_TOKEN }}

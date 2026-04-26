@@ -117,6 +117,124 @@ async fn budget_max_results_caps_k() {
     assert_eq!(resp.data.len(), 10, "budget.max_results must cap k");
 }
 
+// ─── v0.3a: verify + explain intents ─────────────────────────────────
+
+#[tokio::test]
+async fn explain_intent_returns_cache_stats_rollup() {
+    let (lake, _, _) = make_lake(500, 16);
+    let server = RuLakeMcpServer::from_lake(
+        Arc::clone(&lake),
+        "Eventual".to_string(),
+        vec!["local".to_string()],
+        64,
+    )
+    .unwrap();
+
+    let req = serde_json::from_value(serde_json::json!({
+        "intent": "explain",
+        "target": { "collection": "docs" }
+    }))
+    .unwrap();
+    let resp = server.planner().handle(req).await.expect("ok");
+    assert_eq!(resp.decision.intent, "explain");
+    assert_eq!(resp.decision.chosen_action, "cache_stats_rollup");
+    assert!(
+        resp.decision.reason.contains("hit_rate"),
+        "reason should carry the rollup string"
+    );
+}
+
+#[tokio::test]
+async fn verify_intent_refuses_on_missing_bundle() {
+    let (lake, _, _) = make_lake(100, 16);
+    let server = RuLakeMcpServer::from_lake(
+        Arc::clone(&lake),
+        "Fresh".to_string(),
+        vec!["local".to_string()],
+        64,
+    )
+    .unwrap();
+
+    let req = serde_json::from_value(serde_json::json!({
+        "intent": "verify",
+        "target": { "collection": "docs" },
+        "verify": { "bundle_dir": "/nonexistent/path" }
+    }))
+    .unwrap();
+    let resp = server.planner().handle(req).await.expect("ok");
+    assert!(resp.data.is_empty(), "verify refusal → empty data");
+    let code = format!("{:?}", resp.decision.reason_code);
+    assert!(
+        code.contains("WitnessMismatchRefused"),
+        "missing bundle should map to WitnessMismatchRefused (fail-closed), got {code}"
+    );
+}
+
+#[tokio::test]
+async fn verify_intent_succeeds_on_valid_bundle() {
+    use ruvector_rulake::RuLakeBundle;
+    use tempfile::TempDir;
+
+    let (lake, _, _) = make_lake(100, 16);
+    let server = RuLakeMcpServer::from_lake(
+        Arc::clone(&lake),
+        "Fresh".to_string(),
+        vec!["local".to_string()],
+        64,
+    )
+    .unwrap();
+
+    // Write a fresh bundle to a tempdir.
+    let dir = TempDir::new().unwrap();
+    let bundle = RuLakeBundle::new(
+        "test://verify",
+        16,
+        42,
+        20,
+        ruvector_rulake::Generation::Num(1),
+    );
+    bundle.write_to_dir(dir.path()).unwrap();
+
+    let req = serde_json::from_value(serde_json::json!({
+        "intent": "verify",
+        "target": { "collection": "docs" },
+        "verify": { "bundle_dir": dir.path().to_string_lossy() }
+    }))
+    .unwrap();
+    let resp = server.planner().handle(req).await.expect("ok");
+    assert_eq!(resp.decision.intent, "verify");
+    assert!(
+        resp.provenance.witness_verified,
+        "valid bundle must verify"
+    );
+    assert_eq!(
+        resp.provenance.witness.as_ref().unwrap(),
+        &bundle.rvf_witness,
+        "verified witness must match the bundle"
+    );
+}
+
+#[tokio::test]
+async fn refresh_intent_still_returns_internal_in_v02() {
+    let (lake, _, _) = make_lake(50, 16);
+    let server = RuLakeMcpServer::from_lake(
+        Arc::clone(&lake),
+        "Fresh".to_string(),
+        vec!["local".to_string()],
+        64,
+    )
+    .unwrap();
+    let req = serde_json::from_value(serde_json::json!({
+        "intent": "refresh",
+        "target": { "collection": "docs" },
+        "refresh": { "bundle_dir": "/tmp" }
+    }))
+    .unwrap();
+    let res = server.planner().handle(req).await;
+    assert!(res.is_err(), "refresh is v0.3");
+    assert!(format!("{:?}", res.unwrap_err()).contains("v0.3"));
+}
+
 #[tokio::test]
 async fn decision_trace_has_required_fields_for_audit() {
     // Validates the §7 acceptance criterion: every audit line must
