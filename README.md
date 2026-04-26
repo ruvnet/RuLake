@@ -14,7 +14,7 @@ ruLake is the layer between your **agents** and the **data they remember**. Plug
 
 #### What it is, in one paragraph
 
-Agentic systems are built on **contrastive AI** — embeddings that put similar things close together and different things far apart. Every "what does the agent remember about X?" query is, underneath, a contrast: rank the corpus by distance to X. ruLake is the place where those contrasts run. It keeps a compressed copy of your vectors in RAM, serves hits at **≈1.02× raw library speed** (essentially free abstraction), and refreshes cold entries from whatever cloud or file store actually owns the bytes. Each cached entry is anchored by a **cryptographic witness**, so an answer is verifiable across processes, hosts, and time.
+Agents need to *remember things* — past conversations, documents you've shown them, facts they've learned. That memory is stored as **embeddings** (numeric fingerprints of meaning), and "remembering" means **finding the embeddings closest to what the agent is thinking about right now**. ruLake is where that lookup runs. It keeps a compressed copy of your embeddings in RAM, returns matches in about **1 millisecond** with **essentially no overhead** (1.02× raw library speed, measured), and refreshes from whatever cloud or file store actually holds the data. Every answer carries a small cryptographic **fingerprint** of the bytes it was drawn from — so two agents on two machines querying the same data get the same answer, provably.
 
 #### Why agents in particular
 
@@ -43,10 +43,11 @@ ruLake is built to run wherever the agent runs — including small places.
 - **Why it matters** — agent memory at the edge means the personal AI doesn't round-trip your private context to a far-away cluster. Latency is local; cost is zero per query; the witness story keeps it verifiable.
 
 ```bash
-# Three install paths, three audiences. Pick one.
+# Four install paths. Pick the one that fits where your agent runs.
 cargo add rulake                      # Rust
-pip   install rulake                  # Python (wheels coming to PyPI)
-npm   install rulake                  # Node.js / TypeScript
+pip   install rulake                  # Python
+npm   install rulake                  # Node.js / TypeScript (native binary)
+npm   install rulake-wasm             # Browsers, Cloudflare Workers, Deno, Bun
 ```
 
 Open source. ❤️ Free forever.
@@ -264,31 +265,40 @@ See [`BENCHMARK.md`](BENCHMARK.md) for the full table.
 
 ## Quick start
 
-### Build from source (the supported path while the crate is pre-publish)
+### Install — pick your language
 
 ```bash
-git clone --recurse-submodules https://github.com/ruvnet/RuLake.git
-cd RuLake
-./install.sh                                   # checks rustc, inits submodules, cargo build + test
-cargo run --release --bin rulake-demo -- --fast  # smoke-runs the demo in ~5 s
+cargo add rulake                  # Rust
+pip install rulake                # Python
+npm install rulake                # Node.js / TypeScript
+npm install rulake-wasm           # Edge: browsers / Cloudflare Workers / Deno / Bun
 ```
 
-If you forgot `--recurse-submodules`, run `git submodule update --init --recursive` to fetch the vendored
-`ruvector-rabitq` source under `vendor/ruvector/`. See [ADR-001](docs/adrs/ADR-001-standalone-repo-strategy.md)
-for why we vendor instead of taking a `git`/`crates.io` dependency.
-
-### Or run inside Docker (no Rust toolchain required)
+### Or run inside Docker (no toolchain required)
 
 ```bash
 docker build -t rulake .
 docker run --rm rulake --fast
 ```
 
-### As a library dependency
+### Build from source (full repo, all examples, all tests)
+
+```bash
+git clone --recurse-submodules https://github.com/ruvnet/RuLake.git
+cd RuLake
+./install.sh                                       # checks rustc, inits submodules, cargo build + test
+cargo run --release --bin rulake-demo -- --fast    # smoke-runs the demo in ~5 s
+```
+
+If you forgot `--recurse-submodules`, run `git submodule update --init --recursive` to fetch the vendored
+`ruvector-rabitq` source under `vendor/ruvector/`. See [ADR-001](docs/adrs/ADR-001-standalone-repo-strategy.md)
+for why we vendor instead of taking a `git`/`crates.io` dependency.
+
+### Use it from Rust
 
 ```toml
 [dependencies]
-rulake = "2.2"  # once published; until then use `git = "https://github.com/ruvnet/RuLake"`
+rulake = "2.2"
 ```
 
 ```rust
@@ -472,12 +482,12 @@ n = fresh.warm_from_dir("local", "docs", "/var/rulake/snap/")
 
 </details>
 
-### Node.js / TypeScript — `npm install @ruvector/rulake`
+### Node.js / TypeScript — `npm install rulake`
 
 napi-rs bindings live in [`node/`](node/). Per-platform `.node` binaries via npm `optionalDependencies` (Prisma / next-swc pattern), per [ADR-003](docs/adrs/sdk/ADR-003-nodejs-typescript-sdk.md).
 
 ```ts
-import { RuLake, LocalBackend, Consistency } from "@ruvector/rulake";
+import { RuLake, LocalBackend, Consistency } from "rulake";
 
 const lake = new RuLake(20, 42n)
     .withConsistency(Consistency.eventual(5_000));
@@ -554,9 +564,9 @@ const b2 = await Bundle.readFromDir("/var/rulake/snap/");
 console.assert(b2.verifyWitness());
 ```
 
-**Distribution** — npm `optionalDependencies` per platform (`@ruvector/rulake-linux-x64-gnu`, …). On install npm reads `os` / `cpu` / `libc` and pulls only the matching binary. Works in air-gapped envs and behind corporate registries (every binary mirrored), unlike `postinstall`-download patterns.
+**Distribution** — npm `optionalDependencies` per platform (`rulake-linux-x64-gnu`, …). On install npm reads `os` / `cpu` / `libc` and pulls only the matching binary. Works in air-gapped envs and behind corporate registries (every binary mirrored), unlike `postinstall`-download patterns.
 
-**Not in v1** (see ADR-003 §"Open questions"): WASM build for browser / Cloudflare Workers / Deno (`@ruvector/rulake-wasm` reserved on npm — loses AVX-512 popcnt + rayon parallel fan-out, so it's a feature-reduced surface), HTTP client variant (`@ruvector/rulake/http`), JS-implemented `BackendAdapter`.
+**Not in v1** (see ADR-003 §"Open questions"): WASM build for browser / Cloudflare Workers / Deno (`rulake-wasm` reserved on npm — loses AVX-512 popcnt + rayon parallel fan-out, so it's a feature-reduced surface), HTTP client variant (`rulake/http`), JS-implemented `BackendAdapter`.
 
 </details>
 
@@ -1000,7 +1010,7 @@ Per-language details and the cross-cutting story are in the index at
 
 **Orthogonal:**
 - WASM SDKs (browser / Cloudflare / Deno)
-- HTTP wire client (`rulake.client.HttpRuLake` / `@ruvector/rulake/http`)
+- HTTP wire client (`rulake.client.HttpRuLake` / `rulake/http`)
 - Java SDK (both SDK ADRs flag v2)
 - rabitq GPU kernel (ADR-157 — scaffolding only today)
 - `rvf-backend/` once upstream `rvf-runtime` ships a public per-vector reader (see research note)
