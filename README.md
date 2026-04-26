@@ -1,4 +1,4 @@
-# ruLake — A Cache-Coherent Vector Execution Fabric
+# ruLake — A Memory Lake for Agentic AI
 
 [![Crates.io](https://img.shields.io/crates/v/ruvector-rulake.svg)](https://crates.io/crates/ruvector-rulake)
 [![Rust 1.89+](https://img.shields.io/badge/rust-1.89%2B-orange.svg)](https://www.rust-lang.org)
@@ -6,17 +6,47 @@
 [![ruv.io](https://img.shields.io/badge/ruv.io-website-purple.svg)](https://ruv.io)
 [![MIT / Apache-2.0](https://img.shields.io/badge/License-MIT%2FApache--2.0-blue.svg)](#license)
 
-### **A cache layer for vector search — sits in front of whatever database, lakehouse, or file store already holds your vectors, and makes every query fast.**
+### **Give your AI agents fast, trustworthy memory — without standing up a vector database.**
+
+ruLake is the layer between your **agents** and the **data they remember**. Plug in the storage you already have (S3, BigQuery, Snowflake, Parquet, files), expose it through one MCP tool, and every agent on every host gets the same low-latency, content-addressed view of memory.
 
 > Created by [rUv](https://ruv.io). Part of the [RuVector](https://github.com/ruvnet/ruvector) ecosystem alongside [`ruvector-rabitq`](https://github.com/ruvnet/ruvector/tree/main/crates/ruvector-rabitq) (1‑bit compression kernel) and RVF (durable segment format). Designed to be the substrate for the [Cognitum](https://cognitum.one) Agentic Chip's memory hierarchy.
 
+#### What it is, in one paragraph
+
+Agentic systems are built on **contrastive AI** — embeddings that put similar things close together and different things far apart. Every "what does the agent remember about X?" query is, underneath, a contrast: rank the corpus by distance to X. ruLake is the place where those contrasts run. It keeps a compressed copy of your vectors in RAM, serves hits at **≈1.02× raw library speed** (essentially free abstraction), and refreshes cold entries from whatever cloud or file store actually owns the bytes. Each cached entry is anchored by a **cryptographic witness**, so an answer is verifiable across processes, hosts, and time.
+
+#### Why agents in particular
+
+- **One MCP tool, one decision layer.** [`rulake-mcp`](mcp-server/) (ADR-004) speaks the [Model Context Protocol](https://modelcontextprotocol.io). Claude Desktop, Cursor, Cline, Continue, agentic-flow — they all get a single `rulake_query` tool that takes intent (`search` / `verify` / `explain` / `refresh`), risk, freshness budget, and policy, and returns the answer plus a **decision trace** (chosen_action, reason_code, backends_used, refusals). The agent says *what* it wants; ruLake decides *where to look, how strict to be, whether to refuse*.
+- **Trust by witness, not vibes.** Every result carries the SHAKE-256 hex of the underlying bundle. Two agents, two hosts, same data → same witness → same answer, byte-exact. No "the model hallucinated again" debates.
+- **Honest refusals beat confident lies.** Stale cache + missing remote witness? `WITNESS_MISMATCH_REFUSED`, empty data, agent retries narrower. Better than serving a stale answer with a high score.
+
+#### Performance, cost, footprint
+
+| | What it delivers |
+|---|---|
+| **Latency** | 1.02× raw RaBitQ ≈ ~1 ms cache-hit at n=100k, D=128. Measured, not promised. |
+| **Throughput** | 957 QPS single-thread, **2,854 QPS concurrent** (Arc-drop-lock + AVX-512 VPOPCNTDQ). |
+| **Compression** | 1-bit RaBitQ — **32× smaller** than f32 vectors at D=128. RAM footprint stays small even at millions of vectors. |
+| **Cost** | **$0.** MIT/Apache-2.0, no service to host, no per-query fee, no metered API. Run it next to your agent. |
+| **Backends** | LocalBackend (RAM), FsBackend (disk), GcsParquetBackend (Parquet on GCS). BigQuery, S3, Iceberg, Delta on the M2–M5 roadmap. |
+| **Surfaces** | Rust crate · Python wheel (`pip install`) · Node.js (`npm install`) · `rulake-mcp` binary · Docker image. |
+
+#### Edge, browser, and the small-footprint story
+
+ruLake is built to run wherever the agent runs — including small places.
+
+- **Today** — small static binary (the demo + `rulake-mcp` are ~5 MB stripped), distroless Docker, and a Streamable HTTP transport that fits behind any reverse proxy. Runs on a Raspberry Pi or an EC2 t4g.nano, not just a serving cluster.
+- **Coming (v0.4 / v0.5)** — `@ruvector/rulake-wasm` for **browsers, Cloudflare Workers, Deno-deploy, Bun**. Same witness-anchored memory model, feature-reduced surface (no AVX-512, no rayon — they don't exist on the edge anyway). The `optionalDependencies` shape ([ADR-003](docs/adrs/sdk/ADR-003-nodejs-typescript-sdk.md) §A) is already wired so the WASM package drops in without breaking npm consumers.
+- **Why it matters** — agent memory at the edge means the personal AI doesn't round-trip your private context to a far-away cluster. Latency is local; cost is zero per query; the witness story keeps it verifiable.
+
 ```bash
-cargo add ruvector-rulake
+# Three install paths, three audiences. Pick one.
+cargo add ruvector-rulake                      # Rust
+pip   install ruvector-rulake                  # Python (wheels coming to PyPI)
+npm   install @ruvector/rulake                 # Node.js / TypeScript
 ```
-
-#### You already have vectors somewhere — Parquet on S3, BigQuery rows, an Iceberg table, Snowflake, RVF segments, files on disk. You want fast, consistent semantic search without standing up a separate vector database.
-
-#### **ruLake** is the piece in the middle. An app asks it for the nearest K vectors; it serves hits from a compressed in-memory cache at ≈**1.02× raw library speed**. On miss, it pulls from your backend, compresses with [RaBitQ](https://arxiv.org/abs/2405.12497) 1-bit quantization, and serves. Every entry is anchored by a cryptographic **witness** so two processes pointing at the same bytes share one compressed copy automatically.
 
 Open source. ❤️ Free forever.
 
@@ -144,13 +174,26 @@ Open source. ❤️ Free forever.
 
 ## Why ruLake exists
 
-Today the tradeoff for vector search is ugly:
+If you're building an agent that remembers things, your three current options for vector search all hurt:
 
-- **Managed vector DB** (Pinecone, Weaviate) — fast, but a whole new system to operate and your data has to move.
-- **Lakehouse-native** (BigQuery Vector Search, Snowflake Cortex) — keeps data in place but queries are expensive, slow, or per-backend.
-- **Local library** (RaBitQ, HNSW, FAISS) — fastest per-process but no sharing, no coherence, no governance.
+- **Managed vector DB** (Pinecone, Weaviate) — fast, but it's a whole new service to operate and your private data has to move into it.
+- **Lakehouse-native** (BigQuery Vector Search, Snowflake Cortex) — keeps data where it lives, but every query bills the warehouse and round-trips a remote cluster.
+- **Local library** (RaBitQ, HNSW, FAISS) — fastest per-process, but every agent spins up its own copy, nothing's verifiable across processes, and there's no governance story.
 
-**ruLake is the middle option.** Keep your data where it lives. Get cache-speed reads. Pay governance once instead of per-backend.
+**ruLake is the missing middle.** Your data stays where it is. The agent gets cache-speed reads (1.02× the raw library cost). One governance and witness story for every backend, instead of N. **No cluster to host, no per-query bill, no separate database.**
+
+For agent platforms that already speak MCP, the integration is one config file:
+
+```json
+{
+  "mcpServers": {
+    "rulake": {
+      "command": "rulake-mcp",
+      "args": ["stdio", "--config", "/etc/rulake/mcp.toml"]
+    }
+  }
+}
+```
 
 <details>
 <summary>🧭 The memory-hierarchy framing (ADR-156)</summary>
