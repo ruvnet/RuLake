@@ -24,6 +24,10 @@ import './styles/help.css';
 async function bootstrap() {
   await import('./lib/data.js');
   await import('./lib/store.js');
+  // wasm side-loader — populates window.RULakeWasm with lazy-load
+  // shims for verifyBundle / computeWitness / searchL2. The rulake-wasm
+  // chunk (~149 KB) only fetches when one of those is first called.
+  await import('./lib/wasm.js');
   await import('./components/tweaks-panel.jsx');
   await import('./components/components.jsx');
   await import('./components/modals.jsx');
