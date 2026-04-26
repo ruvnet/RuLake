@@ -36,6 +36,10 @@ async function bootstrap() {
   // Search dispatcher — picks Worker or main-thread per the user's
   // Storage settings toggle. Pinned as window.RULakeSearch.
   await import('./lib/searchOffload.js');
+  // Embedding provider switchboard — pinned as window.RULakeEmbed.
+  // Configured at runtime by the Storage card; reads `embedProvider`
+  // from IndexedDB and the user-supplied API key from JS memory.
+  await import('./lib/embed.js');
   await import('./components/tweaks-panel.jsx');
   await import('./components/components.jsx');
   await import('./components/modals.jsx');

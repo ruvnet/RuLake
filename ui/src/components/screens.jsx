@@ -511,6 +511,8 @@ function PlaygroundScreen() {
     let witnessOk = true;
     let witnessHex = '';
     let transport = 'main';
+    let embedProvider = 'fixture';
+    let embedMs = 0;
     try {
       const W = window.RULakeWasm;
       const Search = window.RULakeSearch;
@@ -521,8 +523,7 @@ function PlaygroundScreen() {
         const settingsRow = kvRows.find(r => r.label === 'storage-settings');
         useWorker = !!(settingsRow?.settings?.workersEnabled);
       }
-      // Synthesize a small fixture corpus deterministically — proves
-      // the search hot path works end-to-end without server data.
+      // Synthesize a small fixture corpus deterministically.
       const dim = 128;
       const n = 256;
       const r = RULAKE.mulberry32(0xc0ffee);
@@ -530,8 +531,34 @@ function PlaygroundScreen() {
       for (let i = 0; i < n * dim; i++) vectors[i] = r() * 2 - 1;
       const ids = new Float64Array(n);
       for (let i = 0; i < n; i++) ids[i] = i;
-      const queryVec = new Float32Array(dim);
-      for (let i = 0; i < dim; i++) queryVec[i] = r() * 2 - 1;
+
+      // Embed the query — real provider call if Storage card is wired
+      // with a key; deterministic fixture vector otherwise.
+      let queryVec;
+      if (window.RULakeEmbed && window.RULakeEmbed.embed) {
+        const er = await window.RULakeEmbed.embed(query || '');
+        embedMs = er.ms || 0;
+        embedProvider = er.provider || 'fixture';
+        if (er.vector && er.vector.length) {
+          // Project onto the corpus dim (slice or zero-pad).
+          queryVec = new Float32Array(dim);
+          const m = Math.min(er.vector.length, dim);
+          for (let i = 0; i < m; i++) queryVec[i] = er.vector[i];
+        } else if (er.error) {
+          // Real provider failed — record as a soft refusal then fall
+          // through to fixture so the Playground still demos.
+          if (window.RuStore) await window.RuStore.appendAudit({
+            ts: new Date().toISOString().slice(11,19),
+            principal: 'jules@ruv', tool: 'rulake_embed', target: er.provider || 'unknown',
+            k: 0, ms: embedMs, code: 'EMBED_FAILED', outcome: 'refused',
+          });
+          window.toast && window.toast.warn(`embed (${er.provider || '?'})`, er.error);
+        }
+      }
+      if (!queryVec) {
+        queryVec = new Float32Array(dim);
+        for (let i = 0; i < dim; i++) queryVec[i] = r() * 2 - 1;
+      }
 
       if (Search && Search.searchOffload) {
         const result = await Search.searchOffload({
@@ -568,7 +595,7 @@ function PlaygroundScreen() {
     setRunning(false); setVerifying(false); setVerified(witnessOk);
     window.toast && window.toast.ok(
       witnessOk ? 'Witness MATCH' : 'Witness MISMATCH',
-      `${target} · search ${searchMs}ms (${transport}) · witness ${witnessMs}ms · k=${topKLen}`,
+      `${target} · embed:${embedProvider}${embedMs?` ${embedMs}ms`:''} · search ${searchMs}ms (${transport}) · witness ${witnessMs}ms · k=${topKLen}`,
     );
     if (window.RuStore) {
       window.RuStore.appendAudit({
@@ -1266,6 +1293,18 @@ function StorageSettingsCard() {
       if (row && row.settings) setSettings(s => ({ ...s, ...row.settings }));
     }).catch(() => {});
   }, []);
+
+  // Push provider + in-memory API key into the global embed switchboard
+  // whenever either changes. The switchboard is what the Playground
+  // consults at request time.
+  React.useEffect(() => {
+    if (window.RULakeEmbed && window.RULakeEmbed.configure) {
+      window.RULakeEmbed.configure({
+        provider: settings.embedProvider,
+        apiKey: embedKeyInMemory || null,
+      });
+    }
+  }, [settings.embedProvider, embedKeyInMemory]);
 
   const update = (patch) => {
     setSettings(prev => {
