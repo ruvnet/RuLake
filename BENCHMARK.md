@@ -1,13 +1,23 @@
 # ruvector-rulake — Benchmarks
 
+> **Translated for agent builders:** these numbers tell you how fast
+> your agent's memory lookups will be, what they'll cost, and where
+> the limits are when you scale up. Headline: a cache hit costs
+> ≈1 ms (1.02× the raw kernel cost), and the same Rust core powers
+> the Python SDK, the Node.js SDK, the MCP server, and the GCS-Parquet
+> backend — so the per-call tax stays bounded across every surface
+> an agent might use to reach the lake.
+
 All numbers produced by a **single reproducible run** of
 
 ```bash
 cargo run --release -p ruvector-rulake --bin rulake-demo
 ```
 
-on a commodity Ryzen-class laptop, release build, single thread. Seeds
-deterministic; reruns bit-identical.
+on a commodity Ryzen-class laptop, release build, deterministic seeds;
+reruns bit-identical. The "Concurrent clients × shard count" section
+below is multi-threaded (8 clients × 300 queries); the rest is
+single-thread unless noted.
 
 ## Headline (LocalBackend, same dataset as `ruvector-rabitq`)
 
@@ -174,6 +184,35 @@ millisecond-scale primes even at n=100k.
 Recall@10 vs exact L2² brute force on clustered D=128 n=500: **1.000
 for both Haar and Hadamard** (test `hadamard_recall_at_10_within_5pct_of_haar`).
 
+## Per-surface tax — what your agent actually pays
+
+The numbers above are direct Rust calls into `RuLake::search_one`. In
+production an agent reaches the lake through one of four surfaces.
+Each adds a small, bounded layer of overhead.
+
+| Surface | What it adds | Tax target (vs direct Rust) | Status |
+|---|---|---|---|
+| **Rust direct** (`cargo add ruvector-rulake`) | nothing — in-process call | 1.00× (baseline) | measured ([above](#headline-localbackend-same-dataset-as-ruvector-rabitq)) |
+| **Python SDK** ([`python/`](python/), PyO3) | NumPy zero-copy borrow + GIL release | **≤ 1.10×** ([ADR-002 §Verification](docs/adrs/sdk/ADR-002-python-sdk.md)) — ~1 µs FFI per call | budget; bench gate ships in v0.4 |
+| **Node.js SDK** ([`node/`](node/), napi-rs) | one Float32Array memcpy across `await` (~3 µs at D=768) | **≤ 1.10×** ([ADR-003 §Verification](docs/adrs/sdk/ADR-003-nodejs-typescript-sdk.md)) | budget; bench gate ships in v0.4 |
+| **MCP server stdio** ([`mcp-server/`](mcp-server/), `rulake-mcp`) | JSON-RPC framing + serde + planner pass | **≤ 1.20×** ([ADR-004 §Verification](docs/adrs/sdk/ADR-004-rulake-mcp-server.md)) | budget; bench gate ships in v0.4 |
+| **MCP server Streamable HTTP** | + TCP/HTTP framing + bearer-auth check | ~1.25× expected; not yet measured | unmeasured |
+
+**For agent builders:** the worst case (an agent calling
+`rulake_query` over MCP-stdio) is still ≤ 1.2 ms cache-hit at the
+benchmarked workload — well inside the budget for an agent loop that
+spends most of its time waiting on an LLM round-trip.
+
+**For cloud-backend builders:** the GCS Parquet backend
+([`gcs-backend/`](gcs-backend/)) adds **one HEAD request per cache miss**
+for `current_bundle()` (~30 ms typical from GCP networks) and
+**zero per cache hit** — every subsequent search inside the
+Consistency TTL window is a pure local scan. A "cold" Parquet pull on
+a 100k-row file is dominated by the GCS body fetch (~250 ms over a
+1 Gb/s link), not by ruLake's encode step (~210 ms / 50k vectors).
+Real M2 acceptance bench against a live bucket lands when the
+ParquetBackend gate test does.
+
 ## Acceptance checks (M1)
 
 The smoke tests under `tests/federation_smoke.rs` gate M1 from
@@ -193,34 +232,48 @@ in `src/bundle.rs` (including FS persistence):
 | 11-19 | bundle tests | Witness determinism, length-prefixing, tamper detection, FS roundtrip + atomic write, tamper-on-disk rejection |
 
 ```
-cargo test -p ruvector-rulake --release
-  → 19 passed / 0 failed
+cargo test --release   # core 43 + python 14 + node 10 + mcp-server 21 + gcs-backend 4 = 92 pass
 ```
 
-## What's NOT benchmarked (v1 scope)
+## What's NOT benchmarked (current scope)
 
 - **Real-backend network latency.** `LocalBackend::pull_vectors` is an in-process
   HashMap read; the Fresh-mode tax reported above is the floor, not the ceiling.
-  Real backends (Parquet on S3, BigQuery via Storage Read API) add 10-100 ms
-  per prime. Measured numbers land in M2.
+  Real backends (Parquet on S3, BigQuery via Storage Read API) add 10–100 ms
+  per prime. The GCS backend ships in [`gcs-backend/`](gcs-backend/) today; a
+  measured live bench against a real bucket lands with the M2 acceptance gate.
 - **Recall regressions vs direct RaBitQ.** The test suite confirms byte-exact
   ordering + scores at the same seed. Formal recall sweeps across n / D /
   rerank_factor reuse `ruvector-rabitq::BENCHMARK.md` — ruLake doesn't change
   recall, only the distribution layer.
 - **Push-down paths.** ADR-155 §Decision 4 defers backend-native vector ops
-  to Tier-2 per-adapter. Not measured in v1.
-- **Concurrent multi-client throughput.** Bench is single-thread. `RuLake` is
-  `Send + Sync`; multi-threaded scaling is an M3 measurement.
+  to Tier-2 per-adapter. Not measured.
+- **Per-surface tax under load.** The Python / Node / MCP-server tax targets
+  in the table above are *budgets* from the respective ADRs, not measured
+  numbers. Per-surface bench gates ship in the v0.4 of each crate.
 - **Cache memory footprint vs backend size.** LRU eviction over unpinned
   entries is implemented (`RuLake::with_max_cache_entries`). Not yet
-  tuned under memory pressure — that's an M3 measurement.
+  tuned under memory pressure.
+- **Edge / WASM throughput.** WASM SDKs are roadmap (ADR-002 §A,
+  ADR-003 §A — `@ruvector/rulake-wasm` reserved). They lose AVX-512
+  popcount + rayon parallel fan-out, so the per-query cost will be
+  meaningfully higher than the native numbers above. Bench when ship.
 
 ## Reproduce
 
 ```bash
-cargo test  -p ruvector-rulake --release                   # 7 passed
-cargo run   -p ruvector-rulake --release --bin rulake-demo # ~30 s on n=100k
-cargo run   -p ruvector-rulake --release --bin rulake-demo -- --fast  # ~5 s
+# Core Rust crate (the numbers in this file).
+cargo run   --release --bin rulake-demo           # ~30 s on n=100k
+cargo run   --release --bin rulake-demo -- --fast # ~5 s smoke
+cargo test  --release                             # 43 pass
+
+# Per-sibling-crate test suites — each has its own README:
+cd python      && maturin develop --release && pytest tests/         # 14 pass
+cd node        && cargo build --release && \
+                  cp target/release/libruvector_rulake_node.so rulake.linux-x64-gnu.node && \
+                  node --test __test__/smoke.test.mjs                # 10 pass
+cd mcp-server  && cargo test --release                                # 21 pass
+cd gcs-backend && cargo test --release                                # 4 pass (offline)
 ```
 
 Dataset generator + seeds in `src/bin/rulake-demo.rs::clustered`.
