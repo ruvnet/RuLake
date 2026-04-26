@@ -284,6 +284,32 @@ async fn handle(
     sessions: Arc<SessionBindings>,
     mtls_fingerprint: Option<String>,
 ) -> Result<Response<BoxBody<Bytes, Infallible>>, Infallible> {
+    // 0. CORS for browser callers (the ruLake Console / any web app).
+    // ADR-006 §"server-side gaps". The mcp-server is loopback-friendly
+    // by default, so we echo the requesting Origin (or `*` if absent),
+    // expose the MCP-specific headers, and short-circuit OPTIONS.
+    // Tightening to an allow-list is a v0.9 follow-up.
+    let origin = req
+        .headers()
+        .get("origin")
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or("*")
+        .to_string();
+    if req.method() == http::Method::OPTIONS {
+        let resp = Response::builder()
+            .status(StatusCode::NO_CONTENT)
+            .header("access-control-allow-origin", &origin)
+            .header("access-control-allow-methods", "GET, POST, OPTIONS, DELETE")
+            .header(
+                "access-control-allow-headers",
+                "authorization, content-type, accept, mcp-session-id, mcp-request-id, mcp-protocol-version",
+            )
+            .header("access-control-expose-headers", "mcp-session-id, mcp-protocol-version")
+            .header("access-control-max-age", "600")
+            .body(BodyExt::boxed(Full::new(Bytes::new())))
+            .unwrap();
+        return Ok(resp);
+    }
     // 1. Auth gate (where applicable). Resolves to a principal string
     // + optional client_id that flow into the rate-limit, session-
     // binding, and audit layers.
@@ -441,10 +467,21 @@ async fn handle(
     // v0.8: thread the per-request CapabilitySet (from JWT scopes)
     // into the task-local before forwarding. require_cap reads this
     // first; falls back to server-wide for non-JWT auth modes.
-    let response = match request_caps {
+    let mut response = match request_caps {
         Some(caps) => REQUEST_CAPS.scope(caps, mcp_service.handle(req)).await,
         None => mcp_service.handle(req).await,
     };
+    // CORS response header — pair to the OPTIONS preflight above. The
+    // browser's strict-mode fetch needs the response to carry the
+    // origin echo; same `*` semantics for non-CORS callers.
+    let h = response.headers_mut();
+    if let Ok(v) = http::HeaderValue::from_str(&origin) {
+        h.insert("access-control-allow-origin", v);
+    }
+    h.insert(
+        "access-control-expose-headers",
+        http::HeaderValue::from_static("mcp-session-id, mcp-protocol-version"),
+    );
     Ok(response)
 }
 

@@ -28,6 +28,11 @@ async function bootstrap() {
   // shims for verifyBundle / computeWitness / searchL2. The rulake-wasm
   // chunk (~149 KB) only fetches when one of those is first called.
   await import('./lib/wasm.js');
+  // RuLakeHttp client — pinned on window for the Connect screen's
+  // live-mode handshake. fetch-based, SSE-aware.
+  const httpMod = await import('./lib/http.js');
+  window.RuLakeHttp = httpMod.RuLakeHttp;
+  window.RuLakeHttpError = httpMod.RuLakeHttpError;
   await import('./components/tweaks-panel.jsx');
   await import('./components/components.jsx');
   await import('./components/modals.jsx');

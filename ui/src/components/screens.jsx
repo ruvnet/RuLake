@@ -1237,16 +1237,59 @@ function ConnectScreen() {
 
   const test = async () => {
     setStatus({ kind: 'pending', msg: 'handshake…' });
-    window.toast && window.toast.info('Connecting…', `${endpoint} · TLS handshake`, { duration: 1200 });
-    setTimeout(() => {
-      setStatus({ kind: 'ok', msg: '← initialize OK · 23ms · 9 tools, 5 resources' });
-      window.toast && window.toast.ok('initialize OK', '23ms · 9 tools · 5 resources · 1 prompt');
-      if (window.RuStore) window.RuStore.appendAudit({
+    window.toast && window.toast.info('Connecting…', `${endpoint} · ${mode === 'mtls' ? 'mTLS not browser-supported' : 'MCP initialize'}`, { duration: 1200 });
+    if (mode === 'mtls') {
+      setStatus({ kind: 'err', msg: 'mTLS not supported in the browser — TLS handshake picks the cert before any JS runs. Use a Bearer/JWT proxy instead.' });
+      window.toast && window.toast.warn('mTLS unsupported', 'use a Bearer/JWT proxy in front of the mTLS endpoint');
+      return;
+    }
+    const t0 = performance.now();
+    try {
+      const tokenForClient = mode === 'none' ? null : token;
+      const client = new window.RuLakeHttp(endpoint, { token: tokenForClient });
+      await client.connect();   // initialize + notifications/initialized
+
+      // tools/list — exact wire shape, drains SSE until we see the result.
+      const toolsResp = await fetch(endpoint, {
+        method:  'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          'Accept':        'application/json, text/event-stream',
+          'Authorization': tokenForClient
+            ? (tokenForClient.startsWith('Bearer ') ? tokenForClient : `Bearer ${tokenForClient}`)
+            : '',
+          'mcp-session-id': client.sessionId || '',
+          'MCP-Request-Id': Math.random().toString(36).slice(2) + Date.now().toString(36),
+        },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 4, method: 'tools/list' }),
+      });
+      let toolsCount = 0, resourcesCount = 0;
+      try {
+        const txt = await toolsResp.text();
+        const data = txt.split('\n').find(l => l.startsWith('data: '));
+        const env = data ? JSON.parse(data.slice(6)) : JSON.parse(txt);
+        toolsCount = env?.result?.tools?.length ?? 0;
+      } catch { /* ignore — SSE keepalive may have eaten the body */ }
+
+      const ms = Math.round(performance.now() - t0);
+      setStatus({ kind: 'ok', msg: `← initialize OK · ${ms}ms · ${toolsCount} tools · session ${client.sessionId?.slice(0,8) || '—'}` });
+      window.toast && window.toast.ok('initialize OK', `${ms}ms · ${toolsCount} tools`);
+      if (window.RuStore) await window.RuStore.appendAudit({
         ts: new Date().toISOString().slice(11,19),
-        principal: 'jules@ruv', tool: 'rulake_test', target: endpoint, k: 0, ms: 23,
+        principal: 'jules@ruv', tool: 'rulake_test', target: endpoint, k: toolsCount, ms,
         code: 'INIT_OK', outcome: 'ok',
       });
-    }, 600);
+    } catch (e) {
+      const ms = Math.round(performance.now() - t0);
+      const msg = (e && e.message) || String(e);
+      setStatus({ kind: 'err', msg: `connect failed · ${msg}` });
+      window.toast && window.toast.warn('Connect failed', msg);
+      if (window.RuStore) await window.RuStore.appendAudit({
+        ts: new Date().toISOString().slice(11,19),
+        principal: 'jules@ruv', tool: 'rulake_test', target: endpoint, k: 0, ms,
+        code: 'CONNECT_FAILED', outcome: 'refused',
+      });
+    }
   };
 
   const pick = (row) => { setEndpoint(row.endpoint); setMode(row.mode); setLabel(row.label || ''); };
