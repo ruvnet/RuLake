@@ -1,0 +1,63 @@
+# ruLake GCS backend — Parquet-on-GCS BackendAdapter (ADR-155 §M2).
+#
+# Implements `BackendAdapter` for Parquet vector files stored on
+# Google Cloud Storage. Generation = GCS object generation number
+# (`Generation::Num`) so cache coherence rides the existing GCS
+# atomicity guarantees — every successful upload bumps the gen.
+#
+# Standalone Cargo package per ADR-001 (no root workspace).
+#
+# Build:  cargo build --release
+# Test:   cargo test --release         (offline; smoke against fixtures)
+#         RULAKE_GCS_LIVE_TEST=1 \
+#         RULAKE_GCS_BUCKET=ruv-rulake-test cargo test --release -- --ignored
+#                                       (live; needs gcloud ADC)
+
+[package]
+name = "ruvector-rulake-gcs"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+authors = ["Ruvector Team"]
+repository = "https://github.com/ruvnet/RuLake"
+description = "GCS Parquet BackendAdapter for ruLake (ADR-155 §M2)"
+
+[dependencies]
+ruvector-rulake = { path = ".." }
+
+# Unified storage abstraction. The `gcp` feature pulls in the GCS
+# transport (which honours gcloud Application Default Credentials).
+# `tokio` feature lets us use the async API; we wrap it in a blocking
+# bridge so the BackendAdapter trait (sync) stays satisfied.
+object_store = { version = "0.13", default-features = false, features = ["gcp"] }
+
+# Apache Parquet reader. `arrow` feature gets us the RecordBatch API
+# we use for vector decoding.
+parquet = { version = "58", default-features = false, features = ["arrow", "snap", "zstd", "async", "object_store"] }
+arrow = { version = "58", default-features = false, features = ["prettyprint"] }
+
+# Async runtime — only used inside the blocking bridge wrapping
+# object_store / parquet's async APIs. Single-threaded current-thread
+# runtime keeps the dep tree light.
+tokio = { version = "1.39", default-features = false, features = ["rt", "macros"] }
+
+# Streaming + futures glue for async parquet reads.
+futures = "0.3"
+bytes = "1"
+
+# Errors. anyhow at the boundary; structured errors map back to
+# `RuLakeError::Backend { backend, detail }` in the trait impl.
+anyhow = "1"
+
+# Logging.
+tracing = "0.1"
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1.39", features = ["rt-multi-thread", "macros"] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
