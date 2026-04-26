@@ -304,6 +304,51 @@ async fn rbac_denies_unallowed_collection() {
 // ─── v0.3d: capability gating ─────────────────────────────────────────
 
 #[tokio::test]
+async fn capability_intersect_keeps_only_both_grants() {
+    use ruvector_rulake_mcp::{Capability, CapabilitySet};
+    let server = CapabilitySet::from_csv("read,publish,admin").unwrap();
+    let token = CapabilitySet::from_csv("read,publish").unwrap();
+    let effective = server.intersect(&token);
+    assert!(effective.has(Capability::Read));
+    assert!(effective.has(Capability::Publish));
+    assert!(!effective.has(Capability::Admin), "admin not in token → not in intersection");
+}
+
+#[tokio::test]
+async fn capability_intersect_empty_token_yields_empty() {
+    use ruvector_rulake_mcp::CapabilitySet;
+    let server = CapabilitySet::from_csv("read,publish,admin").unwrap();
+    let token = CapabilitySet::default(); // read-only
+    let effective = server.intersect(&token);
+    // Both have read; intersection is just read.
+    assert_eq!(effective.labels(), vec!["read"]);
+}
+
+#[tokio::test]
+async fn effective_caps_falls_through_to_server_wide_when_task_local_unset() {
+    use ruvector_rulake_mcp::{Capability, CapabilitySet};
+    use ruvector_rulake_mcp::policy::effective_caps;
+    let server = CapabilitySet::from_csv("read,publish").unwrap();
+    // Outside any REQUEST_CAPS scope — fall through.
+    let effective = effective_caps(&server);
+    assert!(effective.has(Capability::Read));
+    assert!(effective.has(Capability::Publish));
+}
+
+#[tokio::test]
+async fn effective_caps_intersects_inside_task_local_scope() {
+    use ruvector_rulake_mcp::{Capability, CapabilitySet};
+    use ruvector_rulake_mcp::policy::{REQUEST_CAPS, effective_caps};
+    let server = CapabilitySet::from_csv("read,publish,admin").unwrap();
+    let token = CapabilitySet::from_csv("read").unwrap();
+    let result = REQUEST_CAPS.scope(token, async move {
+        let effective = effective_caps(&server);
+        effective.has(Capability::Admin)
+    }).await;
+    assert!(!result, "token-restricted scope must downgrade server's admin to read");
+}
+
+#[tokio::test]
 async fn capability_set_default_excludes_publish_and_admin() {
     use ruvector_rulake_mcp::{Capability, CapabilitySet};
     let cs = CapabilitySet::default();

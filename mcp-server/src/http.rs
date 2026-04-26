@@ -28,6 +28,7 @@ use rmcp::transport::streamable_http_server::tower::{
 
 use crate::auth::{BearerAuth, JwtAuth};
 use crate::mtls::{MtlsConfig, build_acceptor as build_mtls_acceptor, principal_for_client_cert};
+use crate::policy::{CapabilitySet, REQUEST_CAPS};
 use crate::ratelimit::{LayeredRateLimiter, RateLimitDecision};
 use crate::replay::ReplayGuard;
 use crate::server::RuLakeMcpServer;
@@ -294,6 +295,7 @@ async fn handle(
     // mTLS fingerprint still flows into the session-binding tuple.
     let principal: String;
     let client_id: Option<String>;
+    let mut request_caps: Option<CapabilitySet> = None;
     match &auth {
         AuthMode::None => {
             principal = format!("anon:{peer}");
@@ -319,6 +321,10 @@ async fn handle(
                 );
                 principal = jp.principal;
                 client_id = jp.client_id;
+                // v0.8: JWT scopes drive a per-request CapabilitySet.
+                // Server-wide caps stay the upper bound; per-request
+                // caps are intersected at require_cap time.
+                request_caps = Some(jp.capabilities);
             }
             Err(status) => {
                 tracing::warn!(?peer, %status, "jwt auth failed");
@@ -399,10 +405,31 @@ async fn handle(
         RateLimitDecision::Allowed => {}
         RateLimitDecision::Denied { layer } => {
             tracing::warn!(?peer, principal = %principal, layer, "rate limit denied");
-            return Ok(error_response(
-                StatusCode::TOO_MANY_REQUESTS,
-                layer,
-            ));
+            // v0.8b: structured backpressure response. The HTTP layer
+            // returns 429 + Retry-After + a JSON body that mirrors
+            // the planner's DegradedAdvice. Framework-aware agents
+            // read the body; legacy agents see the 429 + Retry-After
+            // header and back off blindly. Both work.
+            let retry_after_ms = match layer {
+                "process" => 1000u32,
+                "principal" => 500,
+                "collection" => 500,
+                _ => 500,
+            };
+            let advice = serde_json::json!({
+                "error": {
+                    "code": "RULAKE_DEGRADED",
+                    "layer": layer,
+                    "retry_after_ms": retry_after_ms,
+                    "hints": match layer {
+                        "process"    => vec!["wait"],
+                        "principal"  => vec!["wait", "use_cached_consistency"],
+                        "collection" => vec!["wait", "narrow_target"],
+                        _ => vec!["wait"],
+                    },
+                }
+            });
+            return Ok(degraded_response(retry_after_ms, advice.to_string()));
         }
     }
 
@@ -410,7 +437,14 @@ async fn handle(
     // handles `tools/call`; capability checks fire at the tool handler
     // (server.rs `require_cap`) so an unauthorized call returns the
     // typed RULAKE_CAPABILITY_REFUSED error in the JSON-RPC response.
-    let response = mcp_service.handle(req).await;
+    //
+    // v0.8: thread the per-request CapabilitySet (from JWT scopes)
+    // into the task-local before forwarding. require_cap reads this
+    // first; falls back to server-wide for non-JWT auth modes.
+    let response = match request_caps {
+        Some(caps) => REQUEST_CAPS.scope(caps, mcp_service.handle(req)).await,
+        None => mcp_service.handle(req).await,
+    };
     Ok(response)
 }
 
@@ -419,6 +453,24 @@ fn error_response(status: StatusCode, msg: &str) -> Response<BoxBody<Bytes, Infa
     Response::builder()
         .status(status)
         .header(http::header::CONTENT_TYPE, "text/plain")
+        .body(body)
+        .unwrap()
+}
+
+/// 429 + Retry-After + a JSON body mirroring the planner's
+/// `DegradedAdvice`. The standard HTTP signal (status code + header)
+/// satisfies legacy agents that don't parse the body; the body
+/// satisfies framework-aware agents per ADR-004 §6.
+fn degraded_response(
+    retry_after_ms: u32,
+    json_body: String,
+) -> Response<BoxBody<Bytes, Infallible>> {
+    let body = Full::new(Bytes::from(json_body)).map_err(|e| match e {}).boxed();
+    let retry_after_secs = (retry_after_ms.div_ceil(1000)).max(1);
+    Response::builder()
+        .status(StatusCode::TOO_MANY_REQUESTS)
+        .header(http::header::CONTENT_TYPE, "application/json")
+        .header(http::header::RETRY_AFTER, retry_after_secs.to_string())
         .body(body)
         .unwrap()
 }

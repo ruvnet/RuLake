@@ -439,7 +439,13 @@ impl RuLakeMcpServer {
 }
 
 fn require_cap(caps: &CapabilitySet, required: Capability) -> Result<(), McpError> {
-    caps.require(required)
+    // v0.8: combine server-wide caps with per-request JWT scopes.
+    // The intersection gates the actual tool call. If the per-request
+    // task-local isn't set (stdio path; legacy auth) this falls
+    // through to server-wide alone.
+    let effective = crate::policy::effective_caps(caps);
+    effective
+        .require(required)
         .map_err(|refused| McpError::invalid_request(refused.to_string(), None))
 }
 
@@ -562,12 +568,16 @@ impl ServerHandler for RuLakeMcpServer {
         _params: Option<PaginatedRequestParams>,
         _ctx: RequestContext<rmcp::service::RoleServer>,
     ) -> Result<ListToolsResult, McpError> {
-        let caps = Arc::clone(&self.capabilities);
+        // v0.8: tools/list visibility honors the same effective-caps
+        // intersection that gates per-call require_cap. An agent
+        // whose JWT only grants `read` sees only read-tier tools,
+        // even on a server started with --capabilities admin.
+        let effective = crate::policy::effective_caps(&self.capabilities);
         let tools: Vec<rmcp::model::Tool> = self
             .tool_router
             .list_all()
             .into_iter()
-            .filter(|t| caps.has(required_cap_for_tool(&t.name)))
+            .filter(|t| effective.has(required_cap_for_tool(&t.name)))
             .collect();
         let mut result = ListToolsResult::default();
         result.tools = tools;

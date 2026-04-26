@@ -15,6 +15,27 @@
 
 use std::collections::HashSet;
 
+tokio::task_local! {
+    /// Per-request CapabilitySet — set by the HTTP middleware from
+    /// the validated JWT's scope claim before calling into rmcp.
+    /// `effective_caps()` reads this first; falls back to the
+    /// server-wide set when unset (stdio path; non-tools/call HTTP
+    /// requests; legacy auth modes).
+    pub static REQUEST_CAPS: CapabilitySet;
+}
+
+/// Resolve the effective capability set for the current call.
+/// Server-wide caps act as the **upper bound** (operator policy
+/// ceiling). Per-request caps from the JWT act as the lower bound
+/// (what the IdP granted this token). The intersection is what
+/// gates the actual tool call. This is the v0.8 SOTA shape.
+pub fn effective_caps(server_wide: &CapabilitySet) -> CapabilitySet {
+    match REQUEST_CAPS.try_with(|r| r.clone()) {
+        Ok(per_request) => server_wide.intersect(&per_request),
+        Err(_) => server_wide.clone(),
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Capability {
     Read,
@@ -92,6 +113,24 @@ impl CapabilitySet {
         let mut v: Vec<&'static str> = self.granted.iter().map(|c| c.label()).collect();
         v.sort();
         v
+    }
+
+    /// Intersect with another set — what BOTH grant. Used by
+    /// `effective_caps()` to combine the server-wide ceiling with the
+    /// per-request token's grant. Read is always preserved if either
+    /// side has it (consistent with `from_csv` which implicitly
+    /// grants Read alongside any other capability).
+    pub fn intersect(&self, other: &CapabilitySet) -> CapabilitySet {
+        let mut granted: HashSet<Capability> = self
+            .granted
+            .iter()
+            .copied()
+            .filter(|c| other.granted.contains(c))
+            .collect();
+        if !granted.is_empty() && (self.has(Capability::Read) || other.has(Capability::Read)) {
+            granted.insert(Capability::Read);
+        }
+        CapabilitySet { granted }
     }
 }
 
