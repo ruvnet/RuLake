@@ -16,15 +16,19 @@
 //! - resources (`rulake://stats`, `rulake://bundle/...`) (v0.2)
 //! - layered rate limiting (v0.2)
 
+pub mod audit;
 pub mod auth;
 pub mod config;
 pub mod http;
 pub mod planner;
+pub mod policy;
 pub mod server;
 pub mod workers;
 
+pub use audit::{AuditEntry, AuditSink};
 pub use auth::BearerAuth;
 pub use config::McpConfig;
 pub use http::{AllowBearerOnPublic, AuthMode, InsecureAllowNoAuth};
+pub use policy::{Capability, CapabilitySet};
 pub use server::RuLakeMcpServer;
 pub use workers::WorkerPool;

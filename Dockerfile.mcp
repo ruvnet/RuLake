@@ -1,0 +1,44 @@
+# rulake-mcp — distroless image for the MCP server (ADR-004 §8).
+#
+# Multi-stage:
+# 1. `builder` — full Rust toolchain on Debian, builds rulake-mcp
+#    in --release. Uses BuildKit cache mounts to keep cargo-deps
+#    builds fast on re-runs.
+# 2. `runtime` — distroless/cc — just glibc + ca-certificates +
+#    the binary. ~25 MB image, no shell, no package manager.
+#
+# Build:  docker build -f Dockerfile.mcp -t rulake-mcp .
+# Run:    docker run --rm -p 7440:7440 \
+#             -v /etc/rulake/mcp.toml:/etc/rulake/mcp.toml:ro \
+#             rulake-mcp http --bind 0.0.0.0:7440 \
+#                              --config /etc/rulake/mcp.toml \
+#                              --auth bearer --bearer-token-file /etc/rulake/token \
+#                              --allow-bearer-on-public
+
+# syntax=docker/dockerfile:1.7
+
+FROM rust:1-bookworm AS builder
+WORKDIR /work
+
+# Submodule sources (per ADR-001 the rabitq kernel comes from vendor/).
+# The .dockerignore excludes target/ so the build is hermetic.
+COPY . .
+
+# BuildKit cache mounts: the registry index, downloaded crates, and
+# the per-target build artifacts all survive between rebuilds.
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/work/mcp-server/target \
+    cargo build --release --manifest-path mcp-server/Cargo.toml \
+    && cp mcp-server/target/release/rulake-mcp /usr/local/bin/rulake-mcp
+
+# ── runtime stage ────────────────────────────────────────────────────
+FROM gcr.io/distroless/cc-debian12:nonroot
+COPY --from=builder /usr/local/bin/rulake-mcp /usr/local/bin/rulake-mcp
+
+EXPOSE 7440
+USER nonroot:nonroot
+
+# Default to stdio so the image is a drop-in MCP server for parent
+# processes; HTTP requires explicit args.
+ENTRYPOINT ["/usr/local/bin/rulake-mcp"]
+CMD ["stdio"]

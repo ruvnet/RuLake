@@ -1,0 +1,94 @@
+# Release rulake-mcp prebuilt binaries to GitHub Releases.
+#
+# Triggered manually or on tag `mcp-v*`. Builds rulake-mcp for the
+# five core platforms (matches the SDKs' coverage) and uploads each
+# as a tarball/zip to the GitHub Release for the tag.
+
+name: release-mcp-bin
+
+on:
+  push:
+    tags:
+      - "mcp-v*"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  PACKAGE_DIR: mcp-server
+  BIN: rulake-mcp
+
+jobs:
+  build:
+    name: build (${{ matrix.target.triple }})
+    runs-on: ${{ matrix.target.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - { os: ubuntu-latest,   triple: x86_64-unknown-linux-gnu,  archive: tar.gz }
+          - { os: ubuntu-latest,   triple: aarch64-unknown-linux-gnu, archive: tar.gz, cross: true }
+          - { os: macos-13,        triple: x86_64-apple-darwin,        archive: tar.gz }
+          - { os: macos-14,        triple: aarch64-apple-darwin,       archive: tar.gz }
+          - { os: windows-latest,  triple: x86_64-pc-windows-msvc,     archive: zip }
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target.triple }}
+      - name: Cross-compile shim (linux-aarch64)
+        if: matrix.target.cross == true
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+          echo 'CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc' >> $GITHUB_ENV
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ env.PACKAGE_DIR }}
+      - name: Build
+        working-directory: ${{ env.PACKAGE_DIR }}
+        run: cargo build --release --target ${{ matrix.target.triple }} --bin ${{ env.BIN }}
+      - name: Stage artifact (unix)
+        if: matrix.target.archive == 'tar.gz'
+        working-directory: ${{ env.PACKAGE_DIR }}
+        shell: bash
+        run: |
+          mkdir -p staging
+          cp target/${{ matrix.target.triple }}/release/${{ env.BIN }} staging/
+          cp ../README.md ../LICENSE-* staging/ 2>/dev/null || true
+          tar -czf ${{ env.BIN }}-${{ matrix.target.triple }}.tar.gz -C staging .
+      - name: Stage artifact (windows)
+        if: matrix.target.archive == 'zip'
+        working-directory: ${{ env.PACKAGE_DIR }}
+        shell: bash
+        run: |
+          mkdir -p staging
+          cp target/${{ matrix.target.triple }}/release/${{ env.BIN }}.exe staging/
+          cp ../README.md staging/ 2>/dev/null || true
+          7z a ${{ env.BIN }}-${{ matrix.target.triple }}.zip ./staging/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bin-${{ matrix.target.triple }}
+          path: |
+            ${{ env.PACKAGE_DIR }}/${{ env.BIN }}-${{ matrix.target.triple }}.tar.gz
+            ${{ env.PACKAGE_DIR }}/${{ env.BIN }}-${{ matrix.target.triple }}.zip
+
+  release:
+    name: attach to GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/mcp-v')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.tar.gz
+            dist/*.zip
+          generate_release_notes: true

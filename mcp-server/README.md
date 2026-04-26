@@ -4,32 +4,36 @@ Implements [ADR-004](../docs/adrs/sdk/ADR-004-rulake-mcp-server.md) — the
 control-plane / decision-layer over [`ruvector-rulake`](..) for
 agent-callable governed memory.
 
-## Status: v0.2 (deployable to remote agents)
+## Status: v0.3 (production-shaped surface)
 
-v0.1 landed the architecture; v0.2 makes it deployable to remote
-agents (Streamable HTTP transport + bearer auth with the
-embarrassing-flag dev-only guards from ADR-004 §5).
+v0.1 landed the architecture, v0.2 added remote-agent deployability
+(Streamable HTTP + bearer), v0.3 ships the rest of the ADR-004 §4 +
+§5 + §7 surface: mutation tools behind capability tiers, all four
+intents (search/verify/explain/refresh), the §7 JSONL audit file,
+and `rulake://stats` resources.
 
-| Capability | v0.1 | v0.2 | v0.3 |
-|---|:---:|:---:|:---:|
-| stdio transport                              | ✅ | ✅ | ✅ |
-| `rulake_query` (intent: `search`)            | ✅ | ✅ | ✅ |
-| `rulake_list_backends`                       | ✅ | ✅ | ✅ |
-| Bounded worker pool (`flume` + `rayon`)      | ✅ | ✅ | ✅ |
-| Decision trace (`reason_code`, `decision.*`) | ✅ | ✅ | ✅ |
-| TOML config (`mcp.toml`) — backends, consistency, workers | ✅ | ✅ | ✅ |
-| Witness-fail-closed for bundle reads         | ✅ | ✅ | ✅ |
-| Streamable HTTP transport                    |    | ✅ | ✅ |
-| Bearer-token auth (dev-only, embarrassing-flag for public bind) | | ✅ | ✅ |
-| DNS-rebinding guard (rmcp `allowed_hosts`)   |    | ✅ | ✅ |
-| OAuth 2.1 + mTLS                             |    |    | ✅ |
-| Replay protection (`MCP-Request-Id` + session binding) | | | ✅ |
-| Layered rate limiting (`governor`)           |    |    | ✅ |
-| Intents `verify` / `explain`                 |    |    | ✅ |
-| Resources (`rulake://stats`, `rulake://bundle/...`) | | | ✅ |
-| Mutation tools (`publish`, `admin` capabilities) |  |    | ✅ |
-| `intent: "refresh"`                          |    |    | ✅ |
-| JSONL audit file (full §7 schema)            |    |    | ✅ |
+| Capability | v0.1 | v0.2 | v0.3 | v0.4 |
+|---|:---:|:---:|:---:|:---:|
+| stdio transport                              | ✅ | ✅ | ✅ | ✅ |
+| `rulake_query` (intent: `search`)            | ✅ | ✅ | ✅ | ✅ |
+| `rulake_list_backends`                       | ✅ | ✅ | ✅ | ✅ |
+| Bounded worker pool (`flume` + `rayon`)      | ✅ | ✅ | ✅ | ✅ |
+| Decision trace (`reason_code`, `decision.*`) | ✅ | ✅ | ✅ | ✅ |
+| TOML config (`mcp.toml`)                     | ✅ | ✅ | ✅ | ✅ |
+| Witness-fail-closed for bundle reads         | ✅ | ✅ | ✅ | ✅ |
+| Streamable HTTP transport                    |    | ✅ | ✅ | ✅ |
+| Bearer-token auth (dev-only, embarrassing-flag for public bind) | | ✅ | ✅ | ✅ |
+| DNS-rebinding guard (rmcp `allowed_hosts`)   |    | ✅ | ✅ | ✅ |
+| Intents `verify` / `explain`                 |    |    | ✅ | ✅ |
+| Resources (`rulake://stats`, `rulake://stats/by-backend`) | | | ✅ | ✅ |
+| Mutation tools (`publish`, `admin` capability tiers) |  |    | ✅ | ✅ |
+| `intent: "refresh"`                          |    |    | ✅ | ✅ |
+| JSONL audit file (`--audit-file`, full §7 schema) |  |    | ✅ | ✅ |
+| OAuth 2.1 + mTLS                             |    |    |    | ✅ |
+| Replay protection (`MCP-Request-Id` + session binding) | | | | ✅ |
+| Layered rate limiting (`governor`)           |    |    |    | ✅ |
+| Resource: `rulake://bundle/{backend}/{collection}` | | |   | ✅ |
+| `tools/list` filtered by capability          |    |    |    | ✅ |
 
 ## Build
 

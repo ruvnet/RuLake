@@ -27,17 +27,37 @@ use serde::{Deserialize, Serialize};
 
 use ruvector_rulake::{LocalBackend, RuLake, BackendAdapter, FsBackend};
 
+use crate::audit::{AuditEntry, AuditSink, PolicyDecision, now_ts};
 use crate::config::{BackendConfig, McpConfig};
 use crate::planner::{PlanError, Planner, QueryRequest, QueryResponse};
+use crate::policy::{Capability, CapabilitySet};
 use crate::workers::WorkerPool;
 
 #[derive(Clone)]
 pub struct RuLakeMcpServer {
     planner: Arc<Planner>,
+    capabilities: Arc<CapabilitySet>,
+    audit: AuditSink,
     tool_router: ToolRouter<Self>,
 }
 
 impl RuLakeMcpServer {
+    pub fn new_with_caps(config: McpConfig, capabilities: CapabilitySet) -> anyhow::Result<Self> {
+        let mut me = Self::new(config)?;
+        me.capabilities = Arc::new(capabilities);
+        Ok(me)
+    }
+
+    /// Replace the audit sink. Call before serve_*.
+    pub fn with_audit(mut self, sink: AuditSink) -> Self {
+        self.audit = sink;
+        self
+    }
+
+    pub fn audit(&self) -> &AuditSink {
+        &self.audit
+    }
+
     pub fn new(config: McpConfig) -> anyhow::Result<Self> {
         let consistency = config.consistency.into_runtime();
         let consistency_label = format!("{consistency:?}");
@@ -80,6 +100,8 @@ impl RuLakeMcpServer {
                 backend_ids,
                 consistency_label,
             }),
+            capabilities: Arc::new(CapabilitySet::default()),
+            audit: AuditSink::stderr(),
             tool_router: Self::tool_router(),
         })
     }
@@ -102,8 +124,24 @@ impl RuLakeMcpServer {
                 backend_ids,
                 consistency_label,
             }),
+            capabilities: Arc::new(CapabilitySet::default()),
+            audit: AuditSink::stderr(),
             tool_router: Self::tool_router(),
         })
+    }
+
+    /// Test helper: same as `from_lake` but with a custom capability set.
+    #[doc(hidden)]
+    pub fn from_lake_with_caps(
+        lake: Arc<RuLake>,
+        consistency_label: String,
+        backend_ids: Vec<String>,
+        max_inflight: usize,
+        capabilities: CapabilitySet,
+    ) -> anyhow::Result<Self> {
+        let mut me = Self::from_lake(lake, consistency_label, backend_ids, max_inflight)?;
+        me.capabilities = Arc::new(capabilities);
+        Ok(me)
     }
 
     /// Direct planner access — used by tests to call the planner
@@ -139,24 +177,116 @@ impl RuLakeMcpServer {
         &self,
         Parameters(req): Parameters<QueryRequest>,
     ) -> Result<Json<QueryResponse>, McpError> {
-        emit_audit_start("rulake_query");
-        match self.planner.handle(req).await {
+        let start = std::time::Instant::now();
+        let intent = format!("{:?}", req.intent).to_ascii_lowercase();
+        let result = self.planner.handle(req).await;
+        let elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
+        let cap_grant = self.capabilities.labels().iter().map(|s| s.to_string()).collect();
+        match result {
             Ok(resp) => {
-                emit_audit_ok("rulake_query", &resp);
+                let outcome = if resp.data.is_empty()
+                    && format!("{:?}", resp.decision.reason_code).contains("Refused")
+                {
+                    "refused"
+                } else {
+                    "ok"
+                };
+                self.audit.emit(AuditEntry {
+                    ts: now_ts(),
+                    transport: "stdio".into(),
+                    principal: "stdio:local".into(),
+                    session: None,
+                    request_id: None,
+                    tool: "rulake_query".into(),
+                    intent: Some(intent),
+                    outcome: outcome.into(),
+                    result_size: Some(resp.data.len() as u32),
+                    trust_level: Some(format!("{:?}", resp.trust_level).to_ascii_lowercase()),
+                    duration_ms: elapsed_ms,
+                    witness_in: None,
+                    witness_out: resp.provenance.witness.clone(),
+                    code: None,
+                    policy_decision: Some(PolicyDecision {
+                        capability_required: "read".into(),
+                        capability_granted: cap_grant,
+                    }),
+                    decision: serde_json::to_value(&resp.decision).ok(),
+                });
                 Ok(Json(resp))
             }
             Err(PlanError::Refused(resp)) => {
-                emit_audit_refused("rulake_query", &resp);
+                self.audit.emit(AuditEntry {
+                    ts: now_ts(),
+                    transport: "stdio".into(),
+                    principal: "stdio:local".into(),
+                    session: None,
+                    request_id: None,
+                    tool: "rulake_query".into(),
+                    intent: Some(intent),
+                    outcome: "refused".into(),
+                    result_size: Some(0),
+                    trust_level: Some("unverified".into()),
+                    duration_ms: elapsed_ms,
+                    witness_in: None,
+                    witness_out: None,
+                    code: Some(format!("{:?}", resp.decision.reason_code)),
+                    policy_decision: Some(PolicyDecision {
+                        capability_required: "read".into(),
+                        capability_granted: cap_grant,
+                    }),
+                    decision: serde_json::to_value(&resp.decision).ok(),
+                });
                 Ok(Json(resp))
             }
             Err(PlanError::Degraded { inflight, cap }) => {
-                emit_audit_degraded("rulake_query", inflight, cap);
+                self.audit.emit(AuditEntry {
+                    ts: now_ts(),
+                    transport: "stdio".into(),
+                    principal: "stdio:local".into(),
+                    session: None,
+                    request_id: None,
+                    tool: "rulake_query".into(),
+                    intent: Some(intent),
+                    outcome: "degraded".into(),
+                    result_size: None,
+                    trust_level: None,
+                    duration_ms: elapsed_ms,
+                    witness_in: None,
+                    witness_out: None,
+                    code: Some("RULAKE_DEGRADED".into()),
+                    policy_decision: Some(PolicyDecision {
+                        capability_required: "read".into(),
+                        capability_granted: cap_grant,
+                    }),
+                    decision: None,
+                });
                 Err(McpError::internal_error(
                     format!("RULAKE_DEGRADED: inflight={inflight} cap={cap}"),
                     None,
                 ))
             }
             Err(PlanError::Internal(s)) => {
+                self.audit.emit(AuditEntry {
+                    ts: now_ts(),
+                    transport: "stdio".into(),
+                    principal: "stdio:local".into(),
+                    session: None,
+                    request_id: None,
+                    tool: "rulake_query".into(),
+                    intent: Some(intent),
+                    outcome: "error".into(),
+                    result_size: None,
+                    trust_level: None,
+                    duration_ms: elapsed_ms,
+                    witness_in: None,
+                    witness_out: None,
+                    code: Some("RULAKE_INTERNAL".into()),
+                    policy_decision: Some(PolicyDecision {
+                        capability_required: "read".into(),
+                        capability_granted: cap_grant,
+                    }),
+                    decision: None,
+                });
                 Err(McpError::internal_error(format!("RULAKE_INTERNAL: {s}"), None))
             }
         }
@@ -172,7 +302,178 @@ impl RuLakeMcpServer {
             backends: self.planner.backend_ids.clone(),
         }))
     }
+
+    // ─── publish-tier tools ──────────────────────────────────────────
+
+    #[tool(
+        name = "rulake_publish_bundle",
+        description = "Publish: atomically write the cache's witness bundle for (backend, collection) to dir/table.rulake.json. Requires --capabilities publish."
+    )]
+    pub async fn rulake_publish_bundle(
+        &self,
+        Parameters(args): Parameters<PublishBundleArgs>,
+    ) -> Result<Json<PathResponse>, McpError> {
+        require_cap(&self.capabilities, Capability::Publish)?;
+        let lake = Arc::clone(&self.planner.lake);
+        let key = (args.backend, args.collection);
+        let dir = std::path::PathBuf::from(args.dir);
+        let res = self
+            .planner
+            .workers
+            .submit(move || lake.publish_bundle(&key, &dir).map(|p| p.to_string_lossy().to_string()))
+            .await
+            .map_err(|e| McpError::internal_error(format!("RULAKE_DEGRADED: {e}"), None))?
+            .map_err(|e| McpError::internal_error(format!("RULAKE_INTERNAL: {e}"), None))?;
+        Ok(Json(PathResponse { path: res }))
+    }
+
+    #[tool(
+        name = "rulake_refresh_from_bundle_dir",
+        description = "Publish: refresh cache from dir/table.rulake.json. Returns 'up_to_date' | 'invalidated' | 'bundle_missing'. Requires --capabilities publish."
+    )]
+    pub async fn rulake_refresh_from_bundle_dir(
+        &self,
+        Parameters(args): Parameters<RefreshArgs>,
+    ) -> Result<Json<RefreshResponse>, McpError> {
+        require_cap(&self.capabilities, Capability::Publish)?;
+        let lake = Arc::clone(&self.planner.lake);
+        let key = (args.backend, args.collection);
+        let dir = std::path::PathBuf::from(args.dir);
+        let res = self
+            .planner
+            .workers
+            .submit(move || lake.refresh_from_bundle_dir(&key, &dir))
+            .await
+            .map_err(|e| McpError::internal_error(format!("RULAKE_DEGRADED: {e}"), None))?
+            .map_err(|e| McpError::internal_error(format!("RULAKE_INTERNAL: {e}"), None))?;
+        let status = match res {
+            ruvector_rulake::RefreshResult::UpToDate => "up_to_date",
+            ruvector_rulake::RefreshResult::Invalidated => "invalidated",
+            ruvector_rulake::RefreshResult::BundleMissing => "bundle_missing",
+        };
+        Ok(Json(RefreshResponse { status: status.into() }))
+    }
+
+    // ─── admin-tier tools ────────────────────────────────────────────
+
+    #[tool(
+        name = "rulake_save_cache_to_dir",
+        description = "Admin: persist the primed cache for (backend, collection) to dir as a warm-restart snapshot. Requires --capabilities admin."
+    )]
+    pub async fn rulake_save_cache_to_dir(
+        &self,
+        Parameters(args): Parameters<SaveCacheArgs>,
+    ) -> Result<Json<PathResponse>, McpError> {
+        require_cap(&self.capabilities, Capability::Admin)?;
+        let lake = Arc::clone(&self.planner.lake);
+        let key = (args.backend, args.collection);
+        let dir = std::path::PathBuf::from(args.dir);
+        let res = self
+            .planner
+            .workers
+            .submit(move || lake.save_cache_to_dir(&key, &dir).map(|p| p.to_string_lossy().to_string()))
+            .await
+            .map_err(|e| McpError::internal_error(format!("RULAKE_DEGRADED: {e}"), None))?
+            .map_err(|e| McpError::internal_error(format!("RULAKE_INTERNAL: {e}"), None))?;
+        Ok(Json(PathResponse { path: res }))
+    }
+
+    #[tool(
+        name = "rulake_warm_from_dir",
+        description = "Admin: warm the cache for (backend, collection) from a snapshot dir. Returns the number of vectors loaded. Requires --capabilities admin."
+    )]
+    pub async fn rulake_warm_from_dir(
+        &self,
+        Parameters(args): Parameters<WarmArgs>,
+    ) -> Result<Json<WarmResponse>, McpError> {
+        require_cap(&self.capabilities, Capability::Admin)?;
+        let lake = Arc::clone(&self.planner.lake);
+        let key = (args.backend, args.collection);
+        let dir = std::path::PathBuf::from(args.dir);
+        let res = self
+            .planner
+            .workers
+            .submit(move || lake.warm_from_dir(&key, &dir))
+            .await
+            .map_err(|e| McpError::internal_error(format!("RULAKE_DEGRADED: {e}"), None))?
+            .map_err(|e| McpError::internal_error(format!("RULAKE_INTERNAL: {e}"), None))?;
+        Ok(Json(WarmResponse { vectors: res as u32 }))
+    }
+
+    #[tool(
+        name = "rulake_invalidate_cache",
+        description = "Admin: drop the cache entry for (backend, collection). Next search re-primes. Requires --capabilities admin."
+    )]
+    pub async fn rulake_invalidate_cache(
+        &self,
+        Parameters(args): Parameters<InvalidateArgs>,
+    ) -> Result<Json<EmptyResponse>, McpError> {
+        require_cap(&self.capabilities, Capability::Admin)?;
+        let key = (args.backend, args.collection);
+        self.planner.lake.invalidate_cache(&key);
+        Ok(Json(EmptyResponse {}))
+    }
 }
+
+fn require_cap(caps: &CapabilitySet, required: Capability) -> Result<(), McpError> {
+    caps.require(required)
+        .map_err(|refused| McpError::invalid_request(refused.to_string(), None))
+}
+
+// ─── Mutation-tool arg/response shapes ────────────────────────────────
+
+#[derive(Debug, Deserialize, Serialize, rmcp::schemars::JsonSchema)]
+pub struct PublishBundleArgs {
+    pub backend: String,
+    pub collection: String,
+    /// Directory to write `table.rulake.json` into. Atomic temp+rename.
+    pub dir: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, rmcp::schemars::JsonSchema)]
+pub struct RefreshArgs {
+    pub backend: String,
+    pub collection: String,
+    pub dir: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, rmcp::schemars::JsonSchema)]
+pub struct SaveCacheArgs {
+    pub backend: String,
+    pub collection: String,
+    pub dir: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, rmcp::schemars::JsonSchema)]
+pub struct WarmArgs {
+    pub backend: String,
+    pub collection: String,
+    pub dir: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, rmcp::schemars::JsonSchema)]
+pub struct InvalidateArgs {
+    pub backend: String,
+    pub collection: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, rmcp::schemars::JsonSchema)]
+pub struct PathResponse {
+    pub path: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, rmcp::schemars::JsonSchema)]
+pub struct RefreshResponse {
+    pub status: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, rmcp::schemars::JsonSchema)]
+pub struct WarmResponse {
+    pub vectors: u32,
+}
+
+#[derive(Debug, Deserialize, Serialize, rmcp::schemars::JsonSchema)]
+pub struct EmptyResponse {}
 
 #[derive(Debug, Serialize, Deserialize, rmcp::schemars::JsonSchema)]
 pub struct ListBackendsResponse {
@@ -294,37 +595,3 @@ impl RuLakeMcpServer {
     }
 }
 
-// ─── Audit helpers ────────────────────────────────────────────────────
-//
-// v0.1 emits to stderr via `tracing` JSON. v0.2 lands the per-line
-// JSONL audit file with the full schema from ADR-004 §7. The fields
-// emitted here match the §7 schema's outer shape so downstream
-// log shippers don't need to be retold the schema.
-
-fn emit_audit_start(tool: &str) {
-    tracing::info!(tool, event = "start");
-}
-
-fn emit_audit_ok(tool: &str, resp: &QueryResponse) {
-    tracing::info!(
-        tool,
-        event = "ok",
-        result_size = resp.data.len(),
-        reason_code = ?resp.decision.reason_code,
-        backends_used = ?resp.decision.backends_used,
-        budget_used_ms = resp.decision.budget_used_ms,
-    );
-}
-
-fn emit_audit_refused(tool: &str, resp: &QueryResponse) {
-    tracing::warn!(
-        tool,
-        event = "refused",
-        reason_code = ?resp.decision.reason_code,
-        reason = %resp.decision.reason,
-    );
-}
-
-fn emit_audit_degraded(tool: &str, inflight: usize, cap: usize) {
-    tracing::warn!(tool, event = "degraded", inflight, cap);
-}

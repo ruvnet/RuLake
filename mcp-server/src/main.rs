@@ -8,7 +8,8 @@ use std::path::PathBuf;
 
 use anyhow::Context;
 use ruvector_rulake_mcp::{
-    AllowBearerOnPublic, AuthMode, BearerAuth, InsecureAllowNoAuth, McpConfig, RuLakeMcpServer,
+    AllowBearerOnPublic, AuditSink, AuthMode, BearerAuth, CapabilitySet, InsecureAllowNoAuth,
+    McpConfig, RuLakeMcpServer,
 };
 
 #[tokio::main(flavor = "multi_thread")]
@@ -23,7 +24,24 @@ async fn main() -> anyhow::Result<()> {
         None => McpConfig::default(),
     };
 
-    let server = RuLakeMcpServer::new(config)?;
+    let capabilities = match args.capabilities.as_deref() {
+        Some(csv) => CapabilitySet::from_csv(csv)?,
+        None => CapabilitySet::default(),
+    };
+    tracing::info!(capabilities = ?capabilities.labels(), "starting rulake-mcp");
+    let audit = match &args.audit_file {
+        Some(p) => {
+            let sink = AuditSink::open_file(p)
+                .with_context(|| format!("opening audit file: {}", p.display()))?;
+            tracing::info!(path = %p.display(), "audit → JSONL file");
+            sink
+        }
+        None => {
+            tracing::info!("audit → stderr (no --audit-file set)");
+            AuditSink::stderr()
+        }
+    };
+    let server = RuLakeMcpServer::new_with_caps(config, capabilities)?.with_audit(audit);
 
     match args.transport {
         Transport::Stdio => server.serve_stdio().await,
@@ -64,6 +82,8 @@ fn build_auth(http: &HttpArgs) -> anyhow::Result<AuthMode> {
 struct Args {
     transport: Transport,
     config: Option<PathBuf>,
+    capabilities: Option<String>,
+    audit_file: Option<PathBuf>,
 }
 
 #[derive(Debug)]
@@ -84,6 +104,8 @@ struct HttpArgs {
 fn parse_args() -> anyhow::Result<Args> {
     let mut transport: Option<Transport> = None;
     let mut config = None;
+    let mut capabilities: Option<String> = None;
+    let mut audit_file: Option<PathBuf> = None;
 
     // For http subcommand:
     let mut http_bind: Option<SocketAddr> = None;
@@ -101,6 +123,14 @@ fn parse_args() -> anyhow::Result<Args> {
             "--config" => {
                 config = Some(PathBuf::from(
                     it.next().context("--config expects a path")?,
+                ));
+            }
+            "--capabilities" => {
+                capabilities = Some(it.next().context("--capabilities expects CSV")?);
+            }
+            "--audit-file" => {
+                audit_file = Some(PathBuf::from(
+                    it.next().context("--audit-file expects PATH")?,
                 ));
             }
             "--bind" => {
@@ -143,6 +173,8 @@ fn parse_args() -> anyhow::Result<Args> {
     Ok(Args {
         transport: transport.unwrap(),
         config,
+        capabilities,
+        audit_file,
     })
 }
 
@@ -156,6 +188,12 @@ fn print_help() {
          \n\
          COMMON OPTIONS:\n    \
              --config PATH                  Load mcp.toml from PATH.\n    \
+             --audit-file PATH              Append-only JSONL audit per ADR-004 §7. Default: stderr.\n    \
+             --capabilities CSV             Tier set: read|internal|publish|admin (default: read).\n    \
+                                            `read` exposes rulake_query + list_backends.\n    \
+                                            `publish` adds publish_bundle + refresh_from_bundle_dir.\n    \
+                                            `admin` adds save_cache_to_dir + warm_from_dir + invalidate_cache.\n    \
+                                            `internal` exposes the kernel rulake_query composes (operator-only).\n    \
              -h, --help                     Print this help.\n\
          \n\
          HTTP OPTIONS:\n    \

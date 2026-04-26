@@ -39,6 +39,10 @@ pub struct QueryRequest {
     #[serde(default)]
     pub explain: Option<ExplainArgs>,
 
+    /// Refresh-intent args. Required when `intent == "refresh"`.
+    #[serde(default)]
+    pub refresh: Option<RefreshArgs>,
+
     /// `low | medium | high`. Shapes the budget cap and policy floor.
     #[serde(default = "default_risk")]
     pub risk: Risk,
@@ -95,6 +99,12 @@ pub struct VerifyArgs {
     /// Path to the directory containing `table.rulake.json`.
     /// Must resolve under the operator's path-allow-list (v0.3 will
     /// enforce; v0.2 trusts the operator).
+    pub bundle_dir: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct RefreshArgs {
+    /// Directory containing `table.rulake.json` to refresh from.
     pub bundle_dir: String,
 }
 
@@ -300,11 +310,97 @@ impl Planner {
             Intent::Search => self.handle_search(req, start).await,
             Intent::Verify => self.handle_verify(req, start).await,
             Intent::Explain => self.handle_explain(req, start).await,
-            Intent::Refresh => Err(PlanError::Internal(format!(
-                "intent {:?} is not implemented in v0.2 (lands in v0.3 with mutation tools + publish capability)",
-                req.intent
-            ))),
+            Intent::Refresh => self.handle_refresh(req, start).await,
         }
+    }
+
+    /// `intent: "refresh"` — refresh cache from disk-published bundle
+    /// directory. Capability-gated at the wire layer (server.rs
+    /// require_cap(Publish)), but the planner enforces target+args
+    /// validity. v0.3.
+    async fn handle_refresh(
+        &self,
+        req: QueryRequest,
+        start: std::time::Instant,
+    ) -> Result<QueryResponse, PlanError> {
+        let r = req
+            .refresh
+            .ok_or_else(|| PlanError::Internal("intent=refresh requires `refresh` block".into()))?;
+        let routes = match self.resolve_routes(&req.target, req.budget.max_backends as usize) {
+            Ok(rs) => rs,
+            Err(PlanError::Refused(resp)) => return Ok(resp),
+            Err(e) => return Err(e),
+        };
+        if routes.is_empty() {
+            return Ok(self.build_refusal_intent(
+                "refresh",
+                "no allowed routes",
+                ReasonCode::PolicyRefusedAllowlist,
+                vec![], vec![], start, req.budget.max_latency_ms,
+            ));
+        }
+
+        let lake = Arc::clone(&self.lake);
+        let routes_for_run = routes.clone();
+        let dir = std::path::PathBuf::from(&r.bundle_dir);
+        let submit = self
+            .workers
+            .submit(move || -> Result<Vec<(String, ruvector_rulake::RefreshResult)>, ruvector_rulake::RuLakeError> {
+                let mut out = Vec::with_capacity(routes_for_run.len());
+                for (b, c) in &routes_for_run {
+                    let key = (b.clone(), c.clone());
+                    let res = lake.refresh_from_bundle_dir(&key, &dir)?;
+                    out.push((b.clone(), res));
+                }
+                Ok(out)
+            })
+            .await;
+
+        let outcomes = match submit {
+            Ok(Ok(o)) => o,
+            Ok(Err(e)) => return Err(PlanError::Internal(format!("refresh: {e}"))),
+            Err(SubmitError::Degraded { inflight, cap }) => {
+                return Err(PlanError::Degraded { inflight, cap });
+            }
+            Err(e) => return Err(PlanError::Internal(format!("worker: {e}"))),
+        };
+
+        let elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
+        let backends_planned: Vec<String> = routes.iter().map(|(b, _)| b.clone()).collect();
+        let summary: Vec<String> = outcomes
+            .iter()
+            .map(|(b, r)| format!("{b}={:?}", r))
+            .collect();
+        let any_invalidated = outcomes.iter().any(|(_, r)| matches!(r, ruvector_rulake::RefreshResult::Invalidated));
+        let reason_code = if any_invalidated {
+            ReasonCode::StaleCacheRemoteValid
+        } else {
+            ReasonCode::CacheHitFresh
+        };
+        Ok(QueryResponse {
+            data: vec![],
+            provenance: Provenance {
+                witness: None,
+                witness_verified: true, // refresh succeeded → witness chain trusted
+                consistency: self.consistency_label.clone(),
+                served_from: backends_planned.clone(),
+                lineage_id: None,
+            },
+            trust_level: TrustLevel::Verified,
+            decision: Decision {
+                intent: "refresh".into(),
+                chosen_action: "refresh_from_bundle_dir".into(),
+                reason_code,
+                reason: format!("refresh outcomes: {}", summary.join(", ")),
+                backends_planned: backends_planned.clone(),
+                backends_used: backends_planned,
+                consistency_used: self.consistency_label.clone(),
+                budget_used_ms: elapsed_ms,
+                budget_cap_ms: req.budget.max_latency_ms,
+                degraded: false,
+                refusals: vec![],
+            },
+        })
     }
 
     /// `intent: "verify"` — read the on-disk bundle for a route, recompute

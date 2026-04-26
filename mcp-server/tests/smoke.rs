@@ -117,6 +117,34 @@ async fn budget_max_results_caps_k() {
     assert_eq!(resp.data.len(), 10, "budget.max_results must cap k");
 }
 
+// ─── v0.3d: capability gating ─────────────────────────────────────────
+
+#[tokio::test]
+async fn capability_set_default_excludes_publish_and_admin() {
+    use ruvector_rulake_mcp::{Capability, CapabilitySet};
+    let cs = CapabilitySet::default();
+    assert!(cs.has(Capability::Read));
+    assert!(!cs.has(Capability::Publish));
+    assert!(!cs.has(Capability::Admin));
+    assert!(!cs.has(Capability::Internal));
+}
+
+#[tokio::test]
+async fn capability_set_publish_implies_read() {
+    use ruvector_rulake_mcp::{Capability, CapabilitySet};
+    let cs = CapabilitySet::from_csv("publish").unwrap();
+    assert!(cs.has(Capability::Read), "publish must implicitly grant read");
+    assert!(cs.has(Capability::Publish));
+    assert!(!cs.has(Capability::Admin));
+}
+
+#[tokio::test]
+async fn capability_set_rejects_unknown_label() {
+    use ruvector_rulake_mcp::CapabilitySet;
+    let err = CapabilitySet::from_csv("foo").unwrap_err();
+    assert!(format!("{err:#}").contains("unknown capability"));
+}
+
 // ─── v0.3a: verify + explain intents ─────────────────────────────────
 
 #[tokio::test]
@@ -215,7 +243,8 @@ async fn verify_intent_succeeds_on_valid_bundle() {
 }
 
 #[tokio::test]
-async fn refresh_intent_still_returns_internal_in_v02() {
+async fn refresh_intent_returns_bundle_missing_when_dir_empty() {
+    use tempfile::TempDir;
     let (lake, _, _) = make_lake(50, 16);
     let server = RuLakeMcpServer::from_lake(
         Arc::clone(&lake),
@@ -224,15 +253,22 @@ async fn refresh_intent_still_returns_internal_in_v02() {
         64,
     )
     .unwrap();
+    let dir = TempDir::new().unwrap();
     let req = serde_json::from_value(serde_json::json!({
         "intent": "refresh",
         "target": { "collection": "docs" },
-        "refresh": { "bundle_dir": "/tmp" }
+        "refresh": { "bundle_dir": dir.path().to_string_lossy() }
     }))
     .unwrap();
-    let res = server.planner().handle(req).await;
-    assert!(res.is_err(), "refresh is v0.3");
-    assert!(format!("{:?}", res.unwrap_err()).contains("v0.3"));
+    let resp = server.planner().handle(req).await.expect("planner ok");
+    assert_eq!(resp.decision.intent, "refresh");
+    assert_eq!(resp.decision.chosen_action, "refresh_from_bundle_dir");
+    // Empty directory → BundleMissing for the route — reason carries the outcome string.
+    assert!(
+        resp.decision.reason.contains("BundleMissing"),
+        "expected BundleMissing in reason, got: {}",
+        resp.decision.reason
+    );
 }
 
 #[tokio::test]
