@@ -169,6 +169,249 @@ async fn bearer_auth_rejects_missing_header() {
     assert_eq!(err, http::StatusCode::UNAUTHORIZED);
 }
 
+// ─── v0.8c: end-to-end JWT scope downgrade on the wire ────────────────
+//
+// Status: scaffolded but `#[ignore]`d. The v0.8a scope-downgrade contract
+// itself is already verified at the unit-level by
+// `tests/smoke.rs::tools_list_filtered_by_capability_set`. This e2e test
+// would prove the same contract holds across the rmcp Streamable HTTP
+// transport — but consuming the response correctly requires reading the
+// SSE stream until the JSON-RPC response arrives, then closing it. A bare
+// `resp.text().await` hangs on the rmcp keepalive (`data:` empty events
+// every ~3s with no terminating chunk). To unblock this we'd need an SSE
+// consumer (`reqwest_eventsource` / `eventsource-stream`) or a server-side
+// knob that returns a JSON body when the request can be served
+// synchronously. Scaffolding kept (token mint, MCP handshake order,
+// replay-guard-aware MCP-Request-Id seeds) — that part is right.
+
+#[ignore = "rmcp Streamable HTTP SSE response stays open on keepalives; needs a proper SSE consumer to read the tools/list result. Contract verified by tools_list_filtered_by_capability_set."]
+#[tokio::test(flavor = "multi_thread")]
+async fn jwt_scope_downgrade_filters_tools_list_on_the_wire() {
+    use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
+    use ruvector_rulake_mcp::auth::JwtKey;
+    use ruvector_rulake_mcp::{
+        AllowBearerOnPublic, CapabilitySet, InsecureAllowNoAuth, JwtAuth, JwtConfig,
+    };
+
+    let server = make_server();
+
+    // Server starts with the maximum capability set — admin is the
+    // ceiling. Per-call grants come from the token (the v0.8a contract).
+    let server = ruvector_rulake_mcp::RuLakeMcpServer::from_lake_with_caps(
+        std::sync::Arc::new(make_lake()),
+        "Fresh".into(),
+        vec!["local".into()],
+        64,
+        CapabilitySet::from_csv("read,publish,admin").unwrap(),
+    )
+    .unwrap();
+    drop(server); // unused intermediate; keep make_server() result below.
+
+    // (The duplicate `make_server()` above is intentional — the
+    // `from_lake_with_caps` form is what the wire-test asserts; the
+    // make_server() helper is the existing fixture.)
+    let server_with_admin_caps = make_admin_server();
+
+    // Find a free loopback port.
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    drop(listener);
+    let bind: std::net::SocketAddr = format!("127.0.0.1:{port}").parse().unwrap();
+
+    // HMAC-shared secret for both ends.
+    let secret = b"e2e-test-secret-32bytes-or-longer".to_vec();
+    let issuer = "https://idp.test".to_string();
+    let audience = "https://rulake.test/mcp".to_string();
+
+    let jwt = JwtAuth::new(JwtConfig {
+        key: JwtKey::Hmac(secret.clone()),
+        issuer: issuer.clone(),
+        audience: audience.clone(),
+        algorithms: vec![Algorithm::HS256],
+    });
+
+    let serve = tokio::spawn(async move {
+        ruvector_rulake_mcp::http::serve(
+            server_with_admin_caps,
+            bind,
+            ruvector_rulake_mcp::AuthMode::Jwt(jwt),
+            AllowBearerOnPublic(false),
+            InsecureAllowNoAuth(false),
+        )
+        .await
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let mint = |scope: &str| {
+        let claims = serde_json::json!({
+            "sub":   "alice",
+            "iss":   issuer,
+            "aud":   audience,
+            "exp":   now + 60,
+            "scope": scope,
+        });
+        encode(
+            &Header::new(Algorithm::HS256),
+            &claims,
+            &EncodingKey::from_secret(&secret),
+        )
+        .unwrap()
+    };
+    let read_token = mint("mcp:rulake:read");
+    let admin_token = mint("mcp:rulake:read mcp:rulake:publish mcp:rulake:admin");
+
+    // The MCP wire requires initialize → notifications/initialized →
+    // tools/list. We do the minimal handshake then ask for tools/list,
+    // varying the bearer.
+    let client = reqwest::Client::new();
+    let url = format!("http://127.0.0.1:{port}/");
+
+    let n_tools_for = |token: String, seed_base: u32| {
+        let url = url.clone();
+        let client = client.clone();
+        async move {
+            // Send the three messages in one batch via a single
+            // POST per the Streamable HTTP spec — initialize first
+            // to negotiate the session, then notifications/initialized
+            // (notification, no response), then tools/list. Each call
+            // uses a fresh MCP-Request-Id triple — the replay guard
+            // returns 409 on a duplicate id, so the second token must
+            // not reuse seeds 1/2/3.
+            let init = serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-03-26",
+                    "capabilities": {},
+                    "clientInfo": { "name": "e2e", "version": "0" }
+                }
+            });
+            let init_resp = client
+                .post(&url)
+                .bearer_auth(&token)
+                .header("MCP-Request-Id", uuid_like(seed_base))
+                .header("accept", "application/json, text/event-stream")
+                .json(&init)
+                .send()
+                .await
+                .expect("initialize sent");
+            assert!(
+                init_resp.status().is_success(),
+                "initialize HTTP status: {}",
+                init_resp.status()
+            );
+            // Pull the session id from the response header.
+            let session_id = init_resp
+                .headers()
+                .get("mcp-session-id")
+                .and_then(|h| h.to_str().ok())
+                .map(str::to_string)
+                .unwrap_or_default();
+
+            let initialized = serde_json::json!({
+                "jsonrpc": "2.0",
+                "method": "notifications/initialized"
+            });
+            let mut req = client
+                .post(&url)
+                .bearer_auth(&token)
+                .header("MCP-Request-Id", uuid_like(seed_base + 1))
+                .header("accept", "application/json, text/event-stream")
+                .json(&initialized);
+            if !session_id.is_empty() {
+                req = req.header("mcp-session-id", &session_id);
+            }
+            let _ = req.send().await;
+
+            let list = serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "tools/list"
+            });
+            let mut req = client
+                .post(&url)
+                .bearer_auth(&token)
+                .header("MCP-Request-Id", uuid_like(seed_base + 2))
+                .header("accept", "application/json, text/event-stream")
+                .json(&list);
+            if !session_id.is_empty() {
+                req = req.header("mcp-session-id", &session_id);
+            }
+            let resp = req.send().await.expect("tools/list sent");
+            let status = resp.status();
+            let body = resp.text().await.unwrap();
+            eprintln!("[DEBUG seed_base={seed_base}] tools/list status={status} body={body}");
+            // The body is either JSON or SSE-wrapped JSON. Strip
+            // SSE framing if present.
+            let json_str = body
+                .lines()
+                .find_map(|l| l.strip_prefix("data: "))
+                .unwrap_or(body.as_str());
+            let v: serde_json::Value = serde_json::from_str(json_str)
+                .unwrap_or_else(|_| serde_json::json!({}));
+            v.get("result")
+                .and_then(|r| r.get("tools"))
+                .and_then(|t| t.as_array())
+                .map(|a| a.len())
+                .unwrap_or(0)
+        }
+    };
+
+    let n_read = n_tools_for(read_token, 1).await;
+    let n_admin = n_tools_for(admin_token, 100).await;
+
+    serve.abort();
+
+    // The read-only token must see strictly fewer tools than the admin
+    // token. Exact counts depend on session behaviour; the contract we
+    // care about is the downgrade actually fires on the wire.
+    assert!(
+        n_admin > n_read,
+        "v0.8a contract: admin token must see more tools than read-only \
+         (read={n_read}, admin={n_admin})"
+    );
+    assert!(n_read >= 1, "read token sees ≥1 tool (rulake_query)");
+}
+
+fn make_admin_server() -> ruvector_rulake_mcp::RuLakeMcpServer {
+    use ruvector_rulake_mcp::CapabilitySet;
+    ruvector_rulake_mcp::RuLakeMcpServer::from_lake_with_caps(
+        std::sync::Arc::new(make_lake()),
+        "Fresh".into(),
+        vec!["local".into()],
+        64,
+        CapabilitySet::from_csv("read,publish,admin").unwrap(),
+    )
+    .unwrap()
+}
+
+fn make_lake() -> ruvector_rulake::RuLake {
+    use ruvector_rulake::{LocalBackend, RuLake, BackendAdapter};
+    let lake = RuLake::new(20, 42);
+    let be = std::sync::Arc::new(LocalBackend::new("local"));
+    be.put_collection(
+        "docs",
+        8,
+        (0..50).collect(),
+        (0..50).map(|i| vec![i as f32 * 0.01; 8]).collect(),
+    )
+    .unwrap();
+    let dyn_be: std::sync::Arc<dyn BackendAdapter> = be;
+    lake.register_backend(dyn_be).unwrap();
+    lake
+}
+
+fn uuid_like(seed: u32) -> String {
+    // Deterministic 16-byte hex per request — the replay guard wants
+    // each MCP-Request-Id distinct.
+    format!("{:016x}", (seed as u64).wrapping_mul(0x9e3779b97f4a7c15))
+}
+
 #[tokio::test]
 async fn bearer_auth_rejects_wrong_scheme() {
     use http::HeaderMap;
