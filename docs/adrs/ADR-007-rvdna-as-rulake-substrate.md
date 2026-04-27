@@ -2,12 +2,25 @@
 
 ## Status
 
-**Proposed (2026-04-27)** — drafted on `research/management-ui` as
-the third file of the rvDNA v2 corpus, after `v2-spec.md` and
-`integration-with-rulake.md`. Acceptance criteria: the five
-verification gates in §6 pass on a workstation, with tests committed
-to the `rvdna-backend/` and `mcp-rvdna/` crates that are scaffolded
-as the next two PRs after this ADR lands.
+**Accepted — Scaffolded (2026-04-27)** — `rvdna-backend/` v0.0.1 is
+landed (commit `08261ae`); `mcp-rvdna/` v0.0.1 scaffold lands in the
+following commit. v0.0 ships the hot-tier (T0) BackendAdapter only —
+RAM-resident k-mer vectors with witness derivation byte-isomorphic to
+`RuLakeBundle::new` (memory_class = `genomic`). 6 tests pass; bench
+shows pull_vectors at 35.9 GiB/s and a 555× cache cold→hot ratio
+(commit `ad251e5`). Security review (commit `beed210`) surfaced 6
+findings (0 High, 1 Med, ...): R-2 mitigated, R-3 doc fixed, R-1
+(witness/content decoupling) accepted for v0.0 with mitigation
+deferred to the `mcp-rvdna` companion-server layer where untrusted
+callers can inject collections.
+
+T1 (warm mmap protein embeddings + attention) lands in v0.1; T2
+(cold lazy raw DNA + epigenomic series) lands in v0.2 per §6 of
+this ADR.
+
+**Originally proposed (2026-04-27)** — drafted on
+`research/management-ui` as the third file of the rvDNA v2 corpus,
+after `v2-spec.md` and `integration-with-rulake.md`.
 
 ## Date
 

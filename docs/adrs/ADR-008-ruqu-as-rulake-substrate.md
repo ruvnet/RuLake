@@ -2,14 +2,27 @@
 
 ## Status
 
-**Proposed (2026-04-27)** — no `ruqu-backend/` or `mcp-ruqu/` crates
-yet. This ADR fixes the shape *before* the first PR opens so we don't
-relitigate the witness-mapping, the SIMD-path-affects-witness call,
-the cache-aware planner refactor, or the runtime_class hardware-
-attribution discipline at code review time. Sister ADR to ADR-007
-(rvDNA v2 — being authored in parallel under
-`docs/research/rvdna/ADR-007-rvdna-as-rulake-substrate.md` per the
-parallel rvDNA agent's brief) and to the in-flight ruLake ADR family.
+**Accepted — Scaffolded (2026-04-27)** — `ruqu-backend/` v0.0.1 is
+landed (commit `08261ae`); `mcp-ruqu/` v0.0.1 scaffold lands in the
+following commit. v0.0 ships the StateVector backend only — a tiny
+exact simulator (≤16 qubits, mini-IR: H/X/Y/Z/S/T/Rz/CX) with witness
+derivation byte-isomorphic to `RuLakeBundle::new` (memory_class =
+`quantum`). 9 tests pass; bench shows simulate at 2.15 Gelem/s and
+identifies `Vec<Vec<f32>>` serialization as v0.1's first
+optimization target (commit `ad251e5`). Security review surfaced 6
+findings (0 High, 1 Med Mitigated, ...): R-2 mitigated by
+`limits.rs` (qubit cap 16 for v0.0, 30 hard ceiling), R-3 doc fixed
+in commit `126f993`, R-1 (witness/content decoupling) accepted for
+v0.0 with mitigation deferred to the `mcp-ruqu` companion server.
+
+Stabilizer / TensorNetwork backends ship in v0.1; Hardware backend
++ QEC scheduler land in v0.2 per §4 of this ADR.
+
+**Originally proposed (2026-04-27)** — fixed the shape *before* the
+first PR opened so the witness-mapping, the SIMD-path-affects-witness
+call, the cache-aware planner refactor, and the runtime_class
+hardware-attribution discipline wouldn't relitigate at code-review.
+Sister ADR to ADR-007 (rvDNA v2).
 
 ## Date
 

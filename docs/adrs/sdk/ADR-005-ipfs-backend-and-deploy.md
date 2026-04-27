@@ -2,13 +2,21 @@
 
 ## Status
 
-**Proposed (2026-04-26)** — no `ipfs-backend/` crate yet. This ADR
-fixes the shape *before* the first PR opens so we don't relitigate the
-client / pinning / public-gateway / deployment questions at code
-review. Sister ADR to [ADR-004](./ADR-004-rulake-mcp-server.md) (MCP
-server) and the GCS backend already shipped at `gcs-backend/`
-(commit `c706dc6`); IPFS is the second cloud-shaped backend and the
-first one whose addressing model is content-hash-native.
+**Accepted (2026-04-26 → v0.1 as of 2026-04-27)** — `ipfs-backend/`
+crate is shipping. v0.1 carries the kubo client + gateway-fallback
+mode, witness-anchored bundle distribution by CIDv1, and the offline
+publish/fetch round-trip that the smoke suite exercises. Security
+review (commit `8ce3689`) surfaced **R-IPFS-1**: `fetch_bundle` was
+warn-only on `data_ref ≠ ipfs://{cid}` mismatch — closed by hard
+refuse with code `IPFS_BUNDLE_CID_MISMATCH` in commit `56b497b`.
+Sister ADR to [ADR-004](./ADR-004-rulake-mcp-server.md); the GCS
+backend (`gcs-backend/`, commit `c706dc6`) was the first cloud-shaped
+backend, IPFS is the second and the first whose addressing model is
+content-hash-native.
+
+**Originally proposed (2026-04-26)** — fixed the shape before the
+first PR opened so the client / pinning / public-gateway / deployment
+questions wouldn't relitigate at code-review time.
 
 ## Date
 
