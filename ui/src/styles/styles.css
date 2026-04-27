@@ -1254,7 +1254,12 @@ html, body {
   gap: 12px;
 }
 .intro-show-frame {
-  background: linear-gradient(180deg, var(--ink-2) 0%, var(--ink-1) 100%);
+  /* `--ink-1` was a typo — only --ink, --ink-2, --ink-3, --ink-4 exist
+     in the theme. The undefined var fell through to transparent at the
+     gradient's bottom stop, so the slide frame ended up see-through and
+     the underlying mock-data animations bled into the slide text. Fix:
+     use --ink (the deepest defined ink) as the bottom stop. */
+  background: linear-gradient(180deg, var(--ink-2) 0%, var(--ink) 100%);
   border: 1px solid var(--rule);
   position: relative;
   overflow: hidden;
