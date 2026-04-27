@@ -29,7 +29,7 @@ set -euo pipefail
 
 UI_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO_DIR="$(cd "${UI_DIR}/.." && pwd)"
-RVDNA_DIR="${REPO_DIR}/mcp-rvdna"
+RVDNA_DIR="${REPO_DIR}/crates/mcp-rvdna"
 
 PREVIEW_PORT=4173
 RVDNA_PORT=17441
