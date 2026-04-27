@@ -14,6 +14,8 @@
 //! reshaping any v0.0.1 callers.
 
 use std::collections::VecDeque;
+use std::io::Write;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
@@ -28,7 +30,20 @@ const TAIL_CAPACITY: usize = 256;
 /// handlers via `Arc`-internal mutability.
 #[derive(Clone)]
 pub struct AuditSink {
+    inner: Arc<Inner>,
     tail: Arc<Mutex<VecDeque<Value>>>,
+}
+
+/// Backing store for an [`AuditSink`]. v0.0.1 shipped only `Stderr`;
+/// v0.1 adds `File` so the `--audit-file` CLI flag (mcp-ruqu's `http`
+/// + `stdio` subcommands) can persist JSONL the same way mcp-rvdna and
+/// mcp-server do. Schema unchanged.
+enum Inner {
+    Stderr,
+    File {
+        file: Mutex<Option<std::fs::File>>,
+        path: PathBuf,
+    },
 }
 
 impl Default for AuditSink {
@@ -41,8 +56,33 @@ impl AuditSink {
     /// Stderr sink — every emit also pushes onto the in-memory tail.
     pub fn stderr() -> Self {
         Self {
+            inner: Arc::new(Inner::Stderr),
             tail: Arc::new(Mutex::new(VecDeque::with_capacity(TAIL_CAPACITY))),
         }
+    }
+
+    /// JSONL file sink. Creates parents if missing; opens the file in
+    /// append mode so multiple server runs accumulate cleanly. Mirrors
+    /// `mcp-rvdna::audit::AuditSink::open_file` so operator tooling can
+    /// treat both audit streams interchangeably.
+    pub fn open_file(path: impl Into<PathBuf>) -> std::io::Result<Self> {
+        let path = path.into();
+        if let Some(parent) = path.parent() {
+            if !parent.as_os_str().is_empty() {
+                std::fs::create_dir_all(parent)?;
+            }
+        }
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)?;
+        Ok(Self {
+            inner: Arc::new(Inner::File {
+                file: Mutex::new(Some(file)),
+                path,
+            }),
+            tail: Arc::new(Mutex::new(VecDeque::with_capacity(TAIL_CAPACITY))),
+        })
     }
 
     /// Snapshot the last `n` audit entries (newest last). Used by
@@ -59,9 +99,18 @@ impl AuditSink {
         guard.iter().skip(start).cloned().collect()
     }
 
-    /// Emit one audit line. Failures (lock poisoned, serializer broken)
-    /// are logged via `tracing` and otherwise swallowed — auditing a
-    /// tool call must never crash the request path.
+    /// Path of the underlying file, when the sink is file-backed.
+    /// Useful for diagnostics ("audit -> JSONL file <path>" log line).
+    pub fn path(&self) -> Option<&std::path::Path> {
+        match &*self.inner {
+            Inner::File { path, .. } => Some(path),
+            Inner::Stderr => None,
+        }
+    }
+
+    /// Emit one audit line. Failures (lock poisoned, serializer broken,
+    /// disk full) are logged via `tracing` and otherwise swallowed —
+    /// auditing a tool call must never crash the request path.
     pub fn emit(&self, entry: AuditEntry) {
         let value: Value = match serde_json::to_value(&entry) {
             Ok(v) => v,
@@ -76,9 +125,33 @@ impl AuditSink {
             }
             buf.push_back(value.clone());
         }
-        match serde_json::to_string(&value) {
-            Ok(line) => tracing::info!(target: "ruqu.audit", "{line}"),
-            Err(e) => tracing::warn!(error = %e, "ruqu audit stringify failed"),
+        let line = match serde_json::to_string(&value) {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!(error = %e, "ruqu audit stringify failed");
+                return;
+            }
+        };
+        match &*self.inner {
+            Inner::Stderr => {
+                tracing::info!(target: "ruqu.audit", "{line}");
+            }
+            Inner::File { file, path } => {
+                let mut guard = match file.lock() {
+                    Ok(g) => g,
+                    Err(p) => {
+                        tracing::error!("ruqu audit lock poisoned at {}", path.display());
+                        p.into_inner()
+                    }
+                };
+                if let Some(f) = guard.as_mut() {
+                    if let Err(e) = writeln!(f, "{line}") {
+                        tracing::warn!(error = %e, "ruqu audit write failed");
+                    } else if let Err(e) = f.flush() {
+                        tracing::warn!(error = %e, "ruqu audit flush failed");
+                    }
+                }
+            }
         }
     }
 }

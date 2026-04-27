@@ -19,6 +19,11 @@
 #   3. mcp-rvdna/scripts/http-smoke.sh     — rvdna-mcp HTTP transport
 #                                             in isolation (handshake
 #                                             + 5 tools + refusal path).
+#   4. mcp-ruqu/scripts/http-smoke.sh      — ruqu-mcp HTTP transport
+#                                             in isolation (same iter 41
+#                                             CORS contract; 5 ruqu_*
+#                                             tools + RUQU_OPTIMIZE_STUB
+#                                             stub-envelope check).
 #
 # Usage:
 #   ./scripts/smoke-all.sh
@@ -57,6 +62,7 @@ fi
 SMOKES=(
   "${CONSOLE_LABEL}|${CONSOLE_SMOKE}"
   "rvdna-mcp HTTP|${REPO_DIR}/mcp-rvdna/scripts/http-smoke.sh"
+  "ruqu-mcp HTTP|${REPO_DIR}/mcp-ruqu/scripts/http-smoke.sh"
 )
 if [[ "${SKIP_CROSS}" -eq 0 ]]; then
   SMOKES+=("Console + mcp-rvdna cross-component|${REPO_DIR}/ui/scripts/smoke-cross-mcp.sh")

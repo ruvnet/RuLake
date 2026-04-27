@@ -1,25 +1,32 @@
-# ruQu MCP companion server (ADR-008 §6 v0.0.1).
+# ruQu MCP companion server (ADR-008 §6 v0.1).
 #
-# v0.0.1 scope (this PR):
-#   - Five tools wired via rmcp's `#[tool_router]` macro pattern,
-#     mirroring `mcp-server/src/server.rs`:
-#       * `ruqu_simulate`    (publish-tier — allocates Hilbert-space RAM)
-#       * `ruqu_verify`      (read-tier   — replays + byte-equal witness check)
-#       * `ruqu_replay`      (read-tier   — cache short-circuit via lake.search_one)
-#       * `ruqu_optimize`    (read-tier   — v0.0.1 stub; planner ships in v0.1)
-#       * `ruqu_qec_schedule`(read-tier   — v0.0.1 stub; QEC ships in v0.2)
-#   - JSONL audit emission with the same shape as mcp-server (ADR-004 §7).
-#   - R-1 mitigation: hard-refuse empty / overlong `circuit.id`.
-#   - R-2 mitigation: `enforce_qubit_cap` BEFORE `execute()`.
-#   - R-3: in-band documentation on `Rz` (theta not in witness in v0.0).
+# v0.0.1 shipped the five tools (rmcp `#[tool_router]` pattern):
+#   * `ruqu_simulate`    (publish-tier — allocates Hilbert-space RAM)
+#   * `ruqu_verify`      (read-tier   — replays + byte-equal witness check)
+#   * `ruqu_replay`      (read-tier   — cache short-circuit via lake.search_one)
+#   * `ruqu_optimize`    (read-tier   — stub; planner ships in v0.2)
+#   * `ruqu_qec_schedule`(read-tier   — stub; QEC ships in v0.2)
+# plus JSONL audit, R-1 / R-2 / R-3 mitigations, stdio transport.
 #
-# Out of scope for v0.0.1 (deferred to later mcp-ruqu releases):
-#   - HTTP transport, mTLS, JWT/JWKS, rate limiting, replay guard
-#     (mcp-server already provides those building blocks; we'll wire
-#      them in mcp-ruqu v0.1 when the planner stub turns real).
+# v0.1 adds (this release):
+#   - Streamable HTTP transport, lifted near-verbatim from
+#     `mcp-rvdna::http` (commit a66d65f) — same iter 32 CORS layer
+#     (echo Origin, expose `mcp-session-id`, short-circuit OPTIONS
+#     preflight). Default bind 127.0.0.1:7442 (avoids clash with
+#     rvdna-mcp's documented 7441 default).
+#   - `ruqu-mcp` binary with `stdio` / `http` subcommands matching
+#     `rvdna-mcp`'s CLI shape so a single operator script can drive
+#     both servers.
+#   - JSONL `--audit-file` sink (was stderr-only in v0.0.1).
+#
+# Out of scope for v0.1 (deferred to mcp-ruqu v0.2):
+#   - mTLS, JWT/JWKS, rate limiting, replay guard. The HTTP `serve()`
+#     signature already carries the `AuthMode` / `BearerAuth` /
+#     `AllowBearerOnPublic` / `InsecureAllowNoAuth` types so the
+#     v0.2 lift from `mcp-server::http` is mechanical.
 #   - The `simulate` / `hardware` / `verify` capability tier additions
 #     from ADR-008 §6 Decision 4 — capability set is plumbed but the
-#     v0.0.1 tools all gate on the existing `Read` / `Publish` tiers
+#     v0.1 tools still gate on the existing `Read` / `Publish` tiers
 #     so we don't fork the policy module before mcp-server agrees.
 #
 # Standalone Cargo package per ADR-001 (no root workspace; sibling
@@ -27,13 +34,17 @@
 
 [package]
 name        = "ruvector-rulake-mcp-ruqu"
-version     = "0.0.1"
+version     = "0.1.0"
 edition     = "2021"
 rust-version = "1.89"
 license     = "MIT OR Apache-2.0"
 authors     = ["Ruvector Team"]
 repository  = "https://github.com/ruvnet/RuLake"
 description = "MCP companion server for ruQu v2 — agent-callable, witness-aware quantum execution surface (ADR-008 §6)"
+
+[[bin]]
+name = "ruqu-mcp"
+path = "src/main.rs"
 
 [dependencies]
 # The substrate this server wraps. Path-dep onto the sibling
@@ -45,15 +56,26 @@ ruvector-rulake-ruqu = { path = "../ruqu-backend" }
 # byte-equality semantics. Match the version mcp-server pins.
 rulake = "2.2"
 
-# Official Rust MCP SDK. Same feature set mcp-server uses, minus the
-# HTTP transport — v0.0.1 ships stdio + the in-process router only.
-# `transport-streamable-http-server` lands when v0.1 wires HTTP.
+# Official Rust MCP SDK. Same feature set mcp-server / mcp-rvdna use,
+# now including `transport-streamable-http-server` for the v0.1 HTTP
+# transport.
 rmcp = { version = "1.5", default-features = false, features = [
     "server",
     "transport-io",
+    "transport-streamable-http-server",
     "macros",
     "schemars",
 ] }
+
+# Streamable HTTP transport stack — hyper 1.x (matches what rmcp uses
+# internally for `transport-streamable-http-server`). Mirrors mcp-rvdna
+# / mcp-server byte-identical so the workspace target/ stays single-
+# rooted when CI builds all three crates together.
+hyper = { version = "1", features = ["server", "http1", "http2"] }
+hyper-util = { version = "0.1", features = ["tokio", "server-auto", "service"] }
+http = "1"
+http-body-util = "0.1"
+bytes = "1"
 
 # Async runtime — matches mcp-server's pinned set.
 tokio = { version = "1.39", features = ["rt-multi-thread", "macros", "io-std", "signal", "sync", "net", "time"] }
@@ -63,8 +85,11 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 schemars = "1.0"
 
-# Structured logging — matches mcp-server.
+# Structured logging — matches mcp-server. `tracing-subscriber` only
+# ships with the binary entry point; the library leaves subscriber
+# choice to the caller.
 tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
 # Error type for callers; same idiom mcp-server uses.
 anyhow = "1"

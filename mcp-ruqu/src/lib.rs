@@ -10,14 +10,21 @@
 //! see `server.rs` for the table — with the R-1 / R-2 / R-3 security
 //! mitigations enforced at the entry of every tool handler.
 //!
-//! Out of scope for v0.0.1 (deferred to mcp-ruqu v0.1):
-//! - HTTP / mTLS / JWT — wire transport stays stdio + in-process.
+//! v0.1 adds the Streamable HTTP transport (lifted near-verbatim from
+//! `mcp-rvdna::http`, including the iter 32 CORS layer). Tool surface
+//! is unchanged.
+//!
+//! Out of scope for v0.1 (deferred to mcp-ruqu v0.2):
+//! - mTLS / JWT / JWKS / replay guard — mcp-server already provides
+//!   those building blocks; the v0.1 HTTP `serve()` signature already
+//!   carries the `AuthMode` / `AllowBearerOnPublic` /
+//!   `InsecureAllowNoAuth` types so the v0.2 lift is mechanical.
 //! - The `simulate` / `hardware` / `verify` capability tier additions
 //!   from ADR-008 §6 Decision 4 — for now we ride on mcp-server's
 //!   existing `Read` / `Publish` tiers so the policy module doesn't
 //!   need to fork before mcp-server agrees.
 //! - `mcp-server::audit::AuditEntry` unification via a shared
-//!   `audit-only` feature on `mcp-server` — v0.0.1 ships its own
+//!   `audit-only` feature on `mcp-server` — v0.1 still ships its own
 //!   structurally-identical type so we don't gate this PR on a
 //!   change to a sibling crate.
 
@@ -29,9 +36,11 @@
 #![allow(missing_docs)]
 
 pub mod audit;
+pub mod http;
 pub mod server;
 
 pub use audit::{AuditEntry, AuditSink, PolicyDecision};
+pub use http::{AllowBearerOnPublic, AuthMode, BearerAuth, InsecureAllowNoAuth};
 pub use server::{
     ReplayResponse, RuquMcpServer, SimulateRequest, SimulateResponse, StubRequest,
     StubResponse, VerifyRequest, VerifyResponse,
