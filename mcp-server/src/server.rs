@@ -326,6 +326,40 @@ impl RuLakeMcpServer {
         }))
     }
 
+    #[tool(
+        name = "rulake_list_collections",
+        description = "Read: list the collections (id, dim, row_count) a registered backend exposes. \
+                       Closes ADR-006 server-gap #1 for the ruLake Console's Browse screen live mode. \
+                       Read-tier — gated by --capabilities read."
+    )]
+    pub async fn rulake_list_collections(
+        &self,
+        Parameters(args): Parameters<ListCollectionsArgs>,
+    ) -> Result<Json<ListCollectionsResponse>, McpError> {
+        require_cap(&self.capabilities, Capability::Read)?;
+        let lake = Arc::clone(&self.planner.lake);
+        let backend = args.backend.clone();
+        let collections = self
+            .planner
+            .workers
+            .submit(move || lake.list_collections(&backend))
+            .await
+            .map_err(|e| McpError::internal_error(format!("RULAKE_DEGRADED: {e}"), None))?
+            .map_err(|e| match e {
+                rulake::error::RuLakeError::UnknownBackend(b) => {
+                    McpError::invalid_params(format!("UNKNOWN_BACKEND: {b}"), None)
+                }
+                other => McpError::internal_error(format!("RULAKE_INTERNAL: {other}"), None),
+            })?;
+        Ok(Json(ListCollectionsResponse {
+            backend: args.backend,
+            collections: collections
+                .into_iter()
+                .map(|id| CollectionEntry { id })
+                .collect(),
+        }))
+    }
+
     // ─── publish-tier tools ──────────────────────────────────────────
 
     #[tool(
@@ -455,7 +489,7 @@ fn require_cap(caps: &CapabilitySet, required: Capability) -> Result<(), McpErro
 fn required_cap_for_tool(name: &str) -> Capability {
     match name {
         // Public surface — read tier.
-        "rulake_query" | "rulake_list_backends" => Capability::Read,
+        "rulake_query" | "rulake_list_backends" | "rulake_list_collections" => Capability::Read,
         // Mutation tools — publish/admin tiers.
         "rulake_publish_bundle" | "rulake_refresh_from_bundle_dir" => Capability::Publish,
         "rulake_save_cache_to_dir"
@@ -526,6 +560,24 @@ pub struct EmptyResponse {}
 #[derive(Debug, Serialize, Deserialize, rmcp::schemars::JsonSchema)]
 pub struct ListBackendsResponse {
     pub backends: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct ListCollectionsArgs {
+    /// Backend id to enumerate. Use rulake_list_backends if you don't
+    /// know the registered ids.
+    pub backend: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct CollectionEntry {
+    pub id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct ListCollectionsResponse {
+    pub backend: String,
+    pub collections: Vec<CollectionEntry>,
 }
 
 // ─── ServerHandler — emitted from #[tool_handler] ────────────────────
