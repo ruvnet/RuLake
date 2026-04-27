@@ -33,12 +33,16 @@ use rulake::backend::{BackendAdapter, CollectionId, PulledBatch};
 use rulake::error::Result;
 
 pub mod circuit;
+pub mod hardware;
 pub mod limits;
+pub mod qec;
 pub mod stabilizer;
 pub mod state_vector;
 pub mod witness;
 
 pub use circuit::{Circuit, Gate};
+pub use hardware::{HardwareConfig, RuquHardwareStubBackend, HARDWARE_STUB_BACKEND_TAG};
+pub use qec::{plan_surface_code, QecError, QecPlan};
 pub use stabilizer::{
     simulate as simulate_stabilizer, StabilizerError, StabilizerState, Tableau,
 };
