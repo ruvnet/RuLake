@@ -1,0 +1,42 @@
+# ruLake AVX-512 kernel — SIMD impl of the ADR-157 `VectorKernel` trait.
+#
+# This crate provides an `Avx512Kernel` that uses x86_64 AVX-512
+# intrinsics (avx512f + avx512bw + avx512vl + avx512vpopcntdq) to
+# accelerate the L2² distance and rabitq Hamming popcount paths.
+#
+# Construction is fail-closed: `Avx512Kernel::new()` returns `None` if
+# any of the required CPU features are missing at runtime, so a binary
+# built with this crate enabled still loads and runs on non-AVX-512
+# hosts — it just falls back to whatever else the operator registered
+# (typically `CpuNaiveKernel`).
+#
+# Standalone Cargo package per ADR-001 (no root workspace).
+#
+# Build:  cargo build --release --manifest-path kernel-avx512/Cargo.toml
+# Test:   cargo test  --release --manifest-path kernel-avx512/Cargo.toml
+# Bench:  cargo bench --manifest-path kernel-avx512/Cargo.toml
+
+[package]
+name = "ruvector-rulake-kernel-avx512"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+authors = ["Ruvector Team"]
+repository = "https://github.com/ruvnet/RuLake"
+description = "AVX-512 VectorKernel impl for ruLake (ADR-157)"
+readme = "README.md"
+
+[dependencies]
+rulake = { path = "..", version = "2.3.0-alpha.1" }
+
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name    = "kernel_l2"
+harness = false
+
+[profile.release]
+opt-level     = 3
+lto           = "thin"
+codegen-units = 1
