@@ -120,6 +120,28 @@ function Topbar({ envTab, setEnvTab, onMenu }) {
     window.addEventListener('rulake:live-connected', onConnect);
     return () => window.removeEventListener('rulake:live-connected', onConnect);
   }, []);
+  // Auto-probe the default live endpoint on boot so visitors landing
+  // on the page see "● LIVE" automatically when the hosted demo MCP
+  // is up — instead of having to navigate to Connect and click Test.
+  // Probe is fire-and-forget; failure leaves the pill at "○ DEMO".
+  React.useEffect(() => {
+    if (window.RULakeActiveClient) return; // already connected
+    const url = 'https://rulake-mcp.ruv.io/';
+    let cancelled = false;
+    (async () => {
+      try {
+        if (!window.RuLakeHttp) return;
+        const client = new window.RuLakeHttp(url, { token: null });
+        await client.connect();
+        if (cancelled) return;
+        window.RULakeActiveClient = { endpoint: url, mode: 'none', token: null, sessionId: client.sessionId, client };
+        window.dispatchEvent(new CustomEvent('rulake:live-connected', {
+          detail: { endpoint: url, sessionId: client.sessionId, toolsCount: 0 },
+        }));
+      } catch { /* offline / cert pending / whatever — leave at DEMO */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
   let liveDisplay;
   if (live && live.endpoint) {
     let host = live.endpoint;

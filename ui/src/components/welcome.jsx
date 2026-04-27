@@ -188,16 +188,28 @@ function IntroSlideshow() {
         </div>
       </div>
       <div className="intro-show-controls">
+        <button
+          className="intro-show-arrow"
+          onClick={() => { setPaused(true); setIdx(i => (i - 1 + slides.length) % slides.length); }}
+          aria-label="Previous slide"
+          title="Previous"
+        >‹</button>
         <div className="intro-show-dots">
           {slides.map((_, i) => (
             <button
               key={i}
               className={'intro-show-dot' + (i === idx ? ' active' : '')}
-              onClick={() => setIdx(i)}
+              onClick={() => { setPaused(true); setIdx(i); }}
               aria-label={`Go to slide ${i + 1}`}
             />
           ))}
         </div>
+        <button
+          className="intro-show-arrow"
+          onClick={() => { setPaused(true); setIdx(i => (i + 1) % slides.length); }}
+          aria-label="Next slide"
+          title="Next"
+        >›</button>
         <button className="intro-show-pause" onClick={() => setPaused(p => !p)}>
           {paused ? '▶ play' : '⏸ pause'}
         </button>

@@ -1014,7 +1014,7 @@ html, body {
   align-items: center;
   justify-content: space-between;
   padding: 10px 18px;
-  background: var(--ink-1);
+  background: var(--ink);
   border-bottom: 1px solid var(--rule);
   font-family: 'JetBrains Mono', monospace;
   font-size: 11px;
@@ -1040,7 +1040,7 @@ html, body {
   display: grid !important;
   grid-template-columns: 200px 1fr;
   flex-direction: row !important;
-  background: var(--ink-1);
+  background: var(--ink);
 }
 .welcome-rail {
   background: var(--ink-2);
@@ -1075,7 +1075,7 @@ html, body {
   border: 1px solid var(--rule);
   display: flex; align-items: center; justify-content: center;
   font-size: 10px;
-  background: var(--ink-1);
+  background: var(--ink);
 }
 .welcome-rail-step.active { color: var(--fg); }
 .welcome-rail-step.active .welcome-rail-dot {
@@ -1263,7 +1263,12 @@ html, body {
   border: 1px solid var(--rule);
   position: relative;
   overflow: hidden;
-  min-height: 296px;
+  /* Bumped from 296 → 340 in iter 52 — at 296 the SVG art (130 px) +
+     copy (40-80 px depending on body length) + tag (32 px) plus padding
+     was tight enough that the slide-in animations from art and copy
+     visibly overlapped during transitions. Extra 44 px gives the
+     animations clean separation. */
+  min-height: 340px;
 }
 .intro-show-frame::before {
   content: '';
@@ -1312,6 +1317,13 @@ html, body {
   position: relative;
   z-index: 1;
   padding: 4px 16px 8px;
+  /* Explicit height + overflow:hidden so the SVG can't bleed into the
+     copy below during slide transitions. The art viewBox is 0 0 360 130
+     and the SVG is set to height="130" — locking the container at 138 px
+     (130 + 8 px bottom padding) prevents any inherited flex/grid quirk
+     from letting it grow into the copy region. */
+  height: 138px;
+  overflow: hidden;
   animation: introArtIn 480ms cubic-bezier(0.2, 0.7, 0.25, 1) both;
 }
 .intro-show-copy {
@@ -1411,6 +1423,29 @@ html, body {
   gap: 12px;
   padding: 0 4px;
 }
+.intro-show-arrow {
+  background: transparent;
+  border: 1px solid var(--rule);
+  color: var(--fg-dim);
+  width: 28px;
+  height: 28px;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 120ms, color 120ms, background 120ms;
+}
+.intro-show-arrow:hover {
+  border-color: var(--verifier-bright);
+  color: var(--verifier-bright);
+  background: rgba(var(--verifier-rgb), 0.06);
+}
+.intro-show-arrow:focus-visible {
+  outline: 1px solid var(--verifier-bright);
+  outline-offset: 2px;
+}
 .intro-show-dots {
   display: flex;
   gap: 6px;
@@ -1459,7 +1494,7 @@ html, body {
   padding: 20px;
 }
 .modal {
-  background: var(--ink-1);
+  background: var(--ink);
   border: 1px solid var(--rule);
   box-shadow: 0 20px 60px rgba(0,0,0,0.6), 0 0 0 1px rgba(45,140,93,0.1);
   max-height: 80vh;
