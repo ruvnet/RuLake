@@ -141,6 +141,40 @@ else
   err "expected 5 tools, got: ${TOOLS:-<unset>}"
 fi
 
+hdr "Browse against rvdna-mcp (must refuse cleanly — no rulake_list_collections)"
+# The Console's Browse screen calls rulake_list_collections to populate
+# the backend list. rvdna-mcp doesn't expose that tool (it serves
+# rvdna_* tools instead), so the call MUST come back as a refusal
+# with audit code LIST_COLLECTIONS_FAILED rather than crash the UI or
+# log a console error. This validates the Console's MCP-error → audit
+# row path against an MCP server that implements a different tool
+# surface — the same pattern any future companion server will use.
+npx --yes agent-browser eval "
+  (async function() {
+    const items = Array.from(document.querySelectorAll('.nav-item-rich'));
+    const browse = items.find(el => /browse|backends/i.test(el.textContent || ''));
+    if (browse) browse.click();
+    await new Promise(r => setTimeout(r, 600));
+    const refresh = Array.from(document.querySelectorAll('button')).find(b => /^(Refresh|REFRESH)$/i.test(b.textContent.trim()));
+    if (refresh) refresh.click();
+    await new Promise(r => setTimeout(r, 3500));
+    return 'browse-refresh-fired';
+  })()
+" > /dev/null 2>&1
+ok "Browse.refresh fired against rvdna-mcp"
+
+REFUSAL_ROWS=$(npx --yes agent-browser eval "
+  (async () => {
+    const rows = await window.RuStore.list('audit');
+    return rows.filter(r => r.code === 'LIST_COLLECTIONS_FAILED' && r.outcome === 'refused').length;
+  })()
+" 2>&1 | tr -d '"' | tail -1)
+if [[ "${REFUSAL_ROWS}" -ge 1 ]]; then
+  ok "LIST_COLLECTIONS_FAILED · refused audit row landed (${REFUSAL_ROWS})"
+else
+  err "expected LIST_COLLECTIONS_FAILED · refused row, got: ${REFUSAL_ROWS:-0}"
+fi
+
 hdr "audit row"
 AUDIT=$(npx --yes agent-browser eval "
   (async () => {
