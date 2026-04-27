@@ -1,0 +1,79 @@
+# ruQu MCP companion server (ADR-008 §6 v0.0.1).
+#
+# v0.0.1 scope (this PR):
+#   - Five tools wired via rmcp's `#[tool_router]` macro pattern,
+#     mirroring `mcp-server/src/server.rs`:
+#       * `ruqu_simulate`    (publish-tier — allocates Hilbert-space RAM)
+#       * `ruqu_verify`      (read-tier   — replays + byte-equal witness check)
+#       * `ruqu_replay`      (read-tier   — cache short-circuit via lake.search_one)
+#       * `ruqu_optimize`    (read-tier   — v0.0.1 stub; planner ships in v0.1)
+#       * `ruqu_qec_schedule`(read-tier   — v0.0.1 stub; QEC ships in v0.2)
+#   - JSONL audit emission with the same shape as mcp-server (ADR-004 §7).
+#   - R-1 mitigation: hard-refuse empty / overlong `circuit.id`.
+#   - R-2 mitigation: `enforce_qubit_cap` BEFORE `execute()`.
+#   - R-3: in-band documentation on `Rz` (theta not in witness in v0.0).
+#
+# Out of scope for v0.0.1 (deferred to later mcp-ruqu releases):
+#   - HTTP transport, mTLS, JWT/JWKS, rate limiting, replay guard
+#     (mcp-server already provides those building blocks; we'll wire
+#      them in mcp-ruqu v0.1 when the planner stub turns real).
+#   - The `simulate` / `hardware` / `verify` capability tier additions
+#     from ADR-008 §6 Decision 4 — capability set is plumbed but the
+#     v0.0.1 tools all gate on the existing `Read` / `Publish` tiers
+#     so we don't fork the policy module before mcp-server agrees.
+#
+# Standalone Cargo package per ADR-001 (no root workspace; sibling
+# crates reach each other via path-deps; rulake from crates.io v2.2).
+
+[package]
+name        = "ruvector-rulake-mcp-ruqu"
+version     = "0.0.1"
+edition     = "2021"
+rust-version = "1.89"
+license     = "MIT OR Apache-2.0"
+authors     = ["Ruvector Team"]
+repository  = "https://github.com/ruvnet/RuLake"
+description = "MCP companion server for ruQu v2 — agent-callable, witness-aware quantum execution surface (ADR-008 §6)"
+
+[dependencies]
+# The substrate this server wraps. Path-dep onto the sibling
+# `ruqu-backend/` crate per ADR-001; no workspace.
+ruvector-rulake-ruqu = { path = "../ruqu-backend" }
+
+# ruLake itself — needed for `RuLake::search_one` (the cache short-
+# circuit `ruqu_replay` rides on) and for `RuLakeBundle` / witness
+# byte-equality semantics. Match the version mcp-server pins.
+rulake = "2.2"
+
+# Official Rust MCP SDK. Same feature set mcp-server uses, minus the
+# HTTP transport — v0.0.1 ships stdio + the in-process router only.
+# `transport-streamable-http-server` lands when v0.1 wires HTTP.
+rmcp = { version = "1.5", default-features = false, features = [
+    "server",
+    "transport-io",
+    "macros",
+    "schemars",
+] }
+
+# Async runtime — matches mcp-server's pinned set.
+tokio = { version = "1.39", features = ["rt-multi-thread", "macros", "io-std", "signal", "sync", "net", "time"] }
+
+# Serialization — matches mcp-server (and rmcp 1.5's resolved schemars).
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+schemars = "1.0"
+
+# Structured logging — matches mcp-server.
+tracing = "0.1"
+
+# Error type for callers; same idiom mcp-server uses.
+anyhow = "1"
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1.39", features = ["macros", "rt-multi-thread"] }
+
+[profile.release]
+opt-level     = 3
+lto           = "thin"
+codegen-units = 1
