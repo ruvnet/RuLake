@@ -1,27 +1,38 @@
 //! ruQu v2 BackendAdapter for ruLake (ADR-008).
 //!
-//! v0.0 shipped the StateVector backend; **v0.1 adds the Stabilizer
-//! backend** ([`RuquStabilizerBackend`] / [`stabilizer::simulate`])
-//! built on the Aaronson–Gottesman tableau formalism. Clifford-only
-//! circuits run in polynomial time and at much wider `n` than the
-//! exponential StateVector path — see the bench at
-//! `benches/stabilizer.rs` for the headline numbers. The TensorNetwork
-//! / Clifford+T / Hardware backends land in v0.2 per ADR-008 §4 and
-//! `docs/research/ruqu/integration-with-rulake.md`.
+//! v0.0 shipped the StateVector backend; v0.1 added the Stabilizer
+//! backend (Aaronson–Gottesman tableau, polynomial-time Clifford-only
+//! simulation). **v0.2 completes the backend trio with the
+//! TensorNetwork backend** ([`RuquTensorNetworkBackend`] /
+//! [`tensor_network::simulate`]) — a Matrix Product State (MPS)
+//! simulator using `ndarray` rank-3 tensors with SVD-based truncation
+//! to a configurable bond-dimension cap, alongside the Hardware (stub)
+//! backend ([`RuquHardwareStubBackend`]) and QEC scheduler
+//! ([`plan_surface_code`]) shipped in the parallel v0.2 commit.
+//!
+//! Each backend has a different sweet spot:
+//!   - **StateVector**: small-N, exact, universal. Cap n=16.
+//!   - **Stabilizer**: large-N, polynomial, Clifford-only. Cap n=32.
+//!   - **TensorNetwork**: 100+ qubits at low entanglement, *universal*
+//!     (handles T / Rz). Truncation error is bounded by the bond cap.
+//!   - **Hardware (stub)**: deterministic noise channel; v0.3 wires
+//!     real cloud QPU connectors through `HardwareConfig`.
 //!
 //! Trust boundary: the witness ([`witness::ruqu_bundle`]) is byte-
 //! isomorphic to a native `RuLakeBundle`. Two deployments running the
 //! same circuit at the same seed produce identical SHAKE-256(32)
 //! witnesses and share cache — that's the cross-process replay
-//! property the ADR §3 trust chain hinges on. v0.1 keeps the per-
-//! backend tag in `data_ref` (`"sv"` vs `"stabilizer"`), so the same
-//! all-Clifford circuit on the two backends produces *distinct*
-//! witnesses. v0.2 introduces a `--concordance-mode` strip per
-//! ADR-008 §G4 so the two backends can attest the same result.
+//! property the ADR §3 trust chain hinges on. v0.2 keeps the per-
+//! backend tag in `data_ref` (`"sv"` / `"stabilizer"` /
+//! `"tensor_network"` / `"hardware-stub"`), so the same all-Clifford
+//! circuit on four backends produces four *distinct* witnesses. The
+//! `--concordance-mode` strip per ADR-008 §G4 is now a v0.3 deliverable.
 //!
-//! v0.1 is still schema-light: the mini-IR (H/X/Y/Z/S/T/Rz/CX) is
-//! enough to demo Bell pairs end-to-end on both backends. v0.0.2
-//! adds an OpenQASM 3.0 frontend.
+//! v0.2 is still schema-light: the mini-IR (H/X/Y/Z/S/T/Rz/CX) is
+//! enough to demo Bell pairs end-to-end on every backend, and
+//! TensorNetwork additionally exercises non-Clifford T / Rz on
+//! 60+ qubit chains that StateVector cannot allocate. The OpenQASM
+//! 3.0 frontend lands in v0.3.
 
 #![deny(unsafe_code)]
 #![warn(missing_docs)]
@@ -38,6 +49,7 @@ pub mod limits;
 pub mod qec;
 pub mod stabilizer;
 pub mod state_vector;
+pub mod tensor_network;
 pub mod witness;
 
 pub use circuit::{Circuit, Gate};
@@ -47,6 +59,9 @@ pub use stabilizer::{
     simulate as simulate_stabilizer, StabilizerError, StabilizerState, Tableau,
 };
 pub use state_vector::{simulate, C};
+pub use tensor_network::{
+    simulate as simulate_tensor_network, Mps, MpsTensor, TensorNetworkError,
+};
 pub use witness::{inputs_for, ruqu_bundle, RuquWitnessInputs, RuquWitnessInputsOwned};
 
 /// One executed circuit's state, keyed by a "collection name" so it
@@ -243,6 +258,136 @@ impl RuquStabilizerBackend {
 }
 
 impl BackendAdapter for RuquStabilizerBackend {
+    fn id(&self) -> &str { &self.id }
+
+    fn list_collections(&self) -> Result<Vec<CollectionId>> {
+        Ok(self.executions.read().expect("poisoned").keys().cloned().collect())
+    }
+
+    fn pull_vectors(&self, collection: &str) -> Result<PulledBatch> {
+        let g = self.executions.read().expect("poisoned");
+        let c = g.get(collection).ok_or_else(|| {
+            rulake::error::RuLakeError::UnknownCollection {
+                backend: self.id.clone(),
+                collection: collection.to_string(),
+            }
+        })?;
+        Ok(PulledBatch {
+            collection: collection.to_string(),
+            ids: c.ids.clone(),
+            vectors: c.vectors.clone(),
+            dim: c.dim,
+            generation: c.generation,
+        })
+    }
+
+    fn generation(&self, collection: &str) -> Result<u64> {
+        let g = self.executions.read().expect("poisoned");
+        let c = g.get(collection).ok_or_else(|| {
+            rulake::error::RuLakeError::UnknownCollection {
+                backend: self.id.clone(),
+                collection: collection.to_string(),
+            }
+        })?;
+        Ok(c.generation)
+    }
+}
+
+/// TensorNetwork BackendAdapter for ruQu (v0.2).
+///
+/// Mirrors [`RuquStateVectorBackend`] and [`RuquStabilizerBackend`]'s
+/// shape: operators construct it with a backend id and a default bond-
+/// dim cap, call [`Self::execute`] (or [`Self::execute_with_bond_dim`]
+/// for an override) to simulate the circuit on an MPS, then register
+/// the backend with `RuLake`. Backed by [`tensor_network::simulate`].
+///
+/// Unlike Stabilizer the TensorNetwork backend handles *every* gate
+/// in the v0.2 mini-IR (T / Rz included). Unlike StateVector it
+/// scales to wide circuits at low entanglement: an n=64 chain at
+/// bond-dim 8 finishes in tens of microseconds (see
+/// `benches/tensor_network.rs`), where the StateVector path is
+/// already asking for `2^64` complex amplitudes and going OOM long
+/// before the first gate runs.
+///
+/// The witness flowing into the [`RuLakeBundle`] uses the
+/// `"tensor_network"` backend tag, distinct from `"sv"`,
+/// `"stabilizer"`, and `"hardware-stub"`. The `--concordance-mode`
+/// strip per ADR-008 §G4 is a v0.3 deliverable, so all four backends
+/// produce four distinct witnesses for the same all-Clifford circuit
+/// in v0.2.
+pub struct RuquTensorNetworkBackend {
+    id: String,
+    default_bond_dim: usize,
+    executions: RwLock<BTreeMap<String, RuquExecution>>,
+}
+
+impl RuquTensorNetworkBackend {
+    /// Create an empty TensorNetwork backend with a stable id and a
+    /// default bond-dim cap applied to every [`Self::execute`] call.
+    /// Use [`tensor_network::DEFAULT_BOND_DIM`] for the canonical
+    /// `χ = 16` if no operator preference exists.
+    pub fn new(id: impl Into<String>, default_bond_dim: usize) -> Self {
+        Self {
+            id: id.into(),
+            default_bond_dim,
+            executions: RwLock::new(BTreeMap::new()),
+        }
+    }
+
+    /// Simulate `circuit` at the backend's default bond-dim cap, store
+    /// the packed MPS under `name`, and return the witness bundle.
+    /// Errors map onto [`rulake::error::RuLakeError::Backend`].
+    pub fn execute(
+        &self,
+        name: impl Into<String>,
+        circuit: &Circuit,
+    ) -> Result<rulake::RuLakeBundle> {
+        self.execute_with_bond_dim(name, circuit, self.default_bond_dim)
+    }
+
+    /// Like [`Self::execute`] but with a per-call bond-dim override —
+    /// useful for sweeping χ in tests / benches without rebuilding
+    /// the backend.
+    pub fn execute_with_bond_dim(
+        &self,
+        name: impl Into<String>,
+        circuit: &Circuit,
+        bond_dim_cap: usize,
+    ) -> Result<rulake::RuLakeBundle> {
+        let mps = tensor_network::simulate(circuit, bond_dim_cap).map_err(|e| {
+            rulake::error::RuLakeError::Backend {
+                backend: self.id.clone(),
+                detail: e.to_string(),
+            }
+        })?;
+        let vectors = tensor_network::to_pulled_batch_form(&mps);
+        let dim = vectors.first().map(|v| v.len()).unwrap_or(0);
+        let ids: Vec<u64> = (0..vectors.len() as u64).collect();
+        let exec = RuquExecution { ids, vectors, dim, generation: 1 };
+        let inputs = witness::inputs_for(circuit, "tensor_network", 0, exec.generation);
+        let bundle = witness::ruqu_bundle(&inputs.as_borrowed());
+        self.executions.write().expect("poisoned").insert(name.into(), exec);
+        Ok(bundle)
+    }
+
+    /// Bump the generation of an executed circuit — same semantics as
+    /// the other backends' `bump_generation`.
+    pub fn bump_generation(&self, name: &str) -> Result<u64> {
+        let mut g = self.executions.write().expect("poisoned");
+        match g.get_mut(name) {
+            Some(c) => {
+                c.generation = c.generation.checked_add(1).unwrap_or(c.generation);
+                Ok(c.generation)
+            }
+            None => Err(rulake::error::RuLakeError::UnknownCollection {
+                backend: self.id.clone(),
+                collection: name.to_string(),
+            }),
+        }
+    }
+}
+
+impl BackendAdapter for RuquTensorNetworkBackend {
     fn id(&self) -> &str { &self.id }
 
     fn list_collections(&self) -> Result<Vec<CollectionId>> {
