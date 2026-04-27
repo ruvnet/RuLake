@@ -338,7 +338,18 @@ async fn handle(
     let mut request_caps: Option<CapabilitySet> = None;
     match &auth {
         AuthMode::None => {
-            principal = format!("anon:{peer}");
+            // Behind a reverse proxy / managed runtime (Cloud Run etc.)
+            // every request lands with a different internal peer IP,
+            // which would make session-binding flap on every call. We
+            // detect proxy mode by the presence of RULAKE_ALLOWED_HOSTS
+            // (the same env var that loosens the DNS-rebinding guard
+            // for proxied deployments) and fall back to a stable
+            // pseudo-principal so sessions are usable.
+            principal = if std::env::var("RULAKE_ALLOWED_HOSTS").map(|v| !v.trim().is_empty()).unwrap_or(false) {
+                "anon:proxied".to_string()
+            } else {
+                format!("anon:{peer}")
+            };
             client_id = None;
         }
         AuthMode::Bearer(b) => match b.verify(req.headers()) {
