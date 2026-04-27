@@ -273,6 +273,15 @@ expect_substr CONNECT_FAILED
 if [[ "$RUN_LIVE" -eq 1 ]]; then
   expect_substr INIT_OK
   expect_substr LIST_COLLECTIONS_OK
+
+  # Topbar live-indicator: data-mode attribute flips to "live" once
+  # the active client is pinned by ConnectScreen.test.
+  TOPBAR_MODE=$(npx --yes agent-browser eval "document.querySelector('.endpoint-pill')?.getAttribute('data-mode') || 'absent'" 2>&1 | tr -d '"' | tr -d ' ')
+  if [[ "$TOPBAR_MODE" == "live" ]]; then
+    ok "topbar data-mode=live (live indicator visible)"
+  else
+    err "topbar data-mode=$TOPBAR_MODE (expected live)"
+  fi
 fi
 
 hdr "console errors"

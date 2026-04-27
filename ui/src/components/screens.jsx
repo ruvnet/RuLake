@@ -104,6 +104,28 @@ function Topbar({ envTab, setEnvTab, onMenu }) {
     { id: 'eu',    label: 'lake-eu' },
     { id: 'edge',  label: 'lake-edge' },
   ];
+  // Live-mode signal: subscribe to rulake:live-connected fired by
+  // ConnectScreen.test() on a successful initialize. The pill in the
+  // top-right flips from "○ DEMO" (no active client) to "● LIVE" with
+  // the endpoint host once a client lands.
+  const [live, setLive] = React.useState(() =>
+    typeof window !== 'undefined' && window.RULakeActiveClient
+      ? { endpoint: window.RULakeActiveClient.endpoint, sessionId: window.RULakeActiveClient.sessionId }
+      : null,
+  );
+  React.useEffect(() => {
+    const onConnect = (e) => setLive({ endpoint: e.detail?.endpoint, sessionId: e.detail?.sessionId });
+    window.addEventListener('rulake:live-connected', onConnect);
+    return () => window.removeEventListener('rulake:live-connected', onConnect);
+  }, []);
+  let liveDisplay;
+  if (live && live.endpoint) {
+    let host = live.endpoint;
+    try { host = new URL(live.endpoint).host; } catch { /* keep raw */ }
+    liveDisplay = `● LIVE · ${host}`;
+  } else {
+    liveDisplay = '○ DEMO · no live MCP';
+  }
   return (
     <header className="topbar">
       <button className="mobile-menu-btn" onClick={onMenu} aria-label="menu">≡</button>
@@ -128,10 +150,9 @@ function Topbar({ envTab, setEnvTab, onMenu }) {
         <span style={{fontFamily:'JetBrains Mono', fontSize:12}}>?</span>
         <span style={{marginLeft:6, fontSize:11.5}}>Help</span>
       </button>
-      <div className="endpoint-pill">
-        <span className="conn-dot pulse"></span>
-        <span>https://rulake.ruv.net/mcp</span>
-        <span className="dim" style={{marginLeft:8}}>JWT · scope:read,publish</span>
+      <div className="endpoint-pill" data-mode={live ? 'live' : 'demo'} title={live ? `connected · session ${live.sessionId?.slice(0,8) || '—'}` : 'no active MCP connection — see Connect screen'}>
+        <span className="conn-dot pulse" style={{background: live ? 'var(--verifier-bright)' : 'var(--fg-faintest)'}}></span>
+        <span style={{fontFamily:'JetBrains Mono, monospace', fontSize:11}}>{liveDisplay}</span>
       </div>
     </header>
   );
@@ -894,13 +915,35 @@ function BrowseScreen({ onOpenBundle, envTab = 'prod' }) {
   };
   const ENV_TO_BACKEND = { prod: 'lake-prod', eu: 'lake-eu', edge: 'lake-edge' };
   const filterId = ENV_TO_BACKEND[envTab];
-  const visibleBackends = RULAKE.BACKENDS.filter(b => b.id === filterId);
+  // Live mode: when window.RULakeLiveCollections is populated by a
+  // successful Browse.refresh against a real mcp-server, render those
+  // server-reported backends + collections instead of the fixture.
+  const [liveTick, setLiveTick] = React.useState(0);
+  React.useEffect(() => {
+    const onAudit = () => setLiveTick(t => t + 1);
+    window.addEventListener('rulake:store', onAudit);
+    return () => window.removeEventListener('rulake:store', onAudit);
+  }, []);
+  const liveCollections = (typeof window !== 'undefined' ? window.RULakeLiveCollections : null);
+  const liveBackendIds = liveCollections ? Object.keys(liveCollections) : null;
+  const visibleBackends = liveBackendIds && liveBackendIds.length
+    ? liveBackendIds.map((bid) => ({
+        id: bid,
+        kind: 'live',
+        region: 'mcp',
+        collections: (liveCollections[bid] || []).map((cid) => ({
+          id: cid, dim: 0, gen: '—', entries: 0,
+          hits: 0, misses: 0, primes: 0, lastPrimeMs: 0,
+          state: 'warm', witness: '—',
+        })),
+      }))
+    : RULAKE.BACKENDS.filter(b => b.id === filterId);
   return (
     <div>
       <div className="pane-header">
         <span>backends</span>
         <span className="crumb-sep">/</span>
-        <span className="crumb-active">all collections</span>
+        <span className="crumb-active">{liveBackendIds ? 'live · ' + visibleBackends.length + ' backends' : 'all collections'}</span>
         <HelpIcon topic="browse" label="About the Backends browser" />
         <div className="header-actions">
           <button className="btn" onClick={refresh} disabled={refreshing}>{refreshing ? 'Refreshing…' : 'Refresh'}</button>
