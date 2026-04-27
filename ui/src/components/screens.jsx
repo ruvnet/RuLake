@@ -811,8 +811,69 @@ function PlaygroundScreen() {
 function BrowseScreen({ onOpenBundle, envTab = 'prod' }) {
   const [selected, setSelected] = useState(['lake-prod','memories']);
   const [refreshing, setRefreshing] = useState(false);
-  const refresh = () => {
+  const refresh = async () => {
     setRefreshing(true);
+    const live = window.RULakeActiveClient;
+    if (live && live.endpoint) {
+      // Live path — call rulake_list_backends, then per-backend
+      // rulake_list_collections via the Streamable HTTP transport.
+      window.toast && window.toast.info('Refreshing collections…', `${live.endpoint} · rulake_list_collections`, { duration: 700 });
+      const t0 = performance.now();
+      try {
+        const callTool = async (name, args) => {
+          const headers = {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json, text/event-stream',
+            'mcp-session-id': live.sessionId || '',
+            'MCP-Request-Id': Math.random().toString(36).slice(2) + Date.now().toString(36),
+          };
+          if (live.token) headers.Authorization = live.token.startsWith('Bearer ') ? live.token : `Bearer ${live.token}`;
+          const resp = await fetch(live.endpoint, {
+            method: 'POST', headers,
+            body: JSON.stringify({ jsonrpc: '2.0', id: Date.now() & 0xffff, method: 'tools/call', params: { name, arguments: args || {} } }),
+          });
+          if (!resp.ok) throw new Error(`${resp.status} ${resp.statusText}`);
+          const txt = await resp.text();
+          // Drain SSE — find the 'data: ' line carrying the result envelope.
+          const data = txt.split('\n').find(l => l.startsWith('data: ') && l.includes('"result"'));
+          if (!data) throw new Error('no result in response');
+          const env = JSON.parse(data.slice(6));
+          if (env.error) throw new Error(env.error.message || 'tool error');
+          // tools/call result wraps content; structuredContent (if present) carries the typed JSON.
+          return env.result?.structuredContent ?? env.result;
+        };
+        const backendsResp = await callTool('rulake_list_backends');
+        const backends = backendsResp?.backends || [];
+        let totalCollections = 0;
+        const collectionsByBackend = {};
+        for (const b of backends) {
+          const r = await callTool('rulake_list_collections', { backend: b });
+          const colls = (r?.collections || []).map(c => c.id || c);
+          collectionsByBackend[b] = colls;
+          totalCollections += colls.length;
+        }
+        const ms = Math.round(performance.now() - t0);
+        window.RULakeLiveCollections = collectionsByBackend;
+        setRefreshing(false);
+        window.toast && window.toast.ok('Collections refreshed (live)', `${totalCollections} collections · ${backends.length} backends · ${ms}ms`);
+        if (window.RuStore) await window.RuStore.appendAudit({
+          ts: new Date().toISOString().slice(11,19),
+          principal: 'jules@ruv', tool: 'rulake_list_collections', target: live.endpoint,
+          k: totalCollections, ms, code: 'LIST_COLLECTIONS_OK', outcome: 'ok',
+        });
+      } catch (e) {
+        const ms = Math.round(performance.now() - t0);
+        setRefreshing(false);
+        window.toast && window.toast.warn('Refresh failed', String(e.message || e));
+        if (window.RuStore) await window.RuStore.appendAudit({
+          ts: new Date().toISOString().slice(11,19),
+          principal: 'jules@ruv', tool: 'rulake_list_collections', target: live.endpoint,
+          k: 0, ms, code: 'LIST_COLLECTIONS_FAILED', outcome: 'refused',
+        });
+      }
+      return;
+    }
+    // Fallback: demo mode — fixture refresh.
     window.toast && window.toast.info('Refreshing collections…', 'rulake_list_backends · rulake_list_collections', { duration: 700 });
     setTimeout(() => {
       setRefreshing(false);
@@ -1753,6 +1814,15 @@ function ConnectScreen() {
       } catch { /* ignore — SSE keepalive may have eaten the body */ }
 
       const ms = Math.round(performance.now() - t0);
+      // Pin the live client so other screens (Browse, Bundle, Audit)
+      // can dispatch wire calls without re-handshaking. Replaced on
+      // every successful Test/Connect.
+      window.RULakeActiveClient = {
+        endpoint, mode, token: tokenForClient, sessionId: client.sessionId, client,
+      };
+      window.dispatchEvent(new CustomEvent('rulake:live-connected', {
+        detail: { endpoint, sessionId: client.sessionId, toolsCount },
+      }));
       setStatus({ kind: 'ok', msg: `← initialize OK · ${ms}ms · ${toolsCount} tools · session ${client.sessionId?.slice(0,8) || '—'}` });
       window.toast && window.toast.ok('initialize OK', `${ms}ms · ${toolsCount} tools`);
       if (window.RuStore) await window.RuStore.appendAudit({

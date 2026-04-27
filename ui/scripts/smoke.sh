@@ -230,6 +230,22 @@ if [[ "$RUN_LIVE" -eq 1 ]]; then
     await new Promise(r => setTimeout(r, 3000));
   })()" > /dev/null 2>&1
   ok "Connect.test fired against live mcp-server at ${MCP_URL}"
+
+  # Browse.refresh — should see the active client and dispatch the
+  # rulake_list_collections wire call. The local mcp-server registers
+  # one fixture LocalBackend ("local") with zero collections, so the
+  # response is 0 collections / 1 backend — but the audit row lands
+  # green and proves the wire works end-to-end.
+  npx --yes agent-browser eval "
+  (async () => {
+    const item = Array.from(document.querySelectorAll('aside *')).find(el => el.textContent === 'Backends');
+    item && item.click();
+    await new Promise(r => setTimeout(r, 400));
+    const refresh = Array.from(document.querySelectorAll('button')).find(b => /^Refresh\$|REFRESH/i.test(b.textContent.trim()));
+    refresh && refresh.click();
+    await new Promise(r => setTimeout(r, 2500));
+  })()" > /dev/null 2>&1
+  ok "Browse.refresh fired against live mcp-server (rulake_list_collections wire)"
 fi
 
 hdr "audit ledger"
@@ -256,6 +272,7 @@ expect_substr IPFS_OK
 expect_substr CONNECT_FAILED
 if [[ "$RUN_LIVE" -eq 1 ]]; then
   expect_substr INIT_OK
+  expect_substr LIST_COLLECTIONS_OK
 fi
 
 hdr "console errors"
