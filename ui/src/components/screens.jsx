@@ -2028,32 +2028,32 @@ function AppStoreScreen() {
       id: 'rvdna',
       name: 'rvDNA v2',
       tag: 'Genomic intelligence',
-      status: 'proposed',
+      status: 'scaffolded',
       adr: { num: 'ADR-007', path: 'docs/adrs/ADR-007-rvdna-as-rulake-substrate.md' },
       pitch: 'Precomputed genomic file format ($\\;.rvdna$). Raw DNA + embeddings + attention + variant tensors + protein embeddings + epigenomic series, all in one mmap-able artefact. Witness-anchored — verify in your browser; share by CID over IPFS.',
       adds: ['rvdna_find', 'rvdna_call_variants', 'rvdna_translate', 'rvdna_score', 'rvdna_lineage'],
       install: {
-        rust: 'cargo add rvdna-backend',
+        rust: 'cargo add ruvector-rulake-rvdna',
         npm:  'npm install @ruvector/rvdna',
         wasm: 'rulake-wasm bundles the witness verifier',
       },
-      tier: 'T0 hot · T1 warm · T2 cold',
+      tier: 'T0 hot (v0.0.1) · T1 warm (v0.1) · T2 cold (v0.2)',
       research: 'docs/research/rvdna/',
     },
     {
       id: 'ruqu',
       name: 'ruQu v2',
       tag: 'Quantum execution intelligence',
-      status: 'proposed',
+      status: 'scaffolded',
       adr: { num: 'ADR-008', path: 'docs/adrs/ADR-008-ruqu-as-rulake-substrate.md' },
       pitch: 'Five quantum simulation backends (StateVector / Stabilizer / Clifford+T / TensorNetwork / Hardware) with cost-model planning, QEC scheduling, and tamper-evident execution witnesses. Cross-process replay via the lake; zero-recompute when the witness matches.',
       adds: ['ruqu_simulate', 'ruqu_verify', 'ruqu_replay', 'ruqu_optimize', 'ruqu_qec_schedule'],
       install: {
-        rust: 'cargo add ruqu-backend',
+        rust: 'cargo add ruvector-rulake-ruqu',
         npm:  'npm install ruqu-wasm',
         wasm: 'browser circuits with witness verify',
       },
-      tier: '5 backends · OpenQASM 3.0 export',
+      tier: 'StateVector (v0.0.1) · Stabilizer / TensorNetwork (v0.1) · Hardware (v0.2)',
       research: 'docs/research/ruqu/',
     },
     {
@@ -2083,8 +2083,9 @@ function AppStoreScreen() {
   ];
 
   const tagFor = (status) => {
-    if (status === 'shipping') return <span className="tag tag-verified">SHIPPING</span>;
-    if (status === 'proposed') return <span className="tag tag-warm">PROPOSED</span>;
+    if (status === 'shipping')   return <span className="tag tag-verified">SHIPPING</span>;
+    if (status === 'scaffolded') return <span className="tag tag-amber">SCAFFOLDED</span>;
+    if (status === 'proposed')   return <span className="tag tag-warm">PROPOSED</span>;
     return <span className="tag tag-cold">ROADMAP</span>;
   };
 

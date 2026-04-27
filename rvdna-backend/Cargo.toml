@@ -1,0 +1,45 @@
+# rvDNA backend — `.rvdna` v2 file-format BackendAdapter (ADR-007).
+#
+# Hot-tier (T0) implementation for the rvDNA v2 file format: serves
+# k-mer vector batches from a memory-mapped `.rvdna` file's section 1
+# directly to the ruLake cache. Witness derived from the file's bundle
+# pointer at byte 0x00B0 — byte-isomorphic to a `RuLakeBundle` so two
+# deployments reading the same `.rvdna` file produce identical SHAKE-256
+# witnesses and share cache transparently.
+#
+# Standalone Cargo package per ADR-001 (no root workspace; rulake from
+# crates.io v2.2 is the only ruLake-side dep).
+#
+# v0.0 ships T0 only. T1 (warm mmap protein embeddings + attention) and
+# T2 (cold lazy raw DNA + epigenomic series) land in v0.1 / v0.2 per the
+# ship table in docs/research/rvdna/integration-with-rulake.md §1.6.
+#
+# Build:  cargo build --release
+# Test:   cargo test --release
+
+[package]
+name        = "ruvector-rulake-rvdna"
+version     = "0.0.1"
+edition     = "2021"
+rust-version = "1.89"
+license     = "MIT OR Apache-2.0"
+authors     = ["Ruvector Team"]
+repository  = "https://github.com/ruvnet/RuLake"
+description = "rvDNA v2 BackendAdapter for ruLake — genomic substrate, hot-tier (T0) k-mer vectors via mmap (ADR-007)"
+readme      = "README.md"
+
+[dependencies]
+rulake = "2.2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+sha3 = "0.10"
+hex = "0.4"
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+opt-level     = 3
+lto           = "thin"
+codegen-units = 1

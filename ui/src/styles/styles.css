@@ -398,6 +398,7 @@ html, body {
 .tag-degraded { color: var(--refused-bright); border-style: dashed; }
 .tag-cold     { color: var(--fg-faint); }
 .tag-warm     { color: var(--accent-cyan); }
+.tag-amber    { color: var(--refused-bright); }
 
 .dot {
   display: inline-block;
