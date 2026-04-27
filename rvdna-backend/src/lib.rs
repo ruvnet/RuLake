@@ -1,20 +1,23 @@
 //! rvDNA v2 BackendAdapter for ruLake (ADR-007).
 //!
-//! v0.0 ships the hot-tier (T0) only — k-mer vectors loaded eagerly
-//! from a `.rvdna` v2 file. T1 (warm mmap) and T2 (cold lazy) land in
-//! v0.1 / v0.2 per ADR-007 §6 and `docs/research/rvdna/integration-with-rulake.md`.
+//! v0.0 shipped the hot-tier (T0) only — k-mer vectors held in RAM.
+//! **v0.1 adds the warm tier (T1)**: `.rvdna` v2 sections §2 (protein
+//! embeddings), §3 (attention), and §4 (variant tensors) served as
+//! `f32` slices straight out of an mmap'd file region. T2 (cold lazy
+//! raw DNA + epigenomic series) lands in v0.2 per ADR-007 §6 and
+//! `docs/research/rvdna/integration-with-rulake.md`.
 //!
 //! Trust boundary: the file's witness (SHAKE-256(32) over the bundle
 //! pointer at byte 0x00B0) is the cache-key anchor. Two deployments
 //! reading the same `.rvdna` file produce identical witnesses and share
-//! cache via ruLake's content-addressed dedup (`src/cache.rs`).
+//! cache via ruLake's content-addressed dedup (`src/cache.rs`). T1
+//! reuses the T0 witness derivation [`witness::rvdna_bundle`] verbatim
+//! — the trust contract is unchanged across tiers.
 //!
-//! v0.0 is deliberately schema-light: a single test fixture exercises
-//! the BackendAdapter contract end-to-end (id / list_collections /
-//! pull_vectors / generation). The full v2 file format reader lands
-//! in v0.0.2; v0.0.1 carries the trait + types + a deterministic
-//! synthetic backend so the App Store status flips from PROPOSED →
-//! SCAFFOLDED.
+//! v0.1 is deliberately schema-light: T1 takes section offsets directly
+//! from the operator at `register_file` time. The full v2 header parser
+//! lands in v0.0.2 / a future point release without changing the
+//! [`t1::RvdnaT1Backend`] surface.
 
 #![deny(unsafe_code)]
 #![warn(missing_docs)]
@@ -25,7 +28,10 @@ use std::sync::RwLock;
 use rulake::backend::{BackendAdapter, CollectionId, PulledBatch};
 use rulake::error::Result;
 
+pub mod t1;
 pub mod witness;
+
+pub use t1::RvdnaT1Backend;
 
 /// One in-memory hot-tier collection — the k-mer vectors from one gene
 /// (or whatever the encoder considered a coherent block).

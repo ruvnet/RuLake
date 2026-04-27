@@ -10,22 +10,24 @@
 # Standalone Cargo package per ADR-001 (no root workspace; rulake from
 # crates.io v2.2 is the only ruLake-side dep).
 #
-# v0.0 ships T0 only. T1 (warm mmap protein embeddings + attention) and
-# T2 (cold lazy raw DNA + epigenomic series) land in v0.1 / v0.2 per the
-# ship table in docs/research/rvdna/integration-with-rulake.md §1.6.
+# v0.0 ships T0 only. v0.1 adds T1 (warm mmap tier — protein embeddings,
+# attention, variant tensors decoded from mmap'd `.rvdna` v2 sections
+# §2/§3/§4 — see `src/t1.rs` and `docs/research/rvdna/v2-spec.md`).
+# T2 (cold lazy raw DNA + epigenomic series) lands in v0.2 per the ship
+# table in docs/research/rvdna/integration-with-rulake.md §1.6.
 #
 # Build:  cargo build --release
 # Test:   cargo test --release
 
 [package]
 name        = "ruvector-rulake-rvdna"
-version     = "0.0.1"
+version     = "0.1.0"
 edition     = "2021"
 rust-version = "1.89"
 license     = "MIT OR Apache-2.0"
 authors     = ["Ruvector Team"]
 repository  = "https://github.com/ruvnet/RuLake"
-description = "rvDNA v2 BackendAdapter for ruLake — genomic substrate, hot-tier (T0) k-mer vectors via mmap (ADR-007)"
+description = "rvDNA v2 BackendAdapter for ruLake — genomic substrate, T0 hot-tier + T1 warm-mmap tier (ADR-007)"
 readme      = "README.md"
 
 [dependencies]
@@ -35,6 +37,8 @@ serde_json = "1.0"
 thiserror = "2.0"
 sha3 = "0.10"
 hex = "0.4"
+memmap2 = "0.9"
+bytemuck = { version = "1.16", features = ["derive"] }
 
 [dev-dependencies]
 tempfile = "3"
@@ -46,6 +50,10 @@ harness = false
 
 [[bench]]
 name    = "cache_priming"
+harness = false
+
+[[bench]]
+name    = "t1_pull_vectors"
 harness = false
 
 [profile.release]
