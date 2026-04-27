@@ -2030,10 +2030,11 @@ function AppStoreScreen() {
       tag: 'Genomic intelligence',
       status: 'scaffolded',
       adr: { num: 'ADR-007', path: 'docs/adrs/ADR-007-rvdna-as-rulake-substrate.md' },
-      pitch: 'Precomputed genomic file format ($\\;.rvdna$). Raw DNA + embeddings + attention + variant tensors + protein embeddings + epigenomic series, all in one mmap-able artefact. Witness-anchored — verify in your browser; share by CID over IPFS.',
+      pitch: 'Precomputed genomic file format ($\\;.rvdna$). Raw DNA + embeddings + attention + variant tensors + protein embeddings + epigenomic series, all in one mmap-able artefact. Witness-anchored — verify in your browser; share by CID over IPFS. Five MCP tools shipping (1 live, 4 witnessed stubs) via mcp-rvdna.',
       adds: ['rvdna_find', 'rvdna_call_variants', 'rvdna_translate', 'rvdna_score', 'rvdna_lineage'],
       install: {
         rust: 'cargo add ruvector-rulake-rvdna',
+        mcp:  'cargo run -p ruvector-rulake-mcp-rvdna',
         npm:  'npm install @ruvector/rvdna',
         wasm: 'rulake-wasm bundles the witness verifier',
       },
@@ -2046,10 +2047,11 @@ function AppStoreScreen() {
       tag: 'Quantum execution intelligence',
       status: 'scaffolded',
       adr: { num: 'ADR-008', path: 'docs/adrs/ADR-008-ruqu-as-rulake-substrate.md' },
-      pitch: 'Five quantum simulation backends (StateVector / Stabilizer / Clifford+T / TensorNetwork / Hardware) with cost-model planning, QEC scheduling, and tamper-evident execution witnesses. Cross-process replay via the lake; zero-recompute when the witness matches.',
+      pitch: 'Five quantum simulation backends (StateVector / Stabilizer / Clifford+T / TensorNetwork / Hardware) with cost-model planning, QEC scheduling, and tamper-evident execution witnesses. Cross-process replay via the lake; zero-recompute when the witness matches. Five MCP tools shipping (3 live: simulate/verify/replay) via mcp-ruqu.',
       adds: ['ruqu_simulate', 'ruqu_verify', 'ruqu_replay', 'ruqu_optimize', 'ruqu_qec_schedule'],
       install: {
         rust: 'cargo add ruvector-rulake-ruqu',
+        mcp:  'cargo run -p ruvector-rulake-mcp-ruqu',
         npm:  'npm install ruqu-wasm',
         wasm: 'browser circuits with witness verify',
       },
@@ -2119,6 +2121,7 @@ function AppStoreScreen() {
               <div>
                 <div className="mono" style={{fontSize:10, color:'var(--fg-faint)', marginBottom:4}}>INSTALL</div>
                 {s.install.rust && s.install.rust !== '—' && <div className="mono" style={{fontSize:11.5}}>$ {s.install.rust}</div>}
+                {s.install.mcp  && s.install.mcp  !== '—' && <div className="mono" style={{fontSize:11.5, color:'var(--accent-cyan)'}}>$ {s.install.mcp}</div>}
                 {s.install.npm  && s.install.npm  !== '—' && <div className="mono" style={{fontSize:11.5}}>$ {s.install.npm}</div>}
                 {s.install.wasm && s.install.wasm !== '—' && <div className="mono dim" style={{fontSize:11}}>{s.install.wasm}</div>}
               </div>

@@ -2,9 +2,28 @@
 
 ## Status
 
-**Accepted (M1)** — core abstraction + LocalBackend + FsBackend shipped
-and measured on branch `research/rulake-datalake-analysis`. Backend
-adapters (Parquet, BigQuery, Iceberg, Delta) are M2+.
+**Accepted — M3 as of 2026-04-27.** Beyond the M1 core abstraction +
+LocalBackend + FsBackend, the standalone repo (per ADR-001) now
+ships:
+- **M2 storage adapters**: `gcs-backend/` (Parquet on GCS) and
+  `ipfs-backend/` v0.1 (witness-anchored bundle distribution by
+  CIDv1, with R-IPFS-1 hard-refuse on CID mismatch in commit
+  `56b497b`);
+- **M3 substrate adapters**: `rvdna-backend/` v0.0.1 (genomic
+  hot-tier, ADR-007) and `ruqu-backend/` v0.0.1 (StateVector quantum
+  execution, ADR-008), both with criterion benches + focused
+  security review on file at `docs/research/{benchmarks,security}/`;
+- **Companion MCP servers**: `mcp-server/` v0.10 (general; commit
+  `56b497b` added symmetric mutation-handler audit + R-MCP-1 fix),
+  `mcp-rvdna/` v0.0.1 (5 tools, witness-drift refusal),
+  `mcp-ruqu/` v0.0.1 (5 tools, qubit-cap + circuit-id guards).
+
+Iceberg / Delta / BigQuery adapters remain roadmapped at M4.
+
+**Originally accepted (M1)** — core abstraction + LocalBackend +
+FsBackend shipped and measured on branch
+`research/rulake-datalake-analysis`. Backend adapters (Parquet,
+BigQuery, Iceberg, Delta) were M2+.
 
 ## Date
 

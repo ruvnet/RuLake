@@ -2,9 +2,16 @@
 
 ## Status
 
-**Proposed** — positioning addendum, not a replacement. ADR-155 still
-governs what ruLake *is* as a crate. This ADR records what it *also
-happens to be good for* if an agent brain system wants to sit on top.
+**Accepted (positioning ratified, 2026-04-27)** — the memory-substrate
+framing now appears verbatim in the published Console (App Store +
+Stats screens), the README's "Why agents in particular" section, and
+the deep gists at `docs/gists/`. ADR-155 still governs what ruLake
+*is* as a crate; this ADR captures what it *is also good for* and
+that framing has been adopted in user-facing surfaces.
+
+**Originally proposed (2026-04-23)** — positioning addendum, not a
+replacement. This ADR records what it *also happens to be good for*
+if an agent brain system wants to sit on top.
 
 ## Date
 
