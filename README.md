@@ -821,9 +821,43 @@ Three modes:
 
 - **Demo** — animated mock data, no dependencies.
 - **WASM-local** — `rulake-wasm` running in your browser; verify bundles, compute witnesses, search via Web Worker. Zero server required.
-- **Live MCP** — point at any running `rulake-mcp` (or `mcp-rvdna`) and the same UI drives the live server.
+- **Live MCP** — point at any running `rulake-mcp` (or `mcp-rvdna`, or `mcp-ruqu`) and the same UI drives the live server.
 
 The 7th route is an **App Store** that lists every shipped substrate with install commands for the Rust crate, MCP companion, and (where applicable) npm package.
+
+#### The other four routes
+
+<details>
+<summary>📊 <b>Backends</b> — collections + cache pressure + federation topology</summary>
+
+<a href="https://ruvnet.github.io/RuLake/"><img src="assets/console-browse.png" alt="Backends route — table of collections per lake (dim, generation, entries, hits/miss, last-prime ms, state) plus cache-pressure bars and the federation-topology graph at the bottom" width="100%" /></a>
+
+Drill into any collection to inspect its witness in the Bundle viewer.
+</details>
+
+<details>
+<summary>🧾 <b>Bundle</b> — witness comparator (publisher vs recomputed-in-browser)</summary>
+
+<a href="https://ruvnet.github.io/RuLake/"><img src="assets/console-bundle.png" alt="Bundle route — witness comparator showing publisher signature vs the witness recomputed in the browser. Includes IPFS CID fetcher and try-sample button. The right pane is the bundle receipt with a green MATCH check and the SHAKE-256 witness in full." width="100%" /></a>
+
+Two columns of the comparator: **Publisher** is what the lake says, **Recomputed** is what your browser hashed independently. They must match — that's the contract.
+</details>
+
+<details>
+<summary>🛝 <b>Playground</b> — submit `rulake_query` intents and inspect the decision trace</summary>
+
+<a href="https://ruvnet.github.io/RuLake/"><img src="assets/console-playground.png" alt="Playground route — query input with target/k/risk/budget knobs, response panel showing top-K hits with snippets, and a right-pane decision trace listing the chosen action, reason code, backends used, and the witness verification result" width="100%" /></a>
+
+Pick a target, set k + risk, click Send. The browser independently recomputes the witness on the response and shows MATCH only when it agrees with the publisher's signature.
+</details>
+
+<details>
+<summary>📓 <b>Audit</b> — JSONL ledger with refusal codes</summary>
+
+<a href="https://ruvnet.github.io/RuLake/"><img src="assets/console-audit.png" alt="Audit route — JSONL tail showing 9 recent entries: agent queries, jules@ruv mutations (publish_bundle, warm_from_dir), one row marked WITNESS_MISMATCH_REFUSED, filter buttons for ALL/OK/DEGRADED/REFUSED" width="100%" /></a>
+
+Tail of every tool call with timestamp, principal, target, latency, outcome code. Refusals (e.g. `WITNESS_MISMATCH_REFUSED`) get the refused color so an operator can spot trust violations at a glance.
+</details>
 
 ### End-to-end smoke contracts
 
