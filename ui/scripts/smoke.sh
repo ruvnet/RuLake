@@ -303,10 +303,17 @@ if echo "$APPSTORE_DOM" | grep -q 'cards:4'; then
 else
   err "App store: expected 4 cards, got: $APPSTORE_DOM"
 fi
-if echo "$APPSTORE_DOM" | grep -q SHIPPING && echo "$APPSTORE_DOM" | grep -q SCAFFOLDED; then
-  ok "App store: status tags include SHIPPING + SCAFFOLDED"
+# Status-tag assertion is intentionally loose — accept any of
+# SHIPPING / SCAFFOLDED / PROPOSED so the smoke doesn't break every
+# time a substrate is promoted (iter 56 was the last such bump:
+# rvDNA + ruQu both went SCAFFOLDED → SHIPPING after the v0.1+v0.2
+# wave landed). What we actually care about is that each card
+# carries SOME status tag.
+TAG_COUNT=$(echo "$APPSTORE_DOM" | grep -oE 'SHIPPING|SCAFFOLDED|PROPOSED|ROADMAP' | wc -l)
+if [[ "$TAG_COUNT" -ge 4 ]]; then
+  ok "App store: 4+ status tags rendered (got $TAG_COUNT)"
 else
-  err "App store: missing expected status tags in: $APPSTORE_DOM"
+  err "App store: expected ≥4 status tags, got $TAG_COUNT in: $APPSTORE_DOM"
 fi
 
 hdr "audit ledger"
