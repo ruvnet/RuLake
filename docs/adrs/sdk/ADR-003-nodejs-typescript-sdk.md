@@ -2,12 +2,18 @@
 
 ## Status
 
-**Proposed (2026-04-25)** — no Node source yet. This ADR fixes the
-shape *before* `node/` lands so we don't relitigate the FFI / async /
-packaging questions when the first PR opens. Companion to
-[ADR-002](./ADR-002-python-sdk.md) for the Python SDK; the two
-deliberately mirror each other where the platforms allow and diverge
-where they should.
+**Accepted (2026-04-25 → v2.2.0 as of 2026-04-26)** — `node/` is
+shipping. napi-rs binding compiled to a `.node` cdylib; TypeScript
+declarations at `node/index.d.ts` (and a separate `http.d.ts` for
+the streamable HTTP surface). ESM-first per §3 with both `.mjs` and
+`.cjs` re-exports for compatibility. Float32Array zero-copy on input
+vectors via napi-rs `TypedArray`. Companion to
+[ADR-002](./ADR-002-python-sdk.md); both SDKs landed in commit
+`2fb1730 Implement Python (PyO3) and Node.js (napi-rs) SDKs`.
+
+**Originally proposed (2026-04-25)** — drafted before the first PR
+opened so the FFI / async / packaging questions wouldn't relitigate
+at code review.
 
 ## Date
 

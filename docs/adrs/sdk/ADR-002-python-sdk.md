@@ -2,10 +2,20 @@
 
 ## Status
 
-**Proposed (2026-04-25)** — no Python source yet. This ADR fixes the
-shape *before* `python/` lands so we don't relitigate the FFI / async /
-packaging questions when the first PR opens. Companion to
-[ADR-003](./ADR-003-nodejs-typescript-sdk.md) for the Node.js/TS SDK.
+**Accepted (2026-04-25 → v2.2.0 as of 2026-04-26)** — `python/` is
+shipping. Crate name `rulake-py` (cdylib `_rulake`); Python source
+under `python/python_src/rulake/` per maturin's prescribed layout.
+v2.2 surface includes `RuLake`, `LocalBackend`, `FsBackend`,
+`Bundle`, `Consistency`, full search variants, and the exception
+hierarchy from §4. NumPy zero-copy on input vectors (PyO3 `numpy =
+"0.22"`); ABI3 wheels via `pyo3 = { version = "0.22", features =
+["abi3-py39"] }`. Companion to [ADR-003](./ADR-003-nodejs-typescript-sdk.md);
+both SDKs landed in commit `2fb1730 Implement Python (PyO3) and
+Node.js (napi-rs) SDKs`.
+
+**Originally proposed (2026-04-25)** — drafted before the first PR
+opened so the FFI / async / packaging questions wouldn't relitigate
+at code review.
 
 ## Date
 
