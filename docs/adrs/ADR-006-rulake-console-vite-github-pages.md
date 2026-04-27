@@ -1,11 +1,12 @@
 # ADR-006 — ruLake Console: Vite + React, hosted on GitHub Pages, dual-mode (demo + live)
 
-**Status.** Proposed
+**Status.** Accepted (built — see "What landed" below)
 **Date.** 2026-04-26
 **Author.** rUv (ruv.io)
 **Supersedes.** Resolves the conditional in `docs/research/management-ui.md` ("conditional yes")
 **Companion.** `docs/research/console-deep-review.md` — the file-by-file evidentiary audit
-**Branch of record.** `research/management-ui`
+**Branch of record.** `research/management-ui` (15 commits past ADR-006 commit, on this branch)
+**Last updated.** 2026-04-27 (ADR refresh after iteration 15)
 
 ---
 
@@ -498,5 +499,60 @@ one PR.
 
 ---
 
-*Status remains Proposed until the first `ui-v0.1` deploy succeeds
-to GitHub Pages, at which point this ADR transitions to Accepted.*
+## What landed (iterations 1–15, branch `research/management-ui`)
+
+This ADR is **Accepted** as of iteration 15 — the console is built,
+verifiable end-to-end via `ui/scripts/smoke.sh`, and tri-mode
+functional. Live deploy to GitHub Pages happens on first push to
+`main` (CI workflow `.github/workflows/release-ui.yml`).
+
+| # | Commit | Deliverable |
+|---|--------|-------------|
+| 0 | `00ed0ca` | `ui/` Vite + React scaffold; 9 design files ported via dynamic-import bootstrap; 6 routes navigate; styles + index.html with full SEO meta |
+| 1 | `7046e1a` | Real `rulake-wasm::computeWitness` + `searchBruteForceL2` wired into Bundle.recompute + Playground.send (replaces 4 setTimeout placeholders) |
+| 2 | `5b956a9` | Connect.test → real `RuLakeHttp.connect()` over Streamable HTTP; **mcp-server v0.9 CORS layer** added (closes server-gap §V #1) |
+| 3 | `474112f` | WASM-local Storage settings card (embed/cloud/IPFS/WebGL/Workers/cache toggles, all persisted to IDB); CSP relaxation for cross-origin probes |
+| 4 | `4a33405` | Web Worker offload — `searchOffload.js` + `search.worker.js`; audit code suffix `_WORKER` makes the toggle observable |
+| 5 | `cf4b5b4` | Live sidebar audit count + new mcp-server CORS regression test (37+8+20+1) |
+| 6 | `780ad26` | Real OpenAI/Cohere/Voyage embedding provider call from Playground; `EMBED_FAILED` audit row on bad keys; fallback to fixture vector |
+| 7 | `21b0b3a` | IPFS bundle fetch on Bundle screen — paste CIDv1, fetch via gateway, recompute witness (5 audit codes for the fetch state machine) |
+| 8 | `cbd6431` | Sample bundle shipped at `ui/public/sample-bundle.json`; "Try sample" button → `IPFS_BUNDLE_VERIFIED` success path lands offline |
+| 9 | `1a49c01` | WebGL toggle observable on VectorField (`data-renderer="webgl2"` vs `"2d"`); 6/6 Storage toggles runtime-observable |
+| 10 | `19f8453` | `ui/scripts/smoke.sh` (216 lines) — canonical regression baseline; green from 0 in one command |
+| 11 | `b57f7c7` | Smoke `--live` flag + CI integration in release-ui workflow; `INIT_OK` audit row landing on real handshake |
+| 12 | `26dbe2b` | mcp-server v0.9 `rulake_list_collections` tool (closes server-gap §V #1; tools tier read; tests updated for 3 read tools / 8 admin total) |
+| 13 | `2204350` | Browse.refresh → real `rulake_list_collections` over wire; `LIST_COLLECTIONS_OK` audit code |
+| 14 | `95f2251` | Topbar live-mode pill (`● LIVE · host` / `○ DEMO · no live MCP`); Browse table swaps fixture → live data on success |
+
+Numbers as of iteration 15:
+- **Browser console errors**: 0 (across all 15 iterations)
+- **Audit codes exercised end-to-end**: 7 — `WITNESS_MATCH` ·
+  `IPFS_BUNDLE_VERIFIED` · `OK_VERIFIED_{MAIN,WORKER}` · `IPFS_OK` ·
+  `CONNECT_FAILED` · `INIT_OK` · `LIST_COLLECTIONS_OK`. Plus
+  `EMBED_FAILED`, `IPFS_HTTP_ERROR`, `IPFS_NETWORK_ERROR`,
+  `IPFS_FETCH_FAILED`, `IPFS_WITNESS_MISMATCH` exercise the refusal
+  side of the trust boundary.
+- **Storage settings runtime-observable**: 6/6
+- **mcp-server tools shipped**: 8 (3 Read tier, 2 Publish, 3 Admin)
+- **mcp-server tests**: 65 + 1 ignored
+- **Smoke assertions**: 15 (build, preview, mcp-server, browser session,
+  bootstrap × 10 globals, action chain × 7, audit ledger × 7, topbar
+  data-mode, console errors)
+
+**Server-side gap status** (vs deep-review §V):
+
+| # | Gap | Status |
+|---|-----|--------|
+| 1 | `rulake_list_collections` tool | ✅ shipped (commit `26dbe2b`) |
+| 2 | `rulake://audit/tail` resource | ⏳ deferred to mcp-server v0.10 |
+| 3 | CORS allow-list for GH Pages origin | ✅ shipped permissive, allow-list-tightening v0.10 |
+| 4 | `rulake://bundle/{b}/{c}` byte-stable JSON audit | ⏳ deferred (no client uses it yet) |
+| 5 | Embedding story for Playground | ✅ shipped — user-supplied OpenAI/Cohere/Voyage key in JS memory only |
+
+3 of 5 v0.1-blockers closed; remaining 2 don't block the live deploy
+(they polish observability and resource fidelity, both v0.10).
+
+**Scope kept out of v0.1 (per Decision 9 — accepted as deferred):**
+PKCE for JWT, snapshot upload over HTTP, RBAC mutation, federation
+builder, full WebGL point-sprite renderer, cloud-bundle-storage
+runtime hookup (persisted-only — needs the user's signed bucket URL).
