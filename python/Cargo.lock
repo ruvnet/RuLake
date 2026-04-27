@@ -414,7 +414,7 @@ dependencies = [
 
 [[package]]
 name = "rulake"
-version = "2.2.0"
+version = "2.3.0-alpha.1"
 dependencies = [
  "hex",
  "rand",
@@ -429,7 +429,7 @@ dependencies = [
 
 [[package]]
 name = "rulake-py"
-version = "2.2.0"
+version = "2.3.0-alpha.1"
 dependencies = [
  "numpy",
  "pyo3",

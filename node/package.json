@@ -1,6 +1,6 @@
 {
   "name": "rulake",
-  "version": "2.2.0",
+  "version": "2.3.0-alpha.1",
   "description": "Memory Lake for Agentic AI — fast, witness-anchored vector memory for LLM agents. Cache layer for RAG, semantic search, federated retrieval over S3/BigQuery/Parquet, MCP-compatible. Node.js bindings.",
   "type": "module",
   "main": "index.cjs",
@@ -99,12 +99,12 @@
     }
   },
   "optionalDependencies": {
-    "rulake-linux-x64-gnu": "2.2.0",
-    "rulake-linux-arm64-gnu": "2.2.0",
-    "rulake-darwin-x64": "2.2.0",
-    "rulake-darwin-arm64": "2.2.0",
-    "rulake-win32-x64-msvc": "2.2.0",
-    "rulake-wasm": "2.2.1"
+    "rulake-linux-x64-gnu": "2.3.0-alpha.1",
+    "rulake-linux-arm64-gnu": "2.3.0-alpha.1",
+    "rulake-darwin-x64": "2.3.0-alpha.1",
+    "rulake-darwin-arm64": "2.3.0-alpha.1",
+    "rulake-win32-x64-msvc": "2.3.0-alpha.1",
+    "rulake-wasm": "2.3.0-alpha.1"
   },
   "devDependencies": {
     "@napi-rs/cli": "^2.18.4"

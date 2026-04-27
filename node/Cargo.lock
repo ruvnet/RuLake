@@ -385,7 +385,7 @@ checksum = "dc897dd8d9e8bd1ed8cdad82b5966c3e0ecae09fb1907d58efaa013543185d0a"
 
 [[package]]
 name = "rulake"
-version = "2.2.0"
+version = "2.3.0-alpha.1"
 dependencies = [
  "hex",
  "rand",
@@ -400,7 +400,7 @@ dependencies = [
 
 [[package]]
 name = "rulake-node"
-version = "2.2.0"
+version = "2.3.0-alpha.1"
 dependencies = [
  "napi",
  "napi-build",
