@@ -26,6 +26,7 @@ use rulake::backend::{BackendAdapter, CollectionId, PulledBatch};
 use rulake::error::Result;
 
 pub mod circuit;
+pub mod limits;
 pub mod state_vector;
 pub mod witness;
 
