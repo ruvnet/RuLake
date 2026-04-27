@@ -1,6 +1,6 @@
 {
   "name": "rulake-wasm",
-  "version": "2.2.1",
+  "version": "2.3.0-alpha.1",
   "description": "Memory Lake for Agentic AI — WASM build for browsers, Cloudflare Workers, Deno, Bun. Same witness-anchored memory model as `rulake` (Node.js bindings), feature-reduced surface for edge runtimes (no AVX-512, no rayon).",
   "type": "module",
   "main": "rulake_wasm.js",
