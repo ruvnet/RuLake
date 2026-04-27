@@ -1,0 +1,71 @@
+# gcloud upload exclusions for `gcloud run deploy --source .`
+# Without this file, gcloud ships every byte under cwd — including
+# 800 MB of cargo target/, 1.6 GB of examples/, etc. — which fails
+# the source-upload step.
+
+# Cargo build outputs (rebuild fresh in the container)
+target/
+**/target/
+.cargo-cache/
+
+# Node + Vite build outputs (UI is not part of mcp-server image)
+node_modules/
+**/node_modules/
+ui/dist/
+ui/.vite/
+
+# Examples (large; not needed by the Dockerfile)
+examples/
+
+# Vendored ruvector source — KEEP only crates/ruvector-rabitq/ since that's
+# the only path-dep the rulake root crate references. Everything else is
+# noise for the Docker build (docs, examples, npm packages, other crates).
+vendor/ruvector/docs/
+vendor/ruvector/examples/
+vendor/ruvector/npm/
+vendor/ruvector/ui/
+vendor/ruvector/data/
+vendor/ruvector/test_models/
+vendor/ruvector/tests/
+vendor/ruvector/scripts/
+vendor/ruvector/patches/
+vendor/ruvector/crates/ruvector-cli/
+vendor/ruvector/crates/ruvector-cluster/
+vendor/ruvector/crates/ruvector-cuda/
+vendor/ruvector/crates/ruvector-flow/
+vendor/ruvector/crates/ruvector-gpu/
+vendor/ruvector/crates/ruvector-hnsw/
+vendor/ruvector/crates/ruvector-mcp/
+vendor/ruvector/crates/ruvector-py/
+vendor/ruvector/crates/ruvector-rt/
+vendor/ruvector/crates/ruvector-server/
+vendor/ruvector/crates/ruvector-train/
+vendor/ruvector/crates/ruvector-wasm/
+vendor/**/target/
+vendor/**/node_modules/
+vendor/**/dist/
+vendor/**/__pycache__/
+vendor/**/.git/
+
+# Python build artifacts
+**/__pycache__/
+**/*.pyc
+**/.venv/
+**/venv/
+**/.pytest_cache/
+**/dist/
+
+# IDE / OS junk
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
+
+# git internals (gcloud handles this but be explicit)
+.git/
+
+# Smoke logs
+/tmp/rulake-*.log
+/tmp/vite-*.log
+/tmp/rvdna-*.log
