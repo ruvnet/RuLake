@@ -27,18 +27,18 @@ jobs:
         # Storage adapters, substrate adapters, and MCP companion
         # servers all build + test independently.
         crate:
-          - "."
-          - "mcp-server"
-          - "mcp-rvdna"
-          - "mcp-ruqu"
-          - "gcs-backend"
-          - "ipfs-backend"
-          - "rvdna-backend"
-          - "ruqu-backend"
-          - "kernel-avx512"   # ADR-157 SIMD reference impl (issue #3)
-          - "kernel-wgpu"     # ADR-157 portable GPU impl (issue #3)
-          - "python"
-          - "node"
+          - "crates/core"
+          - "crates/mcp-server"
+          - "crates/mcp-rvdna"
+          - "crates/mcp-ruqu"
+          - "crates/gcs-backend"
+          - "crates/ipfs-backend"
+          - "crates/rvdna-backend"
+          - "crates/ruqu-backend"
+          - "crates/kernel-avx512"   # ADR-157 SIMD reference impl (issue #3)
+          - "crates/kernel-wgpu"     # ADR-157 portable GPU impl (issue #3)
+          - "sdk/python"
+          - "sdk/node"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -51,10 +51,10 @@ jobs:
         working-directory: ${{ matrix.crate }}
         run: cargo build --release
       - name: Test
-        # The python/ + node/ crates have no Rust-side tests of their
-        # own (their tests run in pytest / node --test). Skip in those
-        # rows; the release-python / release-node workflows cover them.
-        if: matrix.crate != 'python' && matrix.crate != 'node'
+        # The sdk/python + sdk/node crates have no Rust-side tests of
+        # their own (their tests run in pytest / node --test). Skip in
+        # those rows; the release-python / release-node workflows cover them.
+        if: matrix.crate != 'sdk/python' && matrix.crate != 'sdk/node'
         working-directory: ${{ matrix.crate }}
         run: cargo test --release
 
@@ -72,7 +72,7 @@ jobs:
       - name: Install maturin + test deps
         run: pip install maturin pytest numpy
       - name: Build + test
-        working-directory: python
+        working-directory: sdk/python
         run: |
           maturin develop --release
           pytest tests/ -v
@@ -89,12 +89,12 @@ jobs:
         with:
           node-version: "22"
       - name: Build native binding
-        working-directory: node
+        working-directory: sdk/node
         run: |
           cargo build --release
           cp target/release/libruvector_rulake_node.so rulake.linux-x64-gnu.node
       - name: Run smoke tests
-        working-directory: node
+        working-directory: sdk/node
         run: node --test __test__/smoke.test.mjs
 
   smoke:
@@ -117,10 +117,10 @@ jobs:
       - name: Pre-install agent-browser (warms npx cache)
         run: npx --yes agent-browser install || true
       - name: Build mcp-server binary (enables smoke-all auto --live)
-        working-directory: mcp-server
+        working-directory: crates/mcp-server
         run: cargo build --release --bin rulake-mcp
       - name: Build mcp-rvdna binary
-        working-directory: mcp-rvdna
+        working-directory: crates/mcp-rvdna
         run: cargo build --release --bin rvdna-mcp
       - name: Install ui deps + build dist
         working-directory: ui

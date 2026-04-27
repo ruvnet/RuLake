@@ -2,7 +2,7 @@
 
 ## Status
 
-**Accepted (2026-04-26 → v0.1 as of 2026-04-27)** — `ipfs-backend/`
+**Accepted (2026-04-26 → v0.1 as of 2026-04-27)** — `crates/ipfs-backend/`
 crate is shipping. v0.1 carries the kubo client + gateway-fallback
 mode, witness-anchored bundle distribution by CIDv1, and the offline
 publish/fetch round-trip that the smoke suite exercises. Security
@@ -10,7 +10,7 @@ review (commit `8ce3689`) surfaced **R-IPFS-1**: `fetch_bundle` was
 warn-only on `data_ref ≠ ipfs://{cid}` mismatch — closed by hard
 refuse with code `IPFS_BUNDLE_CID_MISMATCH` in commit `56b497b`.
 Sister ADR to [ADR-004](./ADR-004-rulake-mcp-server.md); the GCS
-backend (`gcs-backend/`, commit `c706dc6`) was the first cloud-shaped
+backend (`crates/gcs-backend/`, commit `c706dc6`) was the first cloud-shaped
 backend, IPFS is the second and the first whose addressing model is
 content-hash-native.
 
@@ -34,7 +34,7 @@ node it talks to.
 
 - [ADR-001](../ADR-001-standalone-repo-strategy.md) — sibling crate
   layout, no root workspace, vendored submodule discipline. The new
-  crate slots in next to `gcs-backend/` under the same rules.
+  crate slots in next to `crates/gcs-backend/` under the same rules.
 - [ADR-155](../ADR-155-rulake-datalake-layer.md) — the cache-first /
   witness-as-anchor framing that this backend has to honour. The
   M2-M5 backend roadmap explicitly anticipates content-addressed
@@ -46,7 +46,7 @@ node it talks to.
 - [ADR-002](./ADR-002-python-sdk.md) / [ADR-003](./ADR-003-nodejs-typescript-sdk.md)
   — sibling-crate layout precedent. The IPFS backend follows the same
   no-workspace, no-`*.workspace = true` discipline.
-- Prior art in this repo: `gcs-backend/` (Parquet on GCS via
+- Prior art in this repo: `crates/gcs-backend/` (Parquet on GCS via
   `object_store`). Mirror its shape — `with_store(...)` for tests,
   cached `(dim, generation)` table, `block_on` bridge from the sync
   `BackendAdapter` trait into an async client.
@@ -59,7 +59,7 @@ node it talks to.
 
 ## Context
 
-ruLake's `BackendAdapter` trait (`src/backend.rs:110`) is what every
+ruLake's `BackendAdapter` trait (`crates/core/src/backend.rs:110`) is what every
 data lake plugs into. Today we have `LocalBackend`, `FsBackend`, and
 the freshly-shipped `GcsParquetBackend`. The next natural backend is
 content-addressed storage: a Parquet (or, more relevantly for this
@@ -72,16 +72,16 @@ There are three forces pushing this backend onto the v0.5 list:
 1. **The bundle is already content-addressed.** `RuLakeBundle::new`
    produces a `rvf_witness` that is `SHAKE-256(32)` over the four
    content-shaping fields plus the variant-tagged `Generation`
-   (`src/bundle.rs:166-187` for `new`, `src/bundle.rs:362-390` for
+   (`crates/core/src/bundle.rs:166-187` for `new`, `crates/core/src/bundle.rs:362-390` for
    `compute_witness`). The witness IS the cache-key anchor; two
    bundles with the same witness are interchangeable. IPFS gives us
    a second, network-level anchor (the CID) that maps onto
-   `Generation::Opaque(String)` at `src/bundle.rs:60` without changing
+   `Generation::Opaque(String)` at `crates/core/src/bundle.rs:60` without changing
    the witness format. Two anchors, one cache key — the IPFS variant
    adds a *naming* axis without disturbing the *trust* axis.
 
 2. **The bundle is small.** A `table.rulake.json` is a few hundred
-   bytes (the on-disk size cap is 64 KiB at `src/bundle.rs:218`,
+   bytes (the on-disk size cap is 64 KiB at `crates/core/src/bundle.rs:218`,
    but that's 100× headroom). At that size the IPFS performance
    story is *gateway-round-trip-bound*, not body-bandwidth-bound. A
    bundle fetched through the public ipfs.io gateway is a single
@@ -174,7 +174,7 @@ backend reads CIDs.
 
 ## Decision
 
-We ship a Rust-native `ipfs-backend/` sibling crate that implements
+We ship a Rust-native `crates/ipfs-backend/` sibling crate that implements
 `BackendAdapter` for **bundle metadata addressed by CID**, defaults
 to read+optional-pin against a **kubo HTTP RPC** endpoint, falls
 back to **public IPFS Foundation gateways** for read-only operation
@@ -191,7 +191,7 @@ deployment shape is one VM, one persistent disk, IAP-tunneled SSH,
 no public IP on the kubo HTTP API.
 
 ```text
-ipfs-backend/
+crates/ipfs-backend/
 ├── Cargo.toml          # ruvector-rulake-ipfs, no workspace
 ├── README.md           # install, configure kubo endpoint, gateway fallback
 ├── src/
@@ -222,21 +222,21 @@ $ cargo run --example publish_bundle -- publish ./snapshot/
    pinned bafkrei… (45 ms, kubo)
 ```
 
-### 1. Crate placement — sibling `ipfs-backend/`, mirroring `gcs-backend/`
+### 1. Crate placement — sibling `crates/ipfs-backend/`, mirroring `crates/gcs-backend/`
 
 Per ADR-001 we have no root workspace; the IPFS backend slots in as
-the third sibling backend crate (`gcs-backend/` shipped, an Iceberg
+the third sibling backend crate (`crates/gcs-backend/` shipped, an Iceberg
 backend lives on the M5 list). One binary, `cargo install`-able, ships
 as a library that the operator's serving binary registers via
-`Arc<dyn BackendAdapter>` — same shape as `gcs-backend/`'s
+`Arc<dyn BackendAdapter>` — same shape as `crates/gcs-backend/`'s
 `open_gcs(...) → Result<GcsParquetBackend>`.
 
 | Option | Verdict |
 |---|---|
-| `ipfs-backend/` sibling crate | **Pick.** Mirrors `gcs-backend/`. No workspace, no `*.workspace = true`. Operator opts in by adding `ruvector-rulake-ipfs = { path = "ipfs-backend" }` (or the published version) to their serving binary. |
+| `crates/ipfs-backend/` sibling crate | **Pick.** Mirrors `crates/gcs-backend/`. No workspace, no `*.workspace = true`. Operator opts in by adding `ruvector-rulake-ipfs = { path = "ipfs-backend" }` (or the published version) to their serving binary. |
 | `src/ipfs.rs` inside the main crate | Reject. Forces `ipfs-api`, hyper-rustls, and the kubo client into every ruLake consumer's dep graph. ~30 transitive crates; the library crate stays pure-sync, no-network for a reason. |
 | `crates/rulake-ipfs/` workspace member | Reject. Requires a root workspace, which ADR-001 §2 explicitly rejects. |
-| `examples/rust/06-ipfs-bundle/` | Reject for production; OK as a hand-on demo *in addition*. We follow the same split as `mcp-server/` vs `examples/nodejs/04-mcp-tool/`. |
+| `examples/rust/06-ipfs-bundle/` | Reject for production; OK as a hand-on demo *in addition*. We follow the same split as `crates/mcp-server/` vs `examples/nodejs/04-mcp-tool/`. |
 
 ### 2. The IPFS client — `ipfs-api-backend-hyper`, with a gateway fallback
 
@@ -245,7 +245,7 @@ pattern that `GcsParquetBackend` uses, with a small twist: there
 are two clients, picked by config.
 
 ```toml
-# ipfs-backend/Cargo.toml — illustrative, not final
+# crates/ipfs-backend/Cargo.toml — illustrative, not final
 [package]
 name = "ruvector-rulake-ipfs"
 version = "0.1.0"
@@ -270,7 +270,7 @@ ipfs-api-prelude       = "0.6"
 reqwest                = { version = "0.12", default-features = false, features = ["rustls-tls", "stream", "json"] }
 
 # Async runtime — single-threaded current-thread, owned by the backend
-# (matches gcs-backend/src/backend.rs:74-77 exactly).
+# (matches crates/gcs-backend/src/backend.rs:74-77 exactly).
 tokio                  = { version = "1.39", default-features = false, features = ["rt", "macros"] }
 
 # CID parsing — multihash-aware, multibase-aware. cid-rs is the
@@ -313,7 +313,7 @@ codegen-units = 1
 strip         = "symbols"
 ```
 
-The `Cargo.toml` mirrors `gcs-backend/Cargo.toml` line-for-line on
+The `Cargo.toml` mirrors `crates/gcs-backend/Cargo.toml` line-for-line on
 the runtime + bytes + futures + tracing block; the only swap is
 `object_store + parquet + arrow` becoming `ipfs-api-backend-hyper +
 reqwest + cid`. Operators with both backends pay the union; in
@@ -345,14 +345,14 @@ The mapping is:
 
 | Field | What it is | Used for |
 |---|---|---|
-| `RuLakeBundle.rvf_witness` | `SHAKE-256(32)` over `(data_ref, dim, rotation_seed, rerank_factor, generation_with_variant_tag)`, `src/bundle.rs:362-390` | The cache-key anchor. Two backends with the same witness share the cache pointer — that's the cross-backend dedup story from ADR-155 §3.6. |
+| `RuLakeBundle.rvf_witness` | `SHAKE-256(32)` over `(data_ref, dim, rotation_seed, rerank_factor, generation_with_variant_tag)`, `crates/core/src/bundle.rs:362-390` | The cache-key anchor. Two backends with the same witness share the cache pointer — that's the cross-backend dedup story from ADR-155 §3.6. |
 | `RuLakeBundle.data_ref` | URI of the authoritative byte stream — `gs://...`, `iceberg://...`, or now **`ipfs://<cid>`** | The pull source. The witness includes this string verbatim, so two different IPFS CIDs (or an IPFS CID and a GCS URI) addressing different bytes naturally produce different witnesses. |
-| `RuLakeBundle.generation` | `Generation::Opaque(<cid>)` for IPFS-resident bundles, `src/bundle.rs:60` | The coherence token. Each new pin (≡ new CID) is a new generation. The variant tag (`0x01` for `Opaque`, `src/bundle.rs:91-94`) keeps it from colliding with `Num` mtimes from other backends, per the witness security audit at `src/bundle.rs:71-81`. |
+| `RuLakeBundle.generation` | `Generation::Opaque(<cid>)` for IPFS-resident bundles, `crates/core/src/bundle.rs:60` | The coherence token. Each new pin (≡ new CID) is a new generation. The variant tag (`0x01` for `Opaque`, `crates/core/src/bundle.rs:91-94`) keeps it from colliding with `Num` mtimes from other backends, per the witness security audit at `crates/core/src/bundle.rs:71-81`. |
 
 Concrete construction in `IpfsBundleBackend::current_bundle`:
 
 ```rust
-// Illustrative — actual code in ipfs-backend/src/backend.rs.
+// Illustrative — actual code in crates/ipfs-backend/src/backend.rs.
 fn current_bundle(
     &self,
     collection: &str,
@@ -370,7 +370,7 @@ fn current_bundle(
 
     // 3. Parse + verify the witness on the bundle's own terms.
     //    `from_json` enforces the size + field caps already
-    //    (src/bundle.rs:215-263). We do NOT recompute the witness
+    //    (crates/core/src/bundle.rs:215-263). We do NOT recompute the witness
     //    here — `read_from_dir` does that for the FS sidecar
     //    case; we mirror it for IPFS in `IpfsBundleBackend::read`.
     let bundle: RuLakeBundle = RuLakeBundle::from_json(
@@ -422,14 +422,14 @@ designed to need none.
 The operator's mental model: pinning a bundle to IPFS *publishes*
 it — the IPFS-anchored bundle is a new artefact whose lineage points
 back at the pre-pin version via the `lineage_id` field
-(`src/bundle.rs:141`), but they are separate cache entries. v0.2
+(`crates/core/src/bundle.rs:141`), but they are separate cache entries. v0.2
 opens the alias-table conversation if a customer asks; v0.1 keeps
 the trust surface flat.
 
 ### 4. Read path — single-block `ipfs cat`, no DAG walk
 
 A `table.rulake.json` is bounded by the existing 64 KiB JSON size
-cap (`src/bundle.rs:218`). IPFS's default block size is 256 KiB. A
+cap (`crates/core/src/bundle.rs:218`). IPFS's default block size is 256 KiB. A
 bundle therefore lives in **exactly one block** — no UnixFS DAG, no
 chunking, no link traversal. The read is one HTTP request:
 
@@ -487,7 +487,7 @@ because it was decommissioned in August 2024.
 
 ### 5. Write path — `publish_bundle` → kubo `add` + `pin/add`, optionally also a pinning service
 
-`RuLake::publish_bundle` (`src/lake.rs:167`) calls
+`RuLake::publish_bundle` (`crates/core/src/lake.rs:167`) calls
 `backend.current_bundle(...)` and then `bundle.write_to_dir(dir)` —
 that's the FS-sidecar shape. For IPFS we keep the same trait surface
 but provide a backend-specific helper:
@@ -611,13 +611,13 @@ not a bug. The ADR commits to making this loud:
 | Threat | Mitigation |
 |---|---|
 | **Public visibility of bundle contents** | The README and the constructor's doc-comment both state, in the first paragraph, that pinning a bundle on IPFS makes its contents network-public. Operators who need confidentiality must encrypt before publish — see "Encryption envelope" below. |
-| **Adversarial pinned bundle** (malicious CID claims to be the next bundle for our collection) | Witness-fail-closed at `src/bundle.rs:349`. The bundle's own SHAKE-256 anchor catches any field-level tampering; an attacker who flips a field has to also recompute and re-publish, which is fine — it's a different bundle (different CID, different witness, different cache entry). What they cannot do is poison an existing trusted entry. |
+| **Adversarial pinned bundle** (malicious CID claims to be the next bundle for our collection) | Witness-fail-closed at `crates/core/src/bundle.rs:349`. The bundle's own SHAKE-256 anchor catches any field-level tampering; an attacker who flips a field has to also recompute and re-publish, which is fine — it's a different bundle (different CID, different witness, different cache entry). What they cannot do is poison an existing trusted entry. |
 | **Squatting on a CID** | Impossible by construction. CIDs are content-derived; you can't claim someone else's CID. |
 | **DNS rebinding on the gateway path** | The gateway client refuses to follow redirects to non-`ipfs/` paths; gateways that misbehave are ejected from the rotation for the process lifetime. |
 | **DoS via unbounded fetch** | `length=65536` cap on the kubo path; parse-time cap on the gateway path. A bundle that exceeds the cap fails before allocation. |
 | **Public-gateway abuse / rate-limiting** | Gateway operators rate-limit; the backend respects `429` with exponential backoff and rotates to the next gateway. The operator's own kubo node has no such limit. |
 | **Pinning-service credential leak** | `--auth-file` discipline (§5) keeps keys off `argv`/`env`. |
-| **Witness-format downgrade** | `RuLakeBundle::from_json` rejects `format_version > 2` (`src/bundle.rs:227-233`); a future v3 bundle on IPFS can't trick a v2 reader. |
+| **Witness-format downgrade** | `RuLakeBundle::from_json` rejects `format_version > 2` (`crates/core/src/bundle.rs:227-233`); a future v3 bundle on IPFS can't trick a v2 reader. |
 
 #### Encryption envelope — the small-payload escape hatch
 
@@ -956,7 +956,7 @@ gates is the v0.1 recommendation.
 
 ### 12. Distribution & tests
 
-Mirroring `gcs-backend/`'s split:
+Mirroring `crates/gcs-backend/`'s split:
 
 - **Offline tests** (the default `cargo test`) use a fake kubo
   client that stores blocks in a `HashMap<Cid, Vec<u8>>`. Same shape
@@ -970,7 +970,7 @@ Mirroring `gcs-backend/`'s split:
   either a kubo URL (`RULAKE_IPFS_KUBO_RPC=...
   RULAKE_IPFS_KUBO_BEARER=...`) or a public gateway
   (`RULAKE_IPFS_GATEWAY=https://ipfs.io`). Same gate shape as
-  `gcs-backend/tests/smoke.rs`'s `RULAKE_GCS_LIVE_TEST=1`.
+  `crates/gcs-backend/tests/smoke.rs`'s `RULAKE_GCS_LIVE_TEST=1`.
 - **Conformance test** against the IPFS Pinning Services API spec —
   behind the `pinning-service` feature, runs against an operator-
   supplied PSA endpoint. Asserts the request/response shapes match
@@ -1030,7 +1030,7 @@ workload to size against.
 
 Reject — they're different hash functions. The witness is
 SHAKE-256(32) over a bundle-domain-separated concatenation that
-includes a variant tag for `Generation` (`src/bundle.rs:71-97`).
+includes a variant tag for `Generation` (`crates/core/src/bundle.rs:71-97`).
 The CID is a multihash of the *encoded bundle bytes* (UnixFS or
 raw). Forcing them to be equal would mean either (a) changing the
 witness format to be a multihash — which breaks every existing
@@ -1086,7 +1086,7 @@ config surface that we shouldn't design speculatively.
 - **Zero new trust surface in the witness contract.** The CID is a
   *naming* anchor that lands in `Generation::Opaque`; the witness
   format is unchanged, so `verify_witness()` and the
-  `read_from_dir`-style fail-closed posture (`src/bundle.rs:349`)
+  `read_from_dir`-style fail-closed posture (`crates/core/src/bundle.rs:349`)
   apply verbatim. The IPFS backend cannot poison the witness chain.
 - **Deployment that fits in one VM.** $20-25/mo, no GKE, no Cloud
   Run, no Filestore. The annex turns the operator's environment
@@ -1133,19 +1133,19 @@ config surface that we shouldn't design speculatively.
 ### Neutral
 
 - **Sibling-crate count goes from 4 to 5.** `python/`, `node/`,
-  `mcp-server/`, `gcs-backend/`, `ipfs-backend/`. CI gains one more
+  `crates/mcp-server/`, `crates/gcs-backend/`, `crates/ipfs-backend/`. CI gains one more
   matrix row; ADR-001's "no workspace" rule absorbs it.
 - **Cargo dep tree gains `ipfs-api`, `cid`, `multihash`, `multibase`,
   `reqwest`.** Most of those are pure-Rust, MIT/Apache-licensed; no
   novel licence concerns. The hyper / rustls / tokio overlap with
-  `gcs-backend/` and `mcp-server/` means most of the bytes are
+  `crates/gcs-backend/` and `crates/mcp-server/` means most of the bytes are
   already in the binary if those crates are also linked.
 - **The MCP `transfer_ipfs-resolve` tool stays out of the read
   path.** It's an IPNS resolver and remains useful as an operator-
   facing helper for naming bundles; it's not a substitute for the
   backend's kubo client.
 
-### Verification (acceptance for the PR that lands `ipfs-backend/`)
+### Verification (acceptance for the PR that lands `crates/ipfs-backend/`)
 
 ```text
 $ cargo build --release -p ruvector-rulake-ipfs
@@ -1198,7 +1198,7 @@ paths are bounded by the gateway numbers above.
 
 ### Resolved by this ADR
 
-- **Crate placement.** `ipfs-backend/` sibling, no workspace.
+- **Crate placement.** `crates/ipfs-backend/` sibling, no workspace.
 - **Library.** `ipfs-api-backend-hyper` for kubo RPC; `reqwest` for
   the public-gateway path; `cid` / `multihash` / `multibase` for
   hash arithmetic.
@@ -1299,16 +1299,16 @@ paths are bounded by the gateway numbers above.
   [`docs.cloud.google.com/iap/docs/using-tcp-forwarding`](https://docs.cloud.google.com/iap/docs/using-tcp-forwarding)
 - Cloud Storage FUSE limitations (why Cloud Run was rejected for the
   blockstore in §9.1): [`docs.cloud.google.com/storage/docs/cloud-storage-fuse/overview`](https://docs.cloud.google.com/storage/docs/cloud-storage-fuse/overview)
-- Existing GCS backend this ADR mirrors structurally: `gcs-backend/`
-  (commit `c706dc6`); see `gcs-backend/Cargo.toml`,
-  `gcs-backend/src/backend.rs`, `gcs-backend/README.md`.
+- Existing GCS backend this ADR mirrors structurally: `crates/gcs-backend/`
+  (commit `c706dc6`); see `crates/gcs-backend/Cargo.toml`,
+  `crates/gcs-backend/src/backend.rs`, `crates/gcs-backend/README.md`.
 - Public Rust surface this backend implements: `BackendAdapter` at
-  `src/backend.rs:110-146`; `current_bundle` default impl at
-  `src/backend.rs:125-141` (the one we override).
-- Bundle protocol this backend serves over the wire: `src/bundle.rs`
-  — witness format `src/bundle.rs:362-390`, variant tag for the
-  `Generation` enum `src/bundle.rs:71-97`, witness-fail-closed
-  guard `src/bundle.rs:349`, JSON size + field caps
-  `src/bundle.rs:215-262`.
+  `crates/core/src/backend.rs:110-146`; `current_bundle` default impl at
+  `crates/core/src/backend.rs:125-141` (the one we override).
+- Bundle protocol this backend serves over the wire: `crates/core/src/bundle.rs`
+  — witness format `crates/core/src/bundle.rs:362-390`, variant tag for the
+  `Generation` enum `crates/core/src/bundle.rs:71-97`, witness-fail-closed
+  guard `crates/core/src/bundle.rs:349`, JSON size + field caps
+  `crates/core/src/bundle.rs:215-262`.
 - Related decisions: ADR-155 §M2-M5 backend roadmap, ADR-004 §Resources
   contract, ADR-001 sibling-crate discipline.

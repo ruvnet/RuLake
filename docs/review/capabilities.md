@@ -1,22 +1,22 @@
 # ruLake — Capabilities Review
 
-**Scope.** Map every public API in `src/lib.rs` to a real capability,
+**Scope.** Map every public API in `crates/core/src/lib.rs` to a real capability,
 verify that each marketing claim in `README.md` and each ADR-stated
 guarantee is backed by code in `src/` and a test in `tests/`. Flag
 gaps between what is shipped and what is implied. M1 / M1.5 (per
 ADR-155) is the bar.
 
-**Method.** Read the public re-exports in `src/lib.rs:46-58`, follow
+**Method.** Read the public re-exports in `crates/core/src/lib.rs:46-58`, follow
 each one to its definition, then cross-reference the README's
 "30+ features" matrix and the four ADRs. Tests in
-`tests/federation_smoke.rs` are treated as the authoritative behavioural
+`crates/core/tests/federation_smoke.rs` are treated as the authoritative behavioural
 spec.
 
 ---
 
 ## 1. Public surface — what the crate actually exports
 
-From `src/lib.rs:46-58`:
+From `crates/core/src/lib.rs:46-58`:
 
 ```rust
 pub mod backend;
@@ -38,7 +38,7 @@ Six modules, fourteen re-exports. That is the entire crate surface.
 There is no separate "kernel" module — ADR-157's `VectorKernel` trait
 is **not present** in this codebase (see §6 below).
 
-### `RuLake` (the entry point) — `src/lake.rs`
+### `RuLake` (the entry point) — `crates/core/src/lake.rs`
 
 | Method | Signature (truncated) | Source | Purpose |
 |---|---|---|---|
@@ -70,7 +70,7 @@ That is the entire query / lifecycle surface — about twenty methods.
 ## 2. Capability matrix — claims vs code
 
 Numbering follows the README "Full Capabilities" table for cross-reference.
-"Test" cites a function in `tests/federation_smoke.rs` (or an inline
+"Test" cites a function in `crates/core/tests/federation_smoke.rs` (or an inline
 `#[test]` in the relevant `src/*.rs`) that exercises the claim.
 
 ### Core cache + coherence (claims #1-#7)
@@ -117,7 +117,7 @@ Numbering follows the README "Full Capabilities" table for cross-reference.
 
 | # | Claim | Implementation | Test | Verdict |
 |---|---|---|---|---|
-| 21 | `LocalBackend` reference impl | `backend.rs:157-330` | the entire `tests/federation_smoke.rs` suite | **Backed.** |
+| 21 | `LocalBackend` reference impl | `backend.rs:157-330` | the entire `crates/core/tests/federation_smoke.rs` suite | **Backed.** |
 | 22 | `FsBackend` `ruvec1` format, mtime-as-generation, atomic writes, path-traversal-safe | `fs_backend.rs:1-356` | `fs_write_then_pull_roundtrip`, `fs_register_rejects_path_traversal`, `fs_pull_rejects_bad_magic`, `fs_backend_end_to_end_search_and_recache_on_mtime_bump` (line 487) | **Backed.** Path validator covers 12 attack forms; magic bytes checked; atomic temp+rename on write. |
 | 23 | Custom backends via 4-method trait | `backend.rs:110-146` | `two_backends_share_cache_when_witness_matches` defines its own shim backend | **Backed.** Trait is `id`, `list_collections`, `pull_vectors`, `generation` + optional `current_bundle` and `supports_pushdown`. |
 | 24 | DoS caps: `MAX_PULLED_VECTORS=100M`, `MAX_PULLED_DIM=8192`, `MAX_PULLED_BYTES=16 GiB` | `backend.rs:60-62` constants; `validate_pulled_batch` at `backend.rs:68` | `pulled_batch_validator_*` (4 tests in `backend.rs:332-387`) | **Backed.** Validator runs at `cache.rs:377` before any allocation in `prime_interned`. |
@@ -130,7 +130,7 @@ Numbering follows the README "Full Capabilities" table for cross-reference.
 | 26 | AVX2 + POPCNT | **No, in `ruvector-rabitq`** | Same. |
 | 27 | AVX-512 VPOPCNTDQ | **No, in `ruvector-rabitq`** | Same. |
 | 28 | Runtime CPUID dispatch | **No, in `ruvector-rabitq`** | Same. |
-| 29 | `VectorKernel` trait (ADR-157) | **NOT in this crate** — README implies it exists; ADR-157 places it in `ruvector-rabitq` (see §"Where each piece lives"). | **Gap vs README.** README #29 says "ADR-157" capability; this is **scaffolding only** per the ADR's status ("Proposed — scaffolding-only decision"), and the ruLake side of the dispatch (`RuLake::register_kernel`, `pick_kernel`) is **not present** in `src/lake.rs`. |
+| 29 | `VectorKernel` trait (ADR-157) | **NOT in this crate** — README implies it exists; ADR-157 places it in `ruvector-rabitq` (see §"Where each piece lives"). | **Gap vs README.** README #29 says "ADR-157" capability; this is **scaffolding only** per the ADR's status ("Proposed — scaffolding-only decision"), and the ruLake side of the dispatch (`RuLake::register_kernel`, `pick_kernel`) is **not present** in `crates/core/src/lake.rs`. |
 | 30 | Hadamard rotation (ADR-158) | **No, in `ruvector-rabitq`** — `RandomRotationKind::HadamardSigned` is constructed by `bin/rulake-demo.rs:75` but ruLake does not expose it on the `RuLake` builder. | **Inherited.** The benchmark binary uses it directly via the rabitq crate; ruLake itself takes only `(rerank_factor, rotation_seed)` and forwards Haar-default to RaBitQ. |
 
 ### Security (claims #31-#35)
@@ -165,13 +165,13 @@ implemented:
 
 ADR-155 M1 acceptance numbers cited inside the ADR itself
 (intermediary tax 1.02×, federated speedups 1.97× / 3.86×, recall ≥ 0.90)
-are reproducible from `src/bin/rulake-demo.rs`. The headline KPI
+are reproducible from `crates/core/src/bin/rulake-demo.rs`. The headline KPI
 (`cache_stats().hit_rate() ≥ 0.95`) is exposed at `cache.rs:111`.
 
 ### ADR-156 (substrate for agent brain memory)
 
 The six-guarantee acceptance loop is implemented as **a single test**
-in `tests/federation_smoke.rs:766`
+in `crates/core/tests/federation_smoke.rs:766`
 (`brain_substrate_acceptance_recall_verify_forget_rehydrate`). Verified:
 
 - Recall — `search_one` returns 5 hits (`tests:805-810`).
@@ -227,7 +227,7 @@ Cross-checking against `src/`:
 
 | Milestone | What ADR-155 promises | Status in this repo |
 |---|---|---|
-| **M1** (weeks 1-2) | crate scaffold, trait, `LocalBackend` + `FsBackend`, RaBitQ glue, witness-addressed cache, LRU, rayon fan-out, adaptive per-shard rerank, bundle protocol, hit-rate / prime-time stats, 28 tests | **Shipped.** Test count is now 28+ in `tests/federation_smoke.rs` plus inline tests in `bundle.rs`, `backend.rs`, `fs_backend.rs`. |
+| **M1** (weeks 1-2) | crate scaffold, trait, `LocalBackend` + `FsBackend`, RaBitQ glue, witness-addressed cache, LRU, rayon fan-out, adaptive per-shard rerank, bundle protocol, hit-rate / prime-time stats, 28 tests | **Shipped.** Test count is now 28+ in `crates/core/tests/federation_smoke.rs` plus inline tests in `bundle.rs`, `backend.rs`, `fs_backend.rs`. |
 | **M1.5** | `hit_rate ≥ 0.95` measurable from stats stream alone | **Shipped.** `CacheStats::hit_rate()` at `cache.rs:111`. |
 | **M2** (weeks 3-5) | `ParquetBackend` via `arrow` crate | **Not present.** No `arrow` dependency in `Cargo.toml:15-29`. |
 | **M3** (weeks 6-8) | `BigQueryBackend` via storage-read API | **Not present.** No `gcp-bigquery-*` deps. |
@@ -368,12 +368,12 @@ Counted by `grep -c "#\[test\]"`:
 
 | File | Inline tests | Notes |
 |---|---|---|
-| `tests/federation_smoke.rs` | 19 | Acceptance gates for M1 + brain substrate + warm restart |
-| `src/bundle.rs` | 11 | Witness, JSON caps, atomic write, tamper detection |
-| `src/backend.rs` | 4 | `validate_pulled_batch` boundary cases |
-| `src/fs_backend.rs` | 3 | Roundtrip, path-traversal, bad magic |
-| `src/cache.rs` | 0 | Coverage entirely from `tests/` |
-| `src/lake.rs` | 0 | Same |
+| `crates/core/tests/federation_smoke.rs` | 19 | Acceptance gates for M1 + brain substrate + warm restart |
+| `crates/core/src/bundle.rs` | 11 | Witness, JSON caps, atomic write, tamper detection |
+| `crates/core/src/backend.rs` | 4 | `validate_pulled_batch` boundary cases |
+| `crates/core/src/fs_backend.rs` | 3 | Roundtrip, path-traversal, bad magic |
+| `crates/core/src/cache.rs` | 0 | Coverage entirely from `tests/` |
+| `crates/core/src/lake.rs` | 0 | Same |
 
 **Total: 37 tests** in this crate. README claims "83 tests" in the
 "Status / What's done" block (`README.md:489`) — that count likely

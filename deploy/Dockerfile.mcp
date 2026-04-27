@@ -27,9 +27,9 @@ COPY . .
 # BuildKit cache mounts: the registry index, downloaded crates, and
 # the per-target build artifacts all survive between rebuilds.
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/work/mcp-server/target \
-    cargo build --release --manifest-path mcp-server/Cargo.toml \
-    && cp mcp-server/target/release/rulake-mcp /usr/local/bin/rulake-mcp
+    --mount=type=cache,target=/work/crates/mcp-server/target \
+    cargo build --release --manifest-path crates/mcp-server/Cargo.toml \
+    && cp crates/mcp-server/target/release/rulake-mcp /usr/local/bin/rulake-mcp
 
 # ── runtime stage ────────────────────────────────────────────────────
 FROM gcr.io/distroless/cc-debian12:nonroot

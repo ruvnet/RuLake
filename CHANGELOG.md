@@ -30,12 +30,12 @@ locked under smoke scripts that drive the full wire end-to-end.
 
 ### Added — substrate adapters
 
-- **`rvdna-backend/` v0.0.1** ([ADR-007](docs/adrs/ADR-007-rvdna-as-rulake-substrate.md))
+- **`crates/rvdna-backend/` v0.0.1** ([ADR-007](docs/adrs/ADR-007-rvdna-as-rulake-substrate.md))
   — hot-tier (T0) BackendAdapter for `.rvdna` v2 files. RAM-resident
   k-mer vectors with witness derivation byte-isomorphic to
   `RuLakeBundle::new` (memory_class = `genomic`). 6 tests pass; T1/T2
   land in v0.1/v0.2.
-- **`ruqu-backend/` v0.0.1** ([ADR-008](docs/adrs/ADR-008-ruqu-as-rulake-substrate.md))
+- **`crates/ruqu-backend/` v0.0.1** ([ADR-008](docs/adrs/ADR-008-ruqu-as-rulake-substrate.md))
   — StateVector quantum simulator BackendAdapter (≤16 qubits, mini-IR:
   H/X/Y/Z/S/T/Rz/CX). Witness derivation byte-isomorphic
   (memory_class = `quantum`). 9 tests pass; Stabilizer / TensorNetwork
@@ -43,14 +43,14 @@ locked under smoke scripts that drive the full wire end-to-end.
 
 ### Added — companion MCP servers
 
-- **`mcp-rvdna/` v0.0.1** — five tools (`rvdna_find`,
+- **`crates/mcp-rvdna/` v0.0.1** — five tools (`rvdna_find`,
   `rvdna_call_variants`, `rvdna_translate`, `rvdna_score`,
   `rvdna_lineage`); 17 tests pass. `rvdna_lineage` is the live
   trust-anchor demo with `RVDNA_WITNESS_DRIFT` refusal when the pinned
   witness disagrees with the live re-derivation. End-to-end HTTP smoke
-  at `mcp-rvdna/scripts/http-smoke.sh` (build → launch → MCP handshake
+  at `crates/mcp-rvdna/scripts/http-smoke.sh` (build → launch → MCP handshake
   → tools/list).
-- **`mcp-ruqu/` v0.0.1** — five tools (`ruqu_simulate`, `ruqu_verify`,
+- **`crates/mcp-ruqu/` v0.0.1** — five tools (`ruqu_simulate`, `ruqu_verify`,
   `ruqu_replay`, `ruqu_optimize`, `ruqu_qec_schedule`); 13 tests pass.
   Library-only in v0.0.1 by design (HTTP transport lands in v0.1).
   R-1 / R-2 / R-3 mitigations enforced at handler entry (empty/overlong
@@ -113,7 +113,7 @@ locked under smoke scripts that drive the full wire end-to-end.
   the bundle anyway. CID-substitution surface — a legitimately-witnessed
   bundle re-pinned under a different CID would still be trusted. Fixed
   to **hard refuse** with code `IPFS_BUNDLE_CID_MISMATCH`
-  (`ipfs-backend/src/backend.rs:283-289`, commit `56b497b`).
+  (`crates/ipfs-backend/src/backend.rs:283-289`, commit `56b497b`).
 - **R-MCP-1 (Med)** — Audit shape was asymmetric across read vs
   mutation tools. `rulake_query` emitted a fully-shaped `AuditEntry`
   with `PolicyDecision` on every outcome, but the 5 mutation handlers
@@ -123,10 +123,10 @@ locked under smoke scripts that drive the full wire end-to-end.
   `audit_mutation()` helper on the server struct that derives outcome +
   code from the `Result<T, McpError>` and emits a fully-shaped entry —
   every mutation now leaves an audit trail symmetric with reads
-  (`mcp-server/src/server.rs`, commit `56b497b`).
+  (`crates/mcp-server/src/server.rs`, commit `56b497b`).
 - **R-2 (Med)** — `ruqu-backend::state_vector::simulate` had no qubit
   bound; `Circuit::dim()` saturates at 31, allowing a 32 GiB
-  allocation. Mitigated by new `ruqu-backend/src/limits.rs` with
+  allocation. Mitigated by new `crates/ruqu-backend/src/limits.rs` with
   `MAX_QUBITS_V0_0 = 16`, `MAX_QUBITS_HARD = 30`, and
   `enforce_qubit_cap()` (commit `beed210`). `mcp-ruqu` calls this
   before `execute()` and refuses with `RUQU_QUBIT_CAP_EXCEEDED`.
@@ -184,8 +184,8 @@ against rvdna-mcp at :17441:
 
 - **mcp-rvdna missing CORS layer** — Console got `Failed to fetch`
   on the preflight `OPTIONS /mcp`. Fixed by porting `mcp-server`'s
-  CORS pattern (`mcp-server/src/http.rs:287+`) into
-  `mcp-rvdna/src/http.rs`: echo requesting Origin, expose
+  CORS pattern (`crates/mcp-server/src/http.rs:287+`) into
+  `crates/mcp-rvdna/src/http.rs`: echo requesting Origin, expose
   `mcp-session-id` + `mcp-protocol-version`, short-circuit OPTIONS
   with 204. Tightening to an allow-list deferred to v0.0.2.
 - **Console SSE parser grabbed the keepalive `data:\n` line first** —
@@ -201,7 +201,7 @@ against rvdna-mcp at :17441:
 
 Three scripts that lock the cross-component flows in CI:
 
-- **`mcp-rvdna/scripts/http-smoke.sh`** — builds rvdna-mcp, launches
+- **`crates/mcp-rvdna/scripts/http-smoke.sh`** — builds rvdna-mcp, launches
   on `127.0.0.1:17441`, walks the MCP handshake (initialize →
   notifications/initialized), asserts all 5 expected tool names land
   in `tools/list`, then calls `rvdna_lineage` with an unknown
@@ -244,7 +244,7 @@ Three scripts that lock the cross-component flows in CI:
   cleanly (`LIST_COLLECTIONS_FAILED · refused` audit row + 0 console
   errors) when `Browse.refresh` fires `rulake_list_collections`
   against an MCP server that doesn't expose that tool.
-- **`mcp-rvdna/scripts/http-smoke.sh`** CORS preflight section
+- **`crates/mcp-rvdna/scripts/http-smoke.sh`** CORS preflight section
   (iter 41) — direct curl `OPTIONS` request asserts 5 CORS response
   headers, fast (50 ms) and chrome-free regression check for the
   iter 32 fix.
@@ -312,7 +312,7 @@ each substrate ADR's own scope.
   refusal. 6 new tests + 6 in-module unit tests. Commit `c1cfe8c`.
 - **`mcp-ruqu` v0.1** — HTTP transport (lifts the `mcp-rvdna`
   pattern; same iter-32 CORS layer; default port 7442). New
-  `mcp-ruqu/scripts/http-smoke.sh` registered into
+  `crates/mcp-ruqu/scripts/http-smoke.sh` registered into
   `scripts/smoke-all.sh`. 15 tests + 4-check smoke. Commit `270f4d6`.
 
 ### Added — ADR-157 VectorKernel trait + CpuNaiveKernel (iter 49)
@@ -332,7 +332,7 @@ passes the conformance gate". Root crate version bumped
 - 49 tests pass; CpuNaive baseline = **2.92 ms median for L2 at
   dim=384, n=16384** (the bar future kernels must beat ≥2× p95)
 - v2.2 public surface byte-identical: every prior `pub use` line
-  unchanged; only `src/lib.rs` and `Cargo.toml` touched in existing files
+  unchanged; only `crates/core/src/lib.rs` and `Cargo.toml` touched in existing files
 
 Commit `125ded6`.
 
@@ -398,9 +398,9 @@ shows `● LIVE` instead of `○ DEMO · no live MCP`.
 - **`release-ui.yml` YAML parse error fixed** — unquoted `file:`
   inside step name was being parsed as a nested mapping key (commit
   `f305b04`).
-- **`node-wasm/build.sh` output dirs renamed** (commits `fb3ecf8`,
+- **`sdk/node-wasm/build.sh` output dirs renamed** (commits `fb3ecf8`,
   `fc2b4e8`) — `pkg-web` / `pkg-nodejs` → `web` / `nodejs` to match
-  what `node-wasm/package.json`'s exports map references.
+  what `sdk/node-wasm/package.json`'s exports map references.
 
 ---
 

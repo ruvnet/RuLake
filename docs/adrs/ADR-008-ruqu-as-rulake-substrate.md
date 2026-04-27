@@ -2,8 +2,8 @@
 
 ## Status
 
-**Accepted — Scaffolded (2026-04-27)** — `ruqu-backend/` v0.0.1 is
-landed (commit `08261ae`); `mcp-ruqu/` v0.0.1 scaffold lands in the
+**Accepted — Scaffolded (2026-04-27)** — `crates/ruqu-backend/` v0.0.1 is
+landed (commit `08261ae`); `crates/mcp-ruqu/` v0.0.1 scaffold lands in the
 following commit. v0.0 ships the StateVector backend only — a tiny
 exact simulator (≤16 qubits, mini-IR: H/X/Y/Z/S/T/Rz/CX) with witness
 derivation byte-isomorphic to `RuLakeBundle::new` (memory_class =
@@ -41,8 +41,8 @@ plan's PR sequence to a single decision record.
 
 - **ADR-001** (`docs/adrs/ADR-001-standalone-repo-strategy.md`) —
   sibling crate layout, no root workspace, vendored submodule
-  discipline. `ruqu-backend/` and `mcp-ruqu/` slot in next to
-  `gcs-backend/`, `ipfs-backend/`, and `mcp-server/` under the same
+  discipline. `crates/ruqu-backend/` and `crates/mcp-ruqu/` slot in next to
+  `crates/gcs-backend/`, `crates/ipfs-backend/`, and `crates/mcp-server/` under the same
   rules. No `*.workspace = true`, no shared `Cargo.toml` at the
   repo root.
 - **ADR-005** (`docs/adrs/sdk/ADR-005-ipfs-backend-and-deploy.md`) —
@@ -94,7 +94,7 @@ plan's PR sequence to a single decision record.
 
 ## Context
 
-ruLake's `BackendAdapter` trait (`src/backend.rs:110`) is what every
+ruLake's `BackendAdapter` trait (`crates/core/src/backend.rs:110`) is what every
 data lake plugs into. Today we have `LocalBackend`, `FsBackend`,
 `GcsParquetBackend`, and `IpfsBackend`. Each one wraps a *vector
 data source* — Parquet on cloud storage, an IPFS-published bundle,
@@ -119,7 +119,7 @@ There are five forces pushing ruqu-backend onto the v0.1 list:
    (`vendor/ruvector/crates/ruqu-core/src/witness.rs:88`) is a
    tamper-evident chain of `ExecutionRecord` entries with 32-byte
    self-hashes computed via `DefaultHasher` (SipHash) four times.
-   ruLake's `RuLakeBundle::rvf_witness` (`src/bundle.rs:362`
+   ruLake's `RuLakeBundle::rvf_witness` (`crates/core/src/bundle.rs:362`
    `compute_witness`) is a 32-byte SHAKE-256 over the bundle fields.
    Both are 32-byte digests over a deterministic concatenation of
    execution-affecting inputs. The structural similarity is too
@@ -134,12 +134,12 @@ There are five forces pushing ruqu-backend onto the v0.1 list:
    On second call with identical inputs, the *cheapest* backend is
    trivially "the cache" — but v1 has no cache, so the planner
    re-simulates. Adding a cache pre-pass via
-   `lake.cache_stats_by_backend` (`src/lake.rs:127`) makes the
+   `lake.cache_stats_by_backend` (`crates/core/src/lake.rs:127`) makes the
    second call free. The change is local to a wrapper struct; no
    v1 planner code is modified.
 
 3. **The federation primitive already does the right thing.**
-   `lake.search_federated` (`src/lake.rs:521`) is a parallel
+   `lake.search_federated` (`crates/core/src/lake.rs:521`) is a parallel
    rayon fan-out across `(backend, collection)` pairs. Apply that
    to "(simulation backend, circuit hash)" pairs and federation
    becomes "ask all five quantum engines, in parallel, for prior
@@ -205,7 +205,7 @@ where RuntimeContext = {
 }
 ```
 
-`compute_witness` (`src/bundle.rs:362`) over those five inputs
+`compute_witness` (`crates/core/src/bundle.rs:362`) over those five inputs
 produces the v2 `rvf_witness`. The v1 `WitnessLog` chain semantic
 moves to a companion `chain.rulake.json` sidecar (one entry per
 bundle, each with a `prev_witness` field). The v1 hash function
@@ -225,7 +225,7 @@ affecting unless the SIMD-path id implicitly captures the change).
 Per `integration-with-rulake.md` §1.1, we ship five separate
 `BackendAdapter` implementations (`StateVectorBackend`,
 `StabilizerBackend`, `CliffordTBackend`, `TensorNetworkBackend`,
-`HardwareBackend`) inside one `ruqu-backend/` crate, gated by
+`HardwareBackend`) inside one `crates/ruqu-backend/` crate, gated by
 five Cargo feature flags. Operators with WASM-target deployments
 get StateVector + Stabilizer by default; the other three are opt-in
 behind features that pull in their respective dependencies.
@@ -236,10 +236,10 @@ defence in `integration-with-rulake.md` §1.1.
 ### Decision 3: Cost-model planner becomes cache-aware (non-breaking ruLake addition)
 
 The v1 cost-model planner (`vendor/ruvector/crates/ruqu-core/src/planner.rs:213`)
-gets wrapped by `CacheAwarePlanner` in `ruqu-backend/`. The wrapper:
+gets wrapped by `CacheAwarePlanner` in `crates/ruqu-backend/`. The wrapper:
 
 1. Computes the anticipated witness from inputs.
-2. Queries `lake.cache_stats_by_backend()` (`src/lake.rs:127`) for
+2. Queries `lake.cache_stats_by_backend()` (`crates/core/src/lake.rs:127`) for
    any backend currently holding the witness.
 3. Returns `Hit { backend_id, witness }` on cache hit.
 4. Falls back to the v1 `plan_execution` on miss, returning `Miss
@@ -250,7 +250,7 @@ gains a method (or field) returning the set of witnesses currently
 held by that backend. Concrete shape:
 
 ```rust
-// In src/cache.rs, on PerBackendStats:
+// In crates/core/src/cache.rs, on PerBackendStats:
 pub fn witnesses_held(&self) -> &HashSet<String> { &self.witnesses }
 ```
 
@@ -260,11 +260,11 @@ because the wrapper depends on it.
 
 ### Decision 4: Five new MCP tools in a sibling mcp-ruqu crate
 
-Per `integration-with-rulake.md` §2, we ship `mcp-ruqu/` as a
-sibling crate of `mcp-server/`. The five tools (`ruqu_simulate`,
+Per `integration-with-rulake.md` §2, we ship `crates/mcp-ruqu/` as a
+sibling crate of `crates/mcp-server/`. The five tools (`ruqu_simulate`,
 `ruqu_verify`, `ruqu_replay`, `ruqu_optimize`, `ruqu_qec_schedule`)
 mirror the `#[tool_router]` macro pattern at
-`mcp-server/src/server.rs:189`. Three new capabilities (`simulate`,
+`crates/mcp-server/src/server.rs:189`. Three new capabilities (`simulate`,
 `hardware`, `verify`) gate them.
 
 The audit pipeline is unified across both servers via a shared
@@ -329,7 +329,7 @@ codes do that.
 
 2. **Federation across simulation engines becomes a one-line API
    call.** The federation primitive `lake.search_federated`
-   (`src/lake.rs:521`) is unchanged. Calling it with the five ruQu
+   (`crates/core/src/lake.rs:521`) is unchanged. Calling it with the five ruQu
    simulation engines as backends and circuit-hashes as collection
    ids gives "show me all prior runs of this circuit across all
    five engines" for free. Operators get cross-backend visibility
@@ -359,7 +359,7 @@ codes do that.
    changing.** All five ruqu-core simulation backends, the
    planner, the QEC control plane, the SIMD layer, the QASM
    exporter — none of these change. v2 wraps them; the wrapping
-   is in `ruqu-backend/` and `mcp-ruqu/`, both sibling crates,
+   is in `crates/ruqu-backend/` and `crates/mcp-ruqu/`, both sibling crates,
    neither in the ruqu-core source tree. If ruqu-core evolves,
    v2 inherits via `Cargo.toml` version bumps.
 
@@ -425,7 +425,7 @@ codes do that.
    algorithms, ruqu-exotic, ruqu-wasm continue to live under
    `vendor/ruvector/crates/`. They are not pulled into the ruLake
    workspace (there isn't one per ADR-001); they are dependencies
-   of `ruqu-backend/`. This preserves the upstream's release
+   of `crates/ruqu-backend/`. This preserves the upstream's release
    independence and the submodule discipline.
 
 2. **The `WitnessLog` v1 hash-chain semantic is preserved through
@@ -454,12 +454,12 @@ codes do that.
 
 Five measurable acceptance gates. ADR-008 is *accepted* when all
 five pass in CI. Each maps onto a `tests/*.rs` integration test in
-either `ruqu-backend/` or `mcp-ruqu/` per
+either `crates/ruqu-backend/` or `crates/mcp-ruqu/` per
 `integration-with-rulake.md` §1.1 and §2.1.
 
 ### Gate G1: Witness equivalence proves out
 
-**Test location:** `ruqu-backend/tests/witness_equivalence.rs`
+**Test location:** `crates/ruqu-backend/tests/witness_equivalence.rs`
 
 **Setup:** Generate 1000 random circuits at qubit counts {5, 10, 15,
 20} with mixed gate sets (Bell, GHZ, VQE-like ansatzes, surface-code
@@ -481,7 +481,7 @@ v2 bundle) and compare against the v1 `ExecutionRecord` hash.
 
 ### Gate G2: Cross-process replay sub-1 ms
 
-**Test location:** `ruqu-backend/tests/round_trip_state_vector.rs`
+**Test location:** `crates/ruqu-backend/tests/round_trip_state_vector.rs`
 
 **Setup:** Two test harness threads (representing P1 and P2)
 sharing one `Lake` instance. P1 runs `ruqu_simulate` for a 10-qubit
@@ -498,7 +498,7 @@ P1 returned.
 
 ### Gate G3: Hardware-cache attribution
 
-**Test location:** `ruqu-backend/tests/hardware_cache_attribution.rs`
+**Test location:** `crates/ruqu-backend/tests/hardware_cache_attribution.rs`
 
 **Setup:** A `MockHardwareBackend` (deferred to v0.2 per
 `integration-with-rulake.md` §1.4 — G3 ships in v0.2). The mock
@@ -519,7 +519,7 @@ configurable via test setup.
 
 ### Gate G4: Clifford concordance — stabilizer-sim ↔ mock-hardware
 
-**Test location:** `ruqu-backend/tests/clifford_concordance.rs`
+**Test location:** `crates/ruqu-backend/tests/clifford_concordance.rs`
 (deferred to v0.2 since it depends on G3's mock hardware backend).
 
 **Setup:** A 4-qubit GHZ-state preparation circuit dispatched two
@@ -538,7 +538,7 @@ inequality holds 10/10.
 
 ### Gate G5: Audit log round-trip parity with ruLake's
 
-**Test location:** `mcp-ruqu/tests/audit_round_trip.rs`
+**Test location:** `crates/mcp-ruqu/tests/audit_round_trip.rs`
 
 **Setup:** Test harness runs ten `ruqu_*` calls against `mcp-ruqu`
 in parallel with ten `rulake_*` calls against `mcp-server`. Both
@@ -593,7 +593,7 @@ crate. The five backends register at lake construction time.
 - Coupling: every ruLake user (including those who don't run
   quantum simulations) would pull in ruqu-core's 26K LOC. That's
   the opposite of the modular sibling-crate pattern this repo
-  has used since `gcs-backend/`.
+  has used since `crates/gcs-backend/`.
 - Releaseing: ruLake releases would block on ruqu-core release
   changes, and vice versa. The sibling-crate pattern decouples
   release cadences.
@@ -728,15 +728,15 @@ acceptance hands off to the v0.2+ work.
     scalar gate kernel referenced in v2-spec.md §i for the
     SIMD-path-affects-witness gotcha.
 - ruLake source tree:
-  - `src/backend.rs::BackendAdapter` (line 110) — the trait the
+  - `crates/core/src/backend.rs::BackendAdapter` (line 110) — the trait the
     five ruQu backends implement.
-  - `src/bundle.rs::RuLakeBundle::new` (line 166) and
+  - `crates/core/src/bundle.rs::RuLakeBundle::new` (line 166) and
     `compute_witness` (line 362) — the witness anchor v2 inherits.
-  - `src/lake.rs::cache_stats_by_backend` (line 127) — the cache
+  - `crates/core/src/lake.rs::cache_stats_by_backend` (line 127) — the cache
     pre-pass `CacheAwarePlanner` queries.
-  - `src/lake.rs::search_federated` (line 521) — the federation
+  - `crates/core/src/lake.rs::search_federated` (line 521) — the federation
     primitive ruQu v2 reuses with circuit-witness collection ids.
-  - `mcp-server/src/server.rs:189` — the `#[tool_router]` /
+  - `crates/mcp-server/src/server.rs:189` — the `#[tool_router]` /
     `#[tool]` macro pattern `mcp-ruqu` mirrors.
-  - `mcp-server/src/audit.rs::AuditEntry` — the audit schema
+  - `crates/mcp-server/src/audit.rs::AuditEntry` — the audit schema
     `mcp-ruqu` shares with disjoint code prefixes.

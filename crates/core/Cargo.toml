@@ -18,7 +18,7 @@ path = "src/bin/rulake-demo.rs"
 [dependencies]
 # Sourced from the vendored RuVector submodule (vendor/ruvector). The submodule
 # pins the rabitq revision; bump it via `git submodule update --remote vendor/ruvector`.
-ruvector-rabitq = { path = "vendor/ruvector/crates/ruvector-rabitq", version = "2.2" }
+ruvector-rabitq = { path = "../../vendor/ruvector/crates/ruvector-rabitq", version = "2.2" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "2.0"

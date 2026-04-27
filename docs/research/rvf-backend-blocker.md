@@ -37,7 +37,7 @@ exposes:
 - `RvfStore::compact / delete / close` — lifecycle
 
 What's **missing for the BackendAdapter contract** in
-[`src/backend.rs:115`](../../src/backend.rs):
+[`crates/core/src/backend.rs:115`](../../src/backend.rs):
 
 ```rust
 fn pull_vectors(&self, collection: &str) -> Result<PulledBatch>;
@@ -71,7 +71,7 @@ every function in it is `pub(crate)` (see lines 67, 76, 289, 346).
 **Path A** — file the upstream issue / PR against `ruvnet/RuVector`'s
 `rvf-runtime` for a public `read_all_vectors()` (or per-id
 `read_vector`) method. Until it lands, ruLake's first cloud backend
-remains `gcs-backend/` (Parquet on GCS, shipped today as commit
+remains `crates/gcs-backend/` (Parquet on GCS, shipped today as commit
 `c706dc6`).
 
 When the upstream lands, the right shape is **Path A + Path C
@@ -102,4 +102,4 @@ the higher-performance native option for ruLake-ecosystem deployments.
 2. Draft an ADR for the `BackendAdapter::pull_prebuilt_index` trait
    extension (Path C).
 3. Once both land, scaffold `rvf-backend/` as a sibling crate
-   following the `gcs-backend/` pattern.
+   following the `crates/gcs-backend/` pattern.

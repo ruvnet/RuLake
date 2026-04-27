@@ -17,11 +17,11 @@ prose walkthrough.
 | [001](ADR-001-standalone-repo-strategy.md) | Standalone repo strategy | **Accepted** | repo root | [standalone-repo-deep.md](../gists/standalone-repo-deep.md) |
 | [002](sdk/ADR-002-python-sdk.md) | Python SDK — PyO3 + ABI3 wheels | **Accepted v2.2** | [`python/`](../../python/) | [python-sdk-deep.md](../gists/python-sdk-deep.md) |
 | [003](sdk/ADR-003-nodejs-typescript-sdk.md) | Node SDK — napi-rs + ESM-first | **Accepted v2.2** | [`node/`](../../node/) | [node-sdk-deep.md](../gists/node-sdk-deep.md) |
-| [004](sdk/ADR-004-rulake-mcp-server.md) | MCP server — Streamable HTTP, JWT scopes | **Accepted v0.10** | [`mcp-server/`](../../mcp-server/) | [mcp-server-deep.md](../gists/mcp-server-deep.md) |
-| [005](sdk/ADR-005-ipfs-backend-and-deploy.md) | IPFS backend — CIDv1 + kubo + gateway-fallback | **Accepted v0.1** | [`ipfs-backend/`](../../ipfs-backend/) | [ipfs-backend-deep.md](../gists/ipfs-backend-deep.md) |
+| [004](sdk/ADR-004-rulake-mcp-server.md) | MCP server — Streamable HTTP, JWT scopes | **Accepted v0.10** | [`crates/mcp-server/`](../../mcp-server/) | [mcp-server-deep.md](../gists/mcp-server-deep.md) |
+| [005](sdk/ADR-005-ipfs-backend-and-deploy.md) | IPFS backend — CIDv1 + kubo + gateway-fallback | **Accepted v0.1** | [`crates/ipfs-backend/`](../../ipfs-backend/) | [ipfs-backend-deep.md](../gists/ipfs-backend-deep.md) |
 | [006](ADR-006-rulake-console-vite-github-pages.md) | Console — Vite + React + GitHub Pages | **Accepted** | [`ui/`](../../ui/) | [console-deep.md](../gists/console-deep.md) |
-| [007](ADR-007-rvdna-as-rulake-substrate.md) | rvDNA v2 — genomic substrate | **Accepted — Scaffolded v0.0.1** | [`rvdna-backend/`](../../rvdna-backend/) + [`mcp-rvdna/`](../../mcp-rvdna/) | [rvdna-v2-deep.md](../gists/rvdna-v2-deep.md) |
-| [008](ADR-008-ruqu-as-rulake-substrate.md) | ruQu v2 — quantum execution substrate | **Accepted — Scaffolded v0.0.1** | [`ruqu-backend/`](../../ruqu-backend/) + [`mcp-ruqu/`](../../mcp-ruqu/) | [ruqu-v2-deep.md](../gists/ruqu-v2-deep.md) |
+| [007](ADR-007-rvdna-as-rulake-substrate.md) | rvDNA v2 — genomic substrate | **Accepted — Scaffolded v0.0.1** | [`crates/rvdna-backend/`](../../rvdna-backend/) + [`crates/mcp-rvdna/`](../../mcp-rvdna/) | [rvdna-v2-deep.md](../gists/rvdna-v2-deep.md) |
+| [008](ADR-008-ruqu-as-rulake-substrate.md) | ruQu v2 — quantum execution substrate | **Accepted — Scaffolded v0.0.1** | [`crates/ruqu-backend/`](../../ruqu-backend/) + [`crates/mcp-ruqu/`](../../mcp-ruqu/) | [ruqu-v2-deep.md](../gists/ruqu-v2-deep.md) |
 | [155](ADR-155-rulake-datalake-layer.md) | Datalake layer — vector-native federation intermediary | **Accepted M3** | core + 4 backends + 3 MCP servers | [datalake-layer-deep.md](../gists/datalake-layer-deep.md) |
 | [156](ADR-156-rulake-as-memory-substrate.md) | ruLake as memory substrate for agent brains | **Accepted (positioning ratified)** | README + Console + gists | [memory-substrate-deep.md](../gists/memory-substrate-deep.md) |
 | [157](ADR-157-optional-accelerator-plane.md) | Optional accelerator plane — `VectorKernel` trait | **Proposed** *(scaffolding-only)* | — | — |

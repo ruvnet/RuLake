@@ -74,7 +74,7 @@ mapping → mcp-server → MCP handshake → SSE response back).
 `mcp-server` is the only one that exposes `--capabilities publish admin`
 (8 tools including the 5 mutation handlers iter-32 wired). It also
 runs the `serve_with_guards` path through replay-protection +
-session-binding + layered rate-limiting (`mcp-server/src/http.rs:92+`),
+session-binding + layered rate-limiting (`crates/mcp-server/src/http.rs:92+`),
 which `mcp-rvdna` and `mcp-ruqu` deliberately don't lift in v0.0.1.
 
 Most likely culprit: `LayeredRateLimiter` defaults

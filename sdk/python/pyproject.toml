@@ -75,10 +75,10 @@ python-source = "python_src"
 # vendored rabitq submodule the parent depends on. Without these
 # `pip install <sdist>` cannot build in an air-gapped environment.
 include = [
-    { path = "../src/**/*.rs",                                  format = "sdist" },
-    { path = "../Cargo.toml",                                   format = "sdist" },
-    { path = "../Cargo.lock",                                   format = "sdist" },
-    { path = "../vendor/ruvector/Cargo.toml",                   format = "sdist" },
-    { path = "../vendor/ruvector/Cargo.lock",                   format = "sdist" },
-    { path = "../vendor/ruvector/crates/ruvector-rabitq/**/*",  format = "sdist" },
+    { path = "../../crates/core/src/**/*.rs",                      format = "sdist" },
+    { path = "../../crates/core/Cargo.toml",                       format = "sdist" },
+    { path = "../../crates/core/Cargo.lock",                       format = "sdist" },
+    { path = "../../vendor/ruvector/Cargo.toml",                   format = "sdist" },
+    { path = "../../vendor/ruvector/Cargo.lock",                   format = "sdist" },
+    { path = "../../vendor/ruvector/crates/ruvector-rabitq/**/*",  format = "sdist" },
 ]

@@ -24,14 +24,14 @@ ruLake has reached a state where shipping a UI is the next obvious move.
   Streamable HTTP, JSON-RPC, four authentication modes
   (`none`/`bearer`/`jwt`/`mtls`), per-collection RBAC via JWT scopes,
   per-call capability gates with `tools/list` visibility filtering
-  (`mcp-server/src/server.rs:566-585`), JWKS hot rotation, IPFS-aware
+  (`crates/mcp-server/src/server.rs:566-585`), JWKS hot rotation, IPFS-aware
   bundle resources, and an in-process JSONL audit log.
 - `node-wasm/` exposes `verifyBundleJson`, `computeWitness`,
   `searchBruteForceL2`, `formatVersion`, `buildInfo`
   (`node-wasm/src/lib.rs:157, 211, 275, 343`). ~149 KB compressed.
 - `node/http.mjs` exports `RuLakeHttp` — the fetch-based MCP-Streamable-HTTP
   client every browser caller will use (`node/http.mjs:107-184`).
-- `gcs-backend/`, `ipfs-backend/` (ADR-005) and the on-disk `rvf-*`
+- `crates/gcs-backend/`, `crates/ipfs-backend/` (ADR-005) and the on-disk `rvf-*`
   workspace under `vendor/ruvector/crates/rvf/` are all live.
 
 **What isn't done.**
@@ -215,7 +215,7 @@ We will:
     | Vector field, sparkline, histogram, score distribution | **WebGL** (via plain `<canvas>` + `gl.drawArrays`) | `ui/src/components/VectorFieldGL.jsx` — replaces the SVG vector field for ≥10 k-vector renders; SVG fallback when WebGL unavailable |
     | Embedding generation | **OpenAI** (cloud) / **Cohere** / **Voyage** / **local Web-LLM via WebGPU** | `ui/src/lib/embed/` — each provider behind a `EmbedProvider` interface; Web-LLM optional dynamic import |
     | Cloud bundle storage | **GCS HTTP** / **S3 fetch** with signed URLs | `ui/src/lib/storage/cloud.ts` — read-only by default; CORS-allow-listed buckets |
-    | **IPFS bundle distribution** | **kubo HTTP RPC** + **gateway fallback** + **HTTP gateway** | `ui/src/lib/storage/ipfs.ts` — mirrors `ipfs-backend/`'s three modes (kubo / gateway-only / kubo + gateway-fallback), publishes `table.rulake.json` sidecars by CIDv1, witness ↔ CID per ADR-005 §3 |
+    | **IPFS bundle distribution** | **kubo HTTP RPC** + **gateway fallback** + **HTTP gateway** | `ui/src/lib/storage/ipfs.ts` — mirrors `crates/ipfs-backend/`'s three modes (kubo / gateway-only / kubo + gateway-fallback), publishes `table.rulake.json` sidecars by CIDv1, witness ↔ CID per ADR-005 §3 |
     | Settings UI for all of the above | **Existing Connect / Tweaks panel** | `ui/src/components/screens.jsx` Connect screen + a new "Storage" tab |
 
     The mode picker on the Connect screen becomes:
@@ -430,15 +430,15 @@ We will:
 - `assets/RuLake dashboard.zip` — the design artifact (5.0 MB, 22 files)
 - `docs/research/console-deep-review.md` — the deep-review companion
 - `docs/research/management-ui.md` — the prior "conditional yes" note (1,457 lines)
-- `mcp-server/src/server.rs` — server-side capability surface
+- `crates/mcp-server/src/server.rs` — server-side capability surface
   - `:191-318` — `rulake_query`
   - `:319-446` — list/publish/refresh/save/warm/invalidate tools
   - `:455-469` — capability tier mapping
   - `:566-585` — `tools/list` visibility filter
   - `:597-624` — `list_resources`
   - `:649-708` — `read_resource`
-- `mcp-server/src/audit.rs` — `AuditEntry` shape
-- `mcp-server/src/http.rs` — Streamable HTTP transport
+- `crates/mcp-server/src/audit.rs` — `AuditEntry` shape
+- `crates/mcp-server/src/http.rs` — Streamable HTTP transport
 - `node-wasm/src/lib.rs` — the wasm exports
   - `:157-209` — `verifyBundleJson` (the central wasm call)
   - `:211-237` — `computeWitness`

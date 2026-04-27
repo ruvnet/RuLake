@@ -22,7 +22,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  PACKAGE_DIR: node
+  PACKAGE_DIR: sdk/node
 
 jobs:
   build:

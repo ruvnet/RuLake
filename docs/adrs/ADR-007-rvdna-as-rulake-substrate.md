@@ -2,8 +2,8 @@
 
 ## Status
 
-**Accepted — Scaffolded (2026-04-27)** — `rvdna-backend/` v0.0.1 is
-landed (commit `08261ae`); `mcp-rvdna/` v0.0.1 scaffold lands in the
+**Accepted — Scaffolded (2026-04-27)** — `crates/rvdna-backend/` v0.0.1 is
+landed (commit `08261ae`); `crates/mcp-rvdna/` v0.0.1 scaffold lands in the
 following commit. v0.0 ships the hot-tier (T0) BackendAdapter only —
 RAM-resident k-mer vectors with witness derivation byte-isomorphic to
 `RuLakeBundle::new` (memory_class = `genomic`). 6 tests pass; bench
@@ -39,7 +39,7 @@ that binds the brief to ruLake's existing primitives.
 - [v2-spec.md](./v2-spec.md) — canonical rvDNA v2 file-format and
   behaviour spec. The format defined there is what ADR-007 ratifies.
 - [integration-with-rulake.md](./integration-with-rulake.md) — the
-  code-level companion sketching `rvdna-backend/`, `mcp-rvdna/`,
+  code-level companion sketching `crates/rvdna-backend/`, `crates/mcp-rvdna/`,
   and the Console hooks. The shapes proposed there are what ADR-007
   commits to building.
 - [ADR-013 (v1) — `vendor/ruvector/examples/dna/adr/ADR-013-rvdna-ai-native-format.md`](../../../vendor/ruvector/examples/dna/adr/ADR-013-rvdna-ai-native-format.md)
@@ -56,7 +56,7 @@ that binds the brief to ruLake's existing primitives.
   — the substrate framing that gives `memory_class: "genomic"` (v2
   bundle pointer offset 0x49) its meaning.
 - [`docs/adrs/sdk/ADR-004-rulake-mcp-server.md`](../../adrs/sdk/ADR-004-rulake-mcp-server.md)
-  — the MCP server design `mcp-rvdna/` mirrors. The `#[tool]` macro
+  — the MCP server design `crates/mcp-rvdna/` mirrors. The `#[tool]` macro
   pattern, capability tiers, audit row shape, and JWKS-backed JWT
   flow all transfer.
 - [`docs/adrs/sdk/ADR-005-ipfs-backend-and-deploy.md`](../../adrs/sdk/ADR-005-ipfs-backend-and-deploy.md)
@@ -86,12 +86,12 @@ ruLake is shipping. As of iteration 16 of the `/loop` on
   + 1 ignored.
 - The Console at `ui/` ships in tri-mode (Demo / WASM-local / Live)
   via Vite + React, deployed through GitHub Pages CI.
-- IPFS bundle distribution exists at `ipfs-backend/`; GCS at
-  `gcs-backend/`. Both implement `BackendAdapter`
-  (`src/backend.rs:110`).
+- IPFS bundle distribution exists at `crates/ipfs-backend/`; GCS at
+  `crates/gcs-backend/`. Both implement `BackendAdapter`
+  (`crates/core/src/backend.rs:110`).
 - The bundle witness is SHAKE-256(32), length-prefixed and domain-
   separated, audit-hardened against the `Num(7)` vs
-  `Opaque("\x07\0…")` collision (`src/bundle.rs::compute_witness`).
+  `Opaque("\x07\0…")` collision (`crates/core/src/bundle.rs::compute_witness`).
 
 In parallel, rvDNA v1 lives at `vendor/ruvector/examples/dna/`. It is
 a complete prototype: 18 source files (~9.5 kloc), 15 ADRs, 172
@@ -125,9 +125,9 @@ ruLake recognises and a backend wrapper that matches the
 ### What this ADR commits to
 
 Treating v2 as a first-class ruLake substrate. Concretely: the v2
-spec lands as `docs/research/rvdna/v2-spec.md`; `rvdna-backend/` and
-`mcp-rvdna/` are scaffolded as sibling crates following the
-`gcs-backend/` / `ipfs-backend/` pattern; the Console grows a 7th
+spec lands as `docs/research/rvdna/v2-spec.md`; `crates/rvdna-backend/` and
+`crates/mcp-rvdna/` are scaffolded as sibling crates following the
+`crates/gcs-backend/` / `crates/ipfs-backend/` pattern; the Console grows a 7th
 sidebar entry. None of this requires changing `rulake@2.2.0`'s public
 API — every integration point already exists.
 
@@ -160,9 +160,9 @@ The three tiers from v2-spec §e:
 
 - **Tier 0 (T0) — hot**: §1 k-mer vectors, in-RAM via
   `RvdnaT0Backend`. `Consistency::Fresh` per cache mode
-  (`src/cache.rs::Consistency`). Per-file cap of 512 MiB on top of
+  (`crates/core/src/cache.rs::Consistency`). Per-file cap of 512 MiB on top of
   ruLake's existing `MAX_PULLED_BYTES = 16 GiB`
-  (`src/backend.rs:62`).
+  (`crates/core/src/backend.rs:62`).
 - **Tier 1 (T1) — warm**: §2/§3/§4/§6 mmap'd via `RvdnaT1Backend`.
   `Consistency::Eventual { ttl_ms: 5_000 }`.
 - **Tier 2 (T2) — cold**: §0/§5 lazy via `RvdnaT2Backend<Inner>`.
@@ -170,10 +170,10 @@ The three tiers from v2-spec §e:
   `BackendAdapter` provides the cold-tier bytes (Local, GCS, IPFS).
 
 Each tier is a separate `BackendAdapter` impl. The trait at
-`src/backend.rs:110` is the only contract surface — the four required
+`crates/core/src/backend.rs:110` is the only contract surface — the four required
 methods (`id`, `list_collections`, `pull_vectors`, `generation`) plus
 the `current_bundle` override that makes the witness chain visible to
-ruLake's cache (`src/cache.rs` "the cross-backend share").
+ruLake's cache (`crates/core/src/cache.rs` "the cross-backend share").
 
 The full `RvdnaT0Backend` sketch is in
 `integration-with-rulake.md` §1.3.
@@ -181,13 +181,13 @@ The full `RvdnaT0Backend` sketch is in
 ### D3. Make every v2 file's bundle pointer compatible with ruLake's `RuLakeBundle`
 
 The 96-byte bundle pointer at offset `0x00B0` of every v2 file is
-byte-isomorphic to a `RuLakeBundle` (`src/bundle.rs:113`) serialised
+byte-isomorphic to a `RuLakeBundle` (`crates/core/src/bundle.rs:113`) serialised
 in binary form. The witness at the start of the pointer is the
-output of `compute_witness` (`src/bundle.rs::compute_witness`) over
+output of `compute_witness` (`crates/core/src/bundle.rs::compute_witness`) over
 the same input shape ruLake uses elsewhere — same domain-separation
 prefix, same length-prefixing, same `Generation` variant tag byte
 that closed the 2026-04-23 security audit
-(`src/bundle.rs::Generation::hash_bytes`).
+(`crates/core/src/bundle.rs::Generation::hash_bytes`).
 
 The Generation::Opaque payload v2 uses (`v2-spec.md` §d.1) packs:
 
@@ -202,12 +202,12 @@ The result: a `.rvdna` v2 file, the bundle JSON it emits at encode
 time, and a `RuLakeBundle` synthesised at runtime by
 `RvdnaT0Backend::current_bundle()` all carry the same
 `rvf_witness`. Cache sharing across deployments — the
-`src/cache.rs` "cross-backend share" path — works for free.
+`crates/core/src/cache.rs` "cross-backend share" path — works for free.
 
 ### D4. Expose the genomic surface through a sibling MCP server, not as new tools on `mcp-server`
 
-`mcp-rvdna/` is a separate crate, mirroring `mcp-server/`'s shape
-(`mcp-server/src/server.rs:189`). Five tools:
+`crates/mcp-rvdna/` is a separate crate, mirroring `crates/mcp-server/`'s shape
+(`crates/mcp-server/src/server.rs:189`). Five tools:
 
 - `rvdna_find` — k-mer similarity, witness-pinned (Read tier)
 - `rvdna_call_variants` — variant calls in a region (Read + Clinical
@@ -219,7 +219,7 @@ time, and a `RuLakeBundle` synthesised at runtime by
   digests (Internal tier)
 
 Capability gate by JWT scopes mirroring the `scopes_to_caps` pattern
-from `mcp-server/src/auth.rs:294`. New scopes:
+from `crates/mcp-server/src/auth.rs:294`. New scopes:
 - `mcp:rvdna:read`
 - `mcp:rvdna:clinical`
 - `mcp:rvdna:internal`
@@ -245,10 +245,10 @@ The full sketch is in `integration-with-rulake.md` §2.2.
 ### D5. Federate via `lake.search_federated`, no new federation primitive
 
 Cross-sample queries use the existing
-`RuLake::search_federated` (`src/lake.rs:521`) with rayon parallel
+`RuLake::search_federated` (`crates/core/src/lake.rs:521`) with rayon parallel
 fan-out and adaptive per-shard rerank
-(`src/lake.rs:533` `MIN_PER_SHARD_RERANK = 5`,
-`src/lake.rs:584` `over_request_k`). v2 doesn't invent a new
+(`crates/core/src/lake.rs:533` `MIN_PER_SHARD_RERANK = 5`,
+`crates/core/src/lake.rs:584` `over_request_k`). v2 doesn't invent a new
 federation API — the genomic case is just N `RvdnaT0Backend`
 registrations and one `search_federated(targets, query, k)` call.
 
@@ -311,7 +311,7 @@ readers can read v1 files via the synthesised-witness path
    from the brief reduces to one method invocation against existing
    infrastructure.
 2. **Existing IPFS / GCS backends carry `.rvdna` bundles for free.**
-   `ipfs-backend/` and `gcs-backend/` already implement
+   `crates/ipfs-backend/` and `crates/gcs-backend/` already implement
    `BackendAdapter`; `RvdnaT2Backend<Inner>` wraps them as the cold
    tier. No new networking, no new storage layer.
 3. **The Console's Bundle screen verifies any `.rvdna` witness with
@@ -320,7 +320,7 @@ readers can read v1 files via the synthesised-witness path
    the cryptographic verify path is shared. The Genomic screen is a
    UI shell, not a re-implementation of crypto.
 4. **The audit pipeline serves both servers.** `mcp-rvdna` emits
-   `AuditRow` with the exact shape of `mcp-server/src/audit.rs`; the
+   `AuditRow` with the exact shape of `crates/mcp-server/src/audit.rs`; the
    `RVDNA_*` code prefix makes the rows distinguishable, but a
    single ingestion pipeline handles both. Operators don't run two
    audit stacks.
@@ -362,7 +362,7 @@ readers can read v1 files via the synthesised-witness path
    tenant_ids; both are scoped into v0.2 of `mcp-rvdna`.
 4. **Two MCP servers means two audit log streams.** Operators who
    want one log stream concatenate them; this is straightforward but
-   needs to be documented in the `mcp-rvdna/` README.
+   needs to be documented in the `crates/mcp-rvdna/` README.
 5. **The biomarker section (§6) is new code.** v1 keeps biomarker
    data in memory only (`vendor/ruvector/examples/dna/src/biomarker_stream.rs:1`);
    v2 serialises it. The streaming-mode flag (v2-spec §j) adds
@@ -407,7 +407,7 @@ on one ruLake.
 - **Target**: total wall-clock < 500 ms (5 ms / file, including
   witness verification).
 - **Failure mode**: any single file > 50 ms.
-- **Test location**: `rvdna-backend/tests/t0_register.rs`.
+- **Test location**: `crates/rvdna-backend/tests/t0_register.rs`.
 
 ### G2. Cold-prime latency
 
@@ -417,7 +417,7 @@ RaBitQ-compressed cache.
 - **Target**: total wall-clock for 100 primes < 1.5 s; mean prime
   < 15 ms (the v1 full-pipeline floor).
 - **Failure mode**: `cache_stats.avg_prime_ms > 25`.
-- **Test location**: `rvdna-backend/tests/t0_query.rs::cold_prime`.
+- **Test location**: `crates/rvdna-backend/tests/t0_query.rs::cold_prime`.
 
 ### G3. Federated query latency (the brief's <10 ms ask)
 
@@ -426,7 +426,7 @@ files in parallel via `RuLake::search_federated`.
 
 - **Target**: p50 < 10 ms, p99 < 30 ms.
 - **Failure mode**: any single query > 50 ms.
-- **Test location**: `rvdna-backend/benches/v2_acceptance.rs::g3_federated_find_100_shards`.
+- **Test location**: `crates/rvdna-backend/benches/v2_acceptance.rs::g3_federated_find_100_shards`.
 
 ### G4. Witness-verify latency
 
@@ -435,7 +435,7 @@ witness recompute via v2-spec §d.4).
 
 - **Target**: total wall-clock < 5 s; mean verify < 50 ms.
 - **Failure mode**: any single verify > 200 ms.
-- **Test location**: `rvdna-backend/tests/witness_parity.rs::verify_100`.
+- **Test location**: `crates/rvdna-backend/tests/witness_parity.rs::verify_100`.
 
 ### G5. Audit emit overhead
 
@@ -444,7 +444,7 @@ warm backend. Measure per-call audit emit overhead.
 
 - **Target**: p99 audit emit < 50 µs / call.
 - **Failure mode**: any emit > 200 µs.
-- **Test location**: `mcp-rvdna/tests/audit_overhead.rs`.
+- **Test location**: `crates/mcp-rvdna/tests/audit_overhead.rs`.
 
 If all five gates pass, the brief's "perfect compositional fit" claim
 is verified empirically and v2 is shippable.
@@ -474,7 +474,7 @@ pipeline as a new ruLake API surface.
    it into ruLake would either fork the version trajectory or break
    downstream consumers.
 3. The `BackendAdapter` trait is the right composition primitive.
-   Sibling crates use it (`gcs-backend/`, `ipfs-backend/`); making
+   Sibling crates use it (`crates/gcs-backend/`, `crates/ipfs-backend/`); making
    v2 a sibling continues the precedent.
 
 ### Option B — Treat `.rvdna` as opaque bytes, ship a single `rulake_genomic` MCP tool
@@ -491,7 +491,7 @@ file and runs the v1 pipeline against it.
    bytes means re-encoding on every query, the exact failure mode v2
    was designed to fix.
 2. Doesn't federate. A single tool can't take advantage of
-   `lake.search_federated` (`src/lake.rs:521`); you'd hand-roll the
+   `lake.search_federated` (`crates/core/src/lake.rs:521`); you'd hand-roll the
    fan-out for every multi-sample query.
 3. Loses the cross-deployment cache share. Two ruLake instances
    reading the same `.rvdna` file would each run the v1 pipeline
@@ -500,8 +500,8 @@ file and runs the v1 pipeline against it.
 
 ### Option C — Ship v2 only as a new file format; defer all integration work
 
-Land v2-spec.md as a format-only ADR. Don't scaffold `rvdna-backend/`
-or `mcp-rvdna/`. Let downstream consumers wire it up themselves.
+Land v2-spec.md as a format-only ADR. Don't scaffold `crates/rvdna-backend/`
+or `crates/mcp-rvdna/`. Let downstream consumers wire it up themselves.
 
 **Rejected** because:
 
@@ -564,7 +564,7 @@ later or never.
 | Tier 0 RAM pressure at population scale (1M+ samples) | High | High | Per-file 512 MiB cap + `MAX_T0_FILES_OPEN` per process. v0.3 introduces GCS-backed T0 (k-mer vectors as Parquet) for cohort-of-cohorts cases. |
 | ESM-2 / NT / Hyena ship breaking checkpoint changes | High | Medium | Witness rotates deterministically on model change (v2-spec §c.4 `model_checkpoint_lo`). Federation refuses to mix witnesses cleanly with `RVDNA_WITNESS_MODEL_MISMATCH`. Operators batch-re-embed at their cadence. |
 | Clinical-mode tenant scope misconfiguration | Medium | High (in clinical contexts) | Explicit `RVDNA_TENANT_SCOPE_REFUSED` with clear error message naming the missing claim. `rvdna v2 inspect <file>` subcommand reports the file's `tenant_ids` so operators can verify their JWT issuer config. |
-| Two MCP servers (`mcp-server` + `mcp-rvdna`) increase deployment complexity | Medium | Low | Both servers can be run as a single process (separate ports, shared `Arc<RuLake>`); `mcp-rvdna/main.rs` documents the co-process pattern. Audit logs concatenate into one stream. |
+| Two MCP servers (`mcp-server` + `mcp-rvdna`) increase deployment complexity | Medium | Low | Both servers can be run as a single process (separate ports, shared `Arc<RuLake>`); `crates/mcp-rvdna/main.rs` documents the co-process pattern. Audit logs concatenate into one stream. |
 | Streaming-mode crash between BLAKE3 and witness commit corrupts §6 | Medium | Medium | Default behaviour: refuse to open files where §6's checksum doesn't match the witness. v0.3 introduces an explicit flush-protocol (write WAL → fsync → commit pointer) per v2-spec §n open question 5. |
 | BLAKE3 vs SHAKE-256 split confuses readers | Low | Low | Documented in v2-spec §c.6 with the rationale (throughput vs parity); ADR-007 §Decision D3 reiterates the choice. The Console's Verify view labels each hash by purpose. |
 | Browser-side decode of large `.rvdna` files (multi-GB) hits WASM memory limit | Medium | Medium | Genomic Verify view streams sections — never loads the full file into JS heap. Bundle pointer (96 B) + per-section hashes are all the verification needs; raw §0 bytes are streamed only on explicit user request. |
@@ -582,13 +582,13 @@ v1 vendored submodule.
 | v1 `.rvdna` files in the wild | Readable via v2's synthesised-witness path; migratable via `rvdna v2 migrate`. | Backward compatibility for existing v1 corpora. |
 | v1 ADR-013 (`vendor/ruvector/examples/dna/adr/ADR-013-rvdna-ai-native-format.md`) | Marked superseded for new file emissions. v1 ADR-013 remains the spec of record for the v1 reader path. | Cleanly delineates which ADR governs which file format. |
 | v1 source crate (`vendor/ruvector/examples/dna/`) | Untouched. Continues to build, test, and ship as `rvdna` on crates.io. | v1 owns the biology; v2 owns the envelope. No source merge. |
-| ruLake `BackendAdapter` trait (`src/backend.rs:110`) | Unchanged. v2 implements it three times (T0/T1/T2). | The trait is already the right shape; no API break. |
-| `RuLakeBundle` (`src/bundle.rs:113`) | Unchanged. v2's bundle pointer is byte-isomorphic to a serialised `RuLakeBundle`. | Forces witness parity; no new bundle type. |
-| `compute_witness` (`src/bundle.rs::compute_witness`) | Unchanged. v2 calls it (or computes the equivalent) with the v2-defined `Generation::Opaque` payload. | Cross-deployment witness sharing is the entire point. |
-| `mcp-server/` 8 tools | Unchanged. They continue to expose the substrate surface. | Genomic surface lives in `mcp-rvdna/`, not here. |
-| `mcp-server/src/audit.rs` `AuditRow` shape | Unchanged. `mcp-rvdna` emits the same shape with `RVDNA_*` codes. | One audit pipeline serves both servers. |
-| `mcp-server/src/auth.rs` `scopes_to_caps` (line 294) | Unchanged. `mcp-rvdna` ships its own equivalent for the `mcp:rvdna:*` scope namespace. | Each server owns its scope-to-capability mapping. |
-| `gcs-backend/` and `ipfs-backend/` | Unchanged. `RvdnaT2Backend<Inner>` wraps them as the cold tier. | Composition, not modification. |
+| ruLake `BackendAdapter` trait (`crates/core/src/backend.rs:110`) | Unchanged. v2 implements it three times (T0/T1/T2). | The trait is already the right shape; no API break. |
+| `RuLakeBundle` (`crates/core/src/bundle.rs:113`) | Unchanged. v2's bundle pointer is byte-isomorphic to a serialised `RuLakeBundle`. | Forces witness parity; no new bundle type. |
+| `compute_witness` (`crates/core/src/bundle.rs::compute_witness`) | Unchanged. v2 calls it (or computes the equivalent) with the v2-defined `Generation::Opaque` payload. | Cross-deployment witness sharing is the entire point. |
+| `crates/mcp-server/` 8 tools | Unchanged. They continue to expose the substrate surface. | Genomic surface lives in `crates/mcp-rvdna/`, not here. |
+| `crates/mcp-server/src/audit.rs` `AuditRow` shape | Unchanged. `mcp-rvdna` emits the same shape with `RVDNA_*` codes. | One audit pipeline serves both servers. |
+| `crates/mcp-server/src/auth.rs` `scopes_to_caps` (line 294) | Unchanged. `mcp-rvdna` ships its own equivalent for the `mcp:rvdna:*` scope namespace. | Each server owns its scope-to-capability mapping. |
+| `crates/gcs-backend/` and `crates/ipfs-backend/` | Unchanged. `RvdnaT2Backend<Inner>` wraps them as the cold tier. | Composition, not modification. |
 | Console (`ui/`) sidebar (`ui/src/components/screens.jsx:17`) | One new entry (`Genomic`) added; existing entries untouched. | First-class genomic screen (§Decision D4 rationale extended in `integration-with-rulake.md` §3.1). |
 | `node-wasm/` exports (`verifyBundleJson`, etc.) | Unchanged. v2 adds `verifyRvdnaWitness` as a sibling export. | Reuses the SHAKE-256 path; no new browser crypto. |
 | `docs/adrs/sdk/ADR-005-ipfs-backend-and-deploy.md` | Unchanged. v2 cross-site federation reuses the IPFS path verbatim. | The IPFS path was designed for content-addressed bundles; `.rvdna` is content-addressed. Free fit. |
@@ -601,7 +601,7 @@ v1 vendored submodule.
 
 Two PRs after this ADR is accepted:
 
-### PR 1 — `rvdna-backend/` v0.0
+### PR 1 — `crates/rvdna-backend/` v0.0
 
 - Crate scaffold per `integration-with-rulake.md` §1.1.
 - `RvdnaT0Backend` only (T1/T2 deferred).
@@ -614,7 +614,7 @@ Two PRs after this ADR is accepted:
 - Acceptance gates G1 + G3 implemented as benches.
 - Published as `rvdna-backend = "0.0.1"` to crates.io once green.
 
-### PR 2 — `mcp-rvdna/` v0.0
+### PR 2 — `crates/mcp-rvdna/` v0.0
 
 - Crate scaffold per `integration-with-rulake.md` §2.1.
 - `rvdna_find` and `rvdna_lineage` only (other 3 tools deferred).
@@ -643,7 +643,7 @@ This ADR ratifies that:
   recipe ruLake uses.
 - Five MCP tools (`rvdna_find`, `rvdna_call_variants`,
   `rvdna_translate`, `rvdna_score`, `rvdna_lineage`) are exposed
-  by a sibling `mcp-rvdna/` crate.
+  by a sibling `crates/mcp-rvdna/` crate.
 - Federation uses `lake.search_federated`; no new primitive.
 - Two profiles (clinical / research) are bundle-bound configurations,
   not forks.

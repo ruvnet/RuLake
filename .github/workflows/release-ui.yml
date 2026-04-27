@@ -17,7 +17,7 @@ on:
     branches: [main]
     paths:
       - "ui/**"
-      - "node-wasm/**"
+      - "sdk/node-wasm/**"
       - ".github/workflows/release-ui.yml"
     tags:
       - "ui-v*"
@@ -45,16 +45,16 @@ jobs:
         with:
           node-version: "22"
 
-      - name: "Install + build node-wasm (rulake-wasm sibling, file: dep)"
+      - name: "Install + build sdk/node-wasm (rulake-wasm sibling, file: dep)"
         run: |
-          # ui/ depends on rulake-wasm via `file:../node-wasm`. wasm-pack
+          # ui/ depends on rulake-wasm via `file:../sdk/node-wasm`. wasm-pack
           # build emits the artifacts the package.json files[] field
           # publishes. Skip wasm-opt (host wasm-pack's bundled binary
           # rejects rustc bulk-memory ops; we build raw and Vite serves
           # them as-is).
           rustup target add wasm32-unknown-unknown
           cargo install --locked wasm-pack || true
-          (cd node-wasm && unset RUSTFLAGS CARGO_BUILD_RUSTFLAGS && ./build.sh)
+          (cd sdk/node-wasm && unset RUSTFLAGS CARGO_BUILD_RUSTFLAGS && ./build.sh)
 
       - name: Install ui/ deps
         working-directory: ui

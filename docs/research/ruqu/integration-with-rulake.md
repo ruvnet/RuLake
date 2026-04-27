@@ -3,14 +3,14 @@
 This document goes from `v2-spec.md`'s abstractions to concrete
 crate-and-line-of-code integration. Three load-bearing pieces:
 
-1. `ruqu-backend/` — a sibling Cargo crate (analogous to `gcs-backend/`
-   and `ipfs-backend/` in this repo) that exposes the five ruqu-core
+1. `crates/ruqu-backend/` — a sibling Cargo crate (analogous to `crates/gcs-backend/`
+   and `crates/ipfs-backend/` in this repo) that exposes the five ruqu-core
    simulation engines as `BackendAdapter` implementations
-   (`src/backend.rs:110`).
-2. `mcp-ruqu/` — a sibling MCP server crate (analogous to
-   `mcp-server/`) that exposes the five intent verbs from `v2-spec.md`
+   (`crates/core/src/backend.rs:110`).
+2. `crates/mcp-ruqu/` — a sibling MCP server crate (analogous to
+   `crates/mcp-server/`) that exposes the five intent verbs from `v2-spec.md`
    §g as `#[tool]`-decorated methods, mirroring the macro pattern at
-   `mcp-server/src/server.rs:189`.
+   `crates/mcp-server/src/server.rs:189`.
 3. Console hooks — a 7th sidebar entry (`Quantum`) in `ui/` per
    `docs/adrs/ADR-006-rulake-console-vite-github-pages.md`'s
    route-extension discipline, composing existing `ruqu-wasm` and
@@ -19,7 +19,7 @@ crate-and-line-of-code integration. Three load-bearing pieces:
 Each section ends with a "What v0.1 ships vs v0.2 defers" subsection
 so the first PR after ADR-008 acceptance has an unambiguous scope.
 
-## 1. `ruqu-backend/` — single crate, five Adapter impls
+## 1. `crates/ruqu-backend/` — single crate, five Adapter impls
 
 ### 1.1 The "single union-impl with discriminator" vs "five sibling impls" decision
 
@@ -58,7 +58,7 @@ inside one crate**. Defence:
 **Resulting crate layout:**
 
 ```
-ruqu-backend/
+crates/ruqu-backend/
 ├── Cargo.toml
 ├── src/
 │   ├── lib.rs                  # re-exports, feature-gated mods
@@ -90,7 +90,7 @@ description = "ruLake BackendAdapter implementations for the five \
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-rulake = "2.2"  # the crates.io published version; mirrors gcs-backend/Cargo.toml shape
+rulake = "2.2"  # the crates.io published version; mirrors crates/gcs-backend/Cargo.toml shape
 ruqu-core = { path = "../vendor/ruvector/crates/ruqu-core" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -118,7 +118,7 @@ all = ["state-vector", "stabilizer", "clifford-t", "tensor-network", "hardware"]
 
 ### 1.3 The `BackendAdapter` trait surface — one method group at a time
 
-Per `src/backend.rs:110`, the trait has 4 required methods plus 2
+Per `crates/core/src/backend.rs:110`, the trait has 4 required methods plus 2
 optional. We walk through what each method *does* per backend and
 where the backend's state lives.
 
@@ -204,7 +204,7 @@ actually serve from cache.
 This is the cache-prime path: the lake calls it once per cache miss
 to fetch the full vector batch and compress it into RaBitQ codes.
 
-The return value `PulledBatch` (per `src/backend.rs:38`-area) is:
+The return value `PulledBatch` (per `crates/core/src/backend.rs:38`-area) is:
 
 ```rust
 pub struct PulledBatch {
@@ -290,7 +290,7 @@ recalibrated yet) return the same monotonic_id.
 
 #### `current_bundle(&self, collection, rotation_seed, rerank_factor) -> Result<RuLakeBundle>`
 
-The default impl (`src/backend.rs:125`-area) does a `pull_vectors`
+The default impl (`crates/core/src/backend.rs:125`-area) does a `pull_vectors`
 to get the dim, then synthesises a bundle. ruQu backends override
 to *avoid* the pull on the bundle-fetch hot path:
 
@@ -334,7 +334,7 @@ fn current_bundle(
 
 The bundle is constructed from cached metadata, no pull required.
 This is critical for the MCP server's `rulake://bundle/{b}/{c}`
-resource (`mcp-server/src/server.rs` resource registration area)
+resource (`crates/mcp-server/src/server.rs` resource registration area)
 which needs to be O(1) — operators browse bundles in the Console
 and cannot afford a pull per click.
 
@@ -353,7 +353,7 @@ similarity-of-circuits use case emerges.
 
 **v0.1 ships:**
 
-- `ruqu-backend/` crate scaffold with the five module files.
+- `crates/ruqu-backend/` crate scaffold with the five module files.
 - `state_vector.rs` and `stabilizer.rs` fully implemented behind
   `state-vector` and `stabilizer` features (default).
 - `runtime_context.rs` with the `RuntimeContext` struct and the
@@ -381,28 +381,28 @@ similarity-of-circuits use case emerges.
   feature-flag interactions with `wasm-bindgen` are nailed down.
 - Tiered cache (T0/T1/T2 per `v2-spec.md` §p open question 4).
 
-## 2. `mcp-ruqu/` — sibling MCP server
+## 2. `crates/mcp-ruqu/` — sibling MCP server
 
-Mirrors `mcp-server/`'s shape exactly. The four key parallels:
+Mirrors `crates/mcp-server/`'s shape exactly. The four key parallels:
 
 1. **`#[tool_router]` + `#[tool(name=..., description=...)]` macro
-   pattern** — see `mcp-server/src/server.rs:189`. `mcp-ruqu` uses
+   pattern** — see `crates/mcp-server/src/server.rs:189`. `mcp-ruqu` uses
    the same `rmcp` crate and the same macro.
-2. **`AuditEntry` schema reuse** — `mcp-server/src/audit.rs::AuditEntry`
+2. **`AuditEntry` schema reuse** — `crates/mcp-server/src/audit.rs::AuditEntry`
    is *not* re-defined; `mcp-ruqu` depends on `mcp-server` as a
    library and imports the type directly. Disjoint code prefixes
    (`RUQU_*` vs `RULAKE_*`) prevent collision.
-3. **JWT auth re-use** — `mcp-server/src/auth.rs::scopes_to_caps` is
+3. **JWT auth re-use** — `crates/mcp-server/src/auth.rs::scopes_to_caps` is
    imported and extended with the three new ruqu-specific
    capabilities (`simulate`, `hardware`, `verify`).
 4. **Capability gating via `require_cap(&self.capabilities, ...)`** —
-   identical pattern to `mcp-server/src/server.rs:339` (`require_cap`
+   identical pattern to `crates/mcp-server/src/server.rs:339` (`require_cap`
    call in `rulake_list_collections`).
 
 ### 2.1 Crate layout
 
 ```
-mcp-ruqu/
+crates/mcp-ruqu/
 ├── Cargo.toml
 ├── src/
 │   ├── main.rs                # CLI: --capabilities, --transport, --jwt-jwks
@@ -413,7 +413,7 @@ mcp-ruqu/
 │   └── resources.rs           # MCP resources: ruqu://circuit/{hash}/* etc
 └── tests/
     ├── tool_router_smoke.rs
-    └── http_e2e.rs            # mirrors mcp-server/tests/http_e2e.rs
+    └── http_e2e.rs            # mirrors crates/mcp-server/tests/http_e2e.rs
 ```
 
 ### 2.2 `Cargo.toml`
@@ -443,9 +443,9 @@ clap = { version = "4", features = ["derive"] }
 # By default mcp-ruqu serves SV + Stab only. Operators with hardware
 # adapters in their ruqu-backend build re-enable here.
 default = []
-hardware = ["ruqu-backend/hardware"]
-clifford-t = ["ruqu-backend/clifford-t"]
-tensor-network = ["ruqu-backend/tensor-network"]
+hardware = ["crates/ruqu-backend/hardware"]
+clifford-t = ["crates/ruqu-backend/clifford-t"]
+tensor-network = ["crates/ruqu-backend/tensor-network"]
 all-backends = ["hardware", "clifford-t", "tensor-network"]
 ```
 
@@ -640,14 +640,14 @@ impl RuQuMcpServer {
 }
 ```
 
-The structure mirrors `mcp-server/src/server.rs:189`-area exactly.
+The structure mirrors `crates/mcp-server/src/server.rs:189`-area exactly.
 The `audit.emit` shape is identical; only the codes change.
 
 ### 2.4 MCP resources — `ruqu://circuit/{hash}/{kind}`
 
 In addition to `rulake://stats`, `rulake://stats/by-backend`,
 `rulake://bundle/{b}/{c}`, `rulake://audit/tail` (per
-`mcp-server/src/server.rs` resource registration area), `mcp-ruqu`
+`crates/mcp-server/src/server.rs` resource registration area), `mcp-ruqu`
 adds:
 
 | Resource URI | Returns | Use case |
@@ -665,7 +665,7 @@ cached, which is `O(num_gates)`).
 
 **v0.1 ships:**
 
-- `mcp-ruqu/` crate scaffold.
+- `crates/mcp-ruqu/` crate scaffold.
 - `ruqu_simulate` only, against the StateVector backend. No Stabilizer
   yet (it ships in v0.2 once the tableau-pull semantics are settled).
 - `RUQU_CACHE_HIT`, `RUQU_CACHE_STORED`, `RUQU_QASM_PARSE`,
@@ -686,7 +686,7 @@ cached, which is `O(num_gates)`).
 - Stabilizer backend dispatch in `ruqu_simulate`.
 - `hardware:*` backend dispatch + the `hardware` capability.
 - The remaining MCP resources.
-- HTTP e2e test (mirrors `mcp-server/tests/http_e2e.rs`); v0.1 ships
+- HTTP e2e test (mirrors `crates/mcp-server/tests/http_e2e.rs`); v0.1 ships
   a stdio-only smoke test.
 
 ## 3. Console hooks — the "Quantum" route
@@ -832,13 +832,13 @@ The PRs that follow ADR-008 acceptance, in order:
    default still includes the full ruLake-tool surface). ~50 LOC
    diff.
 
-2. **PR #2 — `ruqu-backend/` v0.0 scaffold.** Crate, Cargo.toml,
+2. **PR #2 — `crates/ruqu-backend/` v0.0 scaffold.** Crate, Cargo.toml,
    feature flags, `runtime_context.rs`, `state_vector.rs`,
    `stabilizer.rs` (impl `BackendAdapter` only — full body deferred
    to PR #4), `tests/round_trip_state_vector.rs` (G2 smoke).
    ~600 LOC.
 
-3. **PR #3 — `mcp-ruqu/` v0.0 scaffold.** Crate, Cargo.toml,
+3. **PR #3 — `crates/mcp-ruqu/` v0.0 scaffold.** Crate, Cargo.toml,
    `server.rs` with `ruqu_simulate` against StateVector,
    `tests/tool_router_smoke.rs`. ~400 LOC.
 

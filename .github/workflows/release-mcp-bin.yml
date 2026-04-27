@@ -14,7 +14,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  PACKAGE_DIR: mcp-server
+  PACKAGE_DIR: crates/mcp-server
   BIN: rulake-mcp
 
 jobs:
@@ -56,7 +56,7 @@ jobs:
         run: |
           mkdir -p staging
           cp target/${{ matrix.target.triple }}/release/${{ env.BIN }} staging/
-          cp ../README.md ../LICENSE-* staging/ 2>/dev/null || true
+          cp ../../README.md ../../LICENSE-* staging/ 2>/dev/null || true
           tar -czf ${{ env.BIN }}-${{ matrix.target.triple }}.tar.gz -C staging .
       - name: Stage artifact (windows)
         if: matrix.target.archive == 'zip'
@@ -65,7 +65,7 @@ jobs:
         run: |
           mkdir -p staging
           cp target/${{ matrix.target.triple }}/release/${{ env.BIN }}.exe staging/
-          cp ../README.md staging/ 2>/dev/null || true
+          cp ../../README.md staging/ 2>/dev/null || true
           7z a ${{ env.BIN }}-${{ matrix.target.triple }}.zip ./staging/*
       - uses: actions/upload-artifact@v4
         with:

@@ -3,7 +3,7 @@
 Status: **draft, /loop pass 1**
 Branch: `research/management-ui`
 Date: 2026-04-26
-Scope: `gcs-backend/` (ADR-155), `ipfs-backend/` (ADR-005), `mcp-server/` (ADR-004 v0.8)
+Scope: `crates/gcs-backend/` (ADR-155), `crates/ipfs-backend/` (ADR-005), `crates/mcp-server/` (ADR-004 v0.8)
 
 This document is the bench-harness + focused-security counterpart to the
 new-substrate (rvdna, ruqu) reviews being added in parallel. It covers the
@@ -29,12 +29,12 @@ regression tracking, not absolute claims.
 
 ---
 
-## 1. `gcs-backend/` — ADR-155 §M2 (Parquet on GCS)
+## 1. `crates/gcs-backend/` — ADR-155 §M2 (Parquet on GCS)
 
 ### 1.1 Bench results
 
-Bench file: `gcs-backend/benches/pull_vectors.rs`
-Run: `cargo bench --manifest-path gcs-backend/Cargo.toml`
+Bench file: `crates/gcs-backend/benches/pull_vectors.rs`
+Run: `cargo bench --manifest-path crates/gcs-backend/Cargo.toml`
 
 | Bench                                         | n × dim       | median        | throughput        |
 | --------------------------------------------- | ------------- | ------------- | ----------------- |
@@ -117,12 +117,12 @@ Notes:
 
 ---
 
-## 2. `ipfs-backend/` — ADR-005 (witness-anchored bundle distribution)
+## 2. `crates/ipfs-backend/` — ADR-005 (witness-anchored bundle distribution)
 
 ### 2.1 Bench results
 
-Bench file: `ipfs-backend/benches/verify_bundle.rs`
-Run: `cargo bench --manifest-path ipfs-backend/Cargo.toml`
+Bench file: `crates/ipfs-backend/benches/verify_bundle.rs`
+Run: `cargo bench --manifest-path crates/ipfs-backend/Cargo.toml`
 
 | Bench                                              | dim    | median        | throughput  |
 | -------------------------------------------------- | ------ | ------------- | ----------- |
@@ -210,13 +210,13 @@ Notes:
 
 ---
 
-## 3. `mcp-server/` — ADR-004 v0.8 (Streamable HTTP + JWT scopes → CapabilitySet)
+## 3. `crates/mcp-server/` — ADR-004 v0.8 (Streamable HTTP + JWT scopes → CapabilitySet)
 
 ### 3.1 Bench results
 
-Bench files: `mcp-server/benches/audit_sink.rs`,
-`mcp-server/benches/tools_list_filter.rs`
-Run: `cargo bench --manifest-path mcp-server/Cargo.toml`
+Bench files: `crates/mcp-server/benches/audit_sink.rs`,
+`crates/mcp-server/benches/tools_list_filter.rs`
+Run: `cargo bench --manifest-path crates/mcp-server/Cargo.toml`
 
 | Bench                                       | size            | median        |
 | ------------------------------------------- | --------------- | ------------- |

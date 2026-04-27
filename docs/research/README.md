@@ -43,7 +43,7 @@ swarms (claude-flow-style hive-minds), robot fleets, multi-process
 inference servers, researcher-laptop ↔ cloud-worker setups — all benefit
 from the content-addressed dedup the witness gives for free. Verified by
 the existing `two_backends_share_cache_when_witness_matches` test in
-`tests/federation_smoke.rs`.
+`crates/core/tests/federation_smoke.rs`.
 
 ## Top-3 verticals per note (their picks, not ours)
 
@@ -110,7 +110,7 @@ procurement) are first-order beneficiaries.
   hierarchies, fraud + lineage hot path, federated edge.
 - **Sizing a custom backend?** The `BackendAdapter` trait is 4 methods
   (`id`, `list_collections`, `pull_vectors`, `generation`); see
-  `src/backend.rs` for the contract and `src/fs_backend.rs` for a
+  `crates/core/src/backend.rs` for the contract and `crates/core/src/fs_backend.rs` for a
   ~250-line reference. Several of the verticals (each cloud backend,
   each fleet aggregator, each EHR adapter) are described to roughly
   this level of detail in the notes.

@@ -4,9 +4,9 @@ This document is the code-level companion to `v2-spec.md`. It answers
 "how does v2 actually plug into ruLake?" with three concrete
 deliverables sketched against the existing trait shapes:
 
-1. `rvdna-backend/` — a sibling Rust crate that implements three
+1. `crates/rvdna-backend/` — a sibling Rust crate that implements three
    `BackendAdapter`s (T0/T1/T2) backed by mmap'd `.rvdna` v2 files.
-2. `mcp-rvdna/` — a sibling MCP server crate exposing the five
+2. `crates/mcp-rvdna/` — a sibling MCP server crate exposing the five
    genomic verbs from the v2 spec (`rvdna_find`, `rvdna_call_variants`,
    `rvdna_translate`, `rvdna_score`, `rvdna_lineage`).
 3. **Console hooks** — a 7th sidebar entry (`Genomic`) added to
@@ -18,25 +18,25 @@ Each section ends with a "What v0.1 ships vs v0.2 defers" table so the
 sequencing is unambiguous.
 
 All cited paths are real. The code blocks are pseudocode in real Rust
-against types that exist (`BackendAdapter` at `src/backend.rs:110`,
-`#[tool]` macro shape at `mcp-server/src/server.rs:189`, the bundle at
-`src/bundle.rs:113`, the Console screens at
+against types that exist (`BackendAdapter` at `crates/core/src/backend.rs:110`,
+`#[tool]` macro shape at `crates/mcp-server/src/server.rs:189`, the bundle at
+`crates/core/src/bundle.rs:113`, the Console screens at
 `ui/src/components/screens.jsx:17`).
 
 ---
 
-## Part 1 — `rvdna-backend/`
+## Part 1 — `crates/rvdna-backend/`
 
 ### 1.1 Crate layout
 
-Sibling of `gcs-backend/` and `ipfs-backend/`. No workspace; mirrors
+Sibling of `crates/gcs-backend/` and `crates/ipfs-backend/`. No workspace; mirrors
 the discipline from `docs/adrs/ADR-001-standalone-repo-strategy.md`
 and the precedent set by `docs/adrs/sdk/ADR-005-ipfs-backend-and-deploy.md`:
 each backend is a free-standing crate that depends on `rulake` from
 crates.io.
 
 ```
-rvdna-backend/
+crates/rvdna-backend/
 ├── Cargo.toml
 ├── README.md
 ├── src/
@@ -80,7 +80,7 @@ rulake = "2.2"
 memmap2 = "0.9"
 
 # BLAKE3 for section checksums; SHAKE-256 for the witness (parity
-# with src/bundle.rs::compute_witness).
+# with crates/core/src/bundle.rs::compute_witness).
 blake3 = "1.5"
 sha3 = "0.10"
 hex = "0.4"
@@ -111,9 +111,9 @@ harness = false
 ### 1.3 `RvdnaT0Backend` — full sketch
 
 This is the load-bearing impl: every other tier is a refinement.
-The trait at `src/backend.rs:110` is four required methods plus the
+The trait at `crates/core/src/backend.rs:110` is four required methods plus the
 `current_bundle` override that makes cross-deployment cache sharing
-free (`src/backend.rs:125`).
+free (`crates/core/src/backend.rs:125`).
 
 ```rust
 // src/t0.rs
@@ -214,7 +214,7 @@ impl BackendAdapter for RvdnaT0Backend {
     /// witness byte-for-byte. This means: when the same .rvdna file
     /// is read by two ruLake instances, both produce the same bundle,
     /// the cache shares the entry across them
-    /// (`src/cache.rs` "the cross-backend share"), and federated
+    /// (`crates/core/src/cache.rs` "the cross-backend share"), and federated
     /// queries don't re-prime per-instance.
     fn current_bundle(
         &self,
@@ -315,8 +315,8 @@ impl BackendAdapter for RvdnaT1Backend {
 /// betas. Backend gates against MAX_T2_DECODE_BYTES_PER_QUERY
 /// (v2-spec §e.3) and refuses with RVDNA_T2_BUDGET_REFUSED.
 ///
-/// Wraps an inner `BackendAdapter` (Local, GCS via `gcs-backend/`,
-/// or IPFS via `ipfs-backend/`) so cold-tier bytes can live anywhere
+/// Wraps an inner `BackendAdapter` (Local, GCS via `crates/gcs-backend/`,
+/// or IPFS via `crates/ipfs-backend/`) so cold-tier bytes can live anywhere
 /// without v2 needing to know.
 pub struct RvdnaT2Backend<Inner: BackendAdapter> {
     id: String,
@@ -326,8 +326,8 @@ pub struct RvdnaT2Backend<Inner: BackendAdapter> {
 }
 ```
 
-The T2 backend is the natural composition point with `gcs-backend/`
-and `ipfs-backend/`: those crates already implement `BackendAdapter`
+The T2 backend is the natural composition point with `crates/gcs-backend/`
+and `crates/ipfs-backend/`: those crates already implement `BackendAdapter`
 for object-storage and IPFS-CID access; T2 wraps them with a §0/§5
 decode layer.
 
@@ -349,33 +349,33 @@ decode layer.
 
 ---
 
-## Part 2 — `mcp-rvdna/`
+## Part 2 — `crates/mcp-rvdna/`
 
-### 2.1 Crate layout (mirrors `mcp-server/`)
+### 2.1 Crate layout (mirrors `crates/mcp-server/`)
 
 ```
-mcp-rvdna/
+crates/mcp-rvdna/
 ├── Cargo.toml
 ├── README.md
 ├── src/
 │   ├── lib.rs              -- pub mod server, pub mod planner
-│   ├── main.rs             -- CLI binary; mirrors mcp-server/src/main.rs
+│   ├── main.rs             -- CLI binary; mirrors crates/mcp-server/src/main.rs
 │   ├── server.rs           -- RvdnaMcpServer with tool_router (the 5 verbs)
 │   ├── planner.rs          -- holds Arc<RuLake> + workers + backend ids
 │   ├── auth.rs             -- JWT validator (re-uses scopes_to_caps shape)
 │   ├── audit.rs            -- AuditRow emitter (re-uses mcp-server's shape)
 │   ├── policy.rs           -- effective_caps (research vs clinical profile)
-│   ├── http.rs             -- Streamable HTTP, mirrors mcp-server/src/http.rs
-│   └── workers.rs          -- offload-pool, mirrors mcp-server/src/workers.rs
+│   ├── http.rs             -- Streamable HTTP, mirrors crates/mcp-server/src/http.rs
+│   └── workers.rs          -- offload-pool, mirrors crates/mcp-server/src/workers.rs
 ├── tests/
 │   ├── tools_smoke.rs      -- roundtrip each of the 5 tools
 │   ├── clinical_refusal.rs -- tenant-scope mismatch refusal path
-│   └── http_e2e.rs         -- mirrors mcp-server/tests/http_e2e.rs
+│   └── http_e2e.rs         -- mirrors crates/mcp-server/tests/http_e2e.rs
 ```
 
 ### 2.2 The five `#[tool]`s — sketch
 
-The macro pattern is verbatim from `mcp-server/src/server.rs:189`
+The macro pattern is verbatim from `crates/mcp-server/src/server.rs:189`
 (`#[tool_router(router = tool_router)]` on the impl block, `#[tool]`
 on each method). The shape:
 
@@ -547,7 +547,7 @@ impl ServerHandler for RvdnaMcpServer {
 
 fn require_cap(caps: &CapabilitySet, required: Capability) -> Result<(), McpError> {
     // v2: combine server-wide caps with per-request JWT scopes.
-    // Mirrors `mcp-server/src/server.rs::require_cap`.
+    // Mirrors `crates/mcp-server/src/server.rs::require_cap`.
     let effective = effective_caps(caps);
     effective
         .require(required)
@@ -585,7 +585,7 @@ pub struct RvdnaFindResponse {
 ### 2.3 Audit row shape (parity with `mcp-server`)
 
 The `mcp-rvdna` server emits `AuditRow` with the exact same fields as
-`mcp-server/src/audit.rs`, so a single ingestion pipeline can serve
+`crates/mcp-server/src/audit.rs`, so a single ingestion pipeline can serve
 both. The only thing that changes is the `tool` and `code` strings
 (`RVDNA_*` instead of `RULAKE_*`).
 
@@ -597,10 +597,10 @@ both. The only thing that changes is the `tool` and `code` strings
 ### 2.4 JWT scope mapping
 
 Extend the `scopes_to_caps` function from
-`mcp-server/src/auth.rs:294`:
+`crates/mcp-server/src/auth.rs:294`:
 
 ```rust
-// mcp-rvdna/src/auth.rs (sketch — same shape as mcp-server's).
+// crates/mcp-rvdna/src/auth.rs (sketch — same shape as mcp-server's).
 pub fn scopes_to_caps(scopes: &HashSet<String>) -> CapabilitySet {
     let mut caps = CapabilitySet::default();
     if scopes.contains("mcp:rvdna:read") {
@@ -645,7 +645,7 @@ file's tenant_ids (from §7 metadata) with this list.
 | JWT auth + JWKS hot rotation | – | Ships |
 | mTLS | – | Defer to v0.3 |
 | Tenant-scoped clinical refusal | – | Ships |
-| Capability-gated `tools/list` filter | – | Ships (mirrors `mcp-server/src/server.rs:566`) |
+| Capability-gated `tools/list` filter | – | Ships (mirrors `crates/mcp-server/src/server.rs:566`) |
 
 ---
 
@@ -688,7 +688,7 @@ Three sub-views, gated by route param:
 
 A list of registered `rvdna-t0:*` and `rvdna-t1:*` backends, sourced
 via the existing `rulake_list_backends` MCP tool
-(`mcp-server/src/server.rs:323`) plus a filter that keeps only the
+(`crates/mcp-server/src/server.rs:323`) plus a filter that keeps only the
 ones with `rvdna-` prefix. For each file:
 - file_id (the BLAKE3 prefix; click-to-copy)
 - bundle witness (with a green checkmark when `verifyRvdnaWitness`
@@ -793,8 +793,8 @@ generous.
 ### B. Why no shared workspace
 
 `docs/adrs/ADR-001-standalone-repo-strategy.md` and the precedent set
-by `gcs-backend/`, `ipfs-backend/`, and `node/` keep each crate free-
-standing. `rvdna-backend/` and `mcp-rvdna/` follow the same rule.
+by `crates/gcs-backend/`, `crates/ipfs-backend/`, and `node/` keep each crate free-
+standing. `crates/rvdna-backend/` and `crates/mcp-rvdna/` follow the same rule.
 Each `Cargo.toml` lists `rulake = "2.2"` from crates.io. No
 `workspace = true` deps.
 
@@ -808,7 +808,7 @@ the magic differs by one byte.
 ### D. The `mcp-rvdna` <-> `mcp-server` relationship
 
 Two separate servers. They share:
-- The audit row shape (`mcp-server/src/audit.rs::AuditRow`).
+- The audit row shape (`crates/mcp-server/src/audit.rs::AuditRow`).
 - The capability mapping pattern (`scopes_to_caps`).
 - The `RuLake` instance (process-local; both servers can hold an
   `Arc<RuLake>` to the same lake).

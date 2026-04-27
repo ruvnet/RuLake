@@ -14,7 +14,7 @@ intelligence file format and pipeline".
 where this corpus is being authored).
 
 **Canonical citations.** v1 source at `vendor/ruvector/examples/dna/`;
-ruLake at `src/`, `mcp-server/src/`, `docs/adrs/`, `node-wasm/`.
+ruLake at `src/`, `crates/mcp-server/src/`, `docs/adrs/`, `node-wasm/`.
 
 ---
 
@@ -63,8 +63,8 @@ v1 files and synthesise the missing v2 fields (see §m).
 
 | What v1 does | What v2 does | Why |
 |---|---|---|
-| 64-byte header with `version_major=1` (`rvdna.rs:127`). | 64-byte header with `version_major=2`, plus a new 96-byte **bundle pointer** appended after the section table. | The bundle pointer is what makes a `.rvdna` file federation-ready: it carries the SHAKE-256 witness, dimension, rotation seed, and rerank factor that ruLake needs (`src/bundle.rs::compute_witness`) to share cache entries across deployments without trusting payload bytes. |
-| Per-section CRC32C checksums (`rvdna.rs:53`). | Per-section BLAKE3 checksums; the bundle pointer's `rvf_witness` is SHAKE-256(32). | BLAKE3 for payload (faster than CRC32C at scale, parallelisable, modern), SHAKE-256 for the witness (parity with `src/bundle.rs::compute_witness` which is hard-coded to SHAKE-256 because the brain layer above it consumes the same digest). The split is deliberate. |
+| 64-byte header with `version_major=1` (`rvdna.rs:127`). | 64-byte header with `version_major=2`, plus a new 96-byte **bundle pointer** appended after the section table. | The bundle pointer is what makes a `.rvdna` file federation-ready: it carries the SHAKE-256 witness, dimension, rotation seed, and rerank factor that ruLake needs (`crates/core/src/bundle.rs::compute_witness`) to share cache entries across deployments without trusting payload bytes. |
+| Per-section CRC32C checksums (`rvdna.rs:53`). | Per-section BLAKE3 checksums; the bundle pointer's `rvf_witness` is SHAKE-256(32). | BLAKE3 for payload (faster than CRC32C at scale, parallelisable, modern), SHAKE-256 for the witness (parity with `crates/core/src/bundle.rs::compute_witness` which is hard-coded to SHAKE-256 because the brain layer above it consumes the same digest). The split is deliberate. |
 | Magic `RVDNA\x01\x00\x00` (`rvdna.rs:49`). | Magic `RVDNA\x02\x00\x00`. | Non-overlapping with v1 magic; readers can dispatch on the third byte. |
 | Codec enum: None / LZ4 / Zstd (`rvdna.rs:69`). | Per-section codec selection (None / Zstd / Zstd-dict). LZ4 dropped from defaults but reserved at value `1` for v1 read compatibility. | LZ4 was the v1 default for fast genomic decode. v2 moves to Zstd (better ratio, slightly slower) per-section because the cold tier (raw DNA) cares about ratio while the hot tier (k-mer vectors) cares about decode speed and prefers `Codec::None`. |
 | Single-sample envelope. | Single-sample default + multi-sample manifest mode (a `.rvdna` may carry an array of `SamplePayload` blocks, each with its own bundle pointer). | Cohort federation needs a way to carry many samples in one file without inventing a new container; v2's manifest mode is a thin layer that points at multiple per-sample byte ranges in the same file. |
@@ -104,18 +104,18 @@ aspirational stubs, not shipping code in `vendor/ruvector/examples/dna/src/`.
 2. **Zero recompute across sessions.** A `.rvdna` file produced once
    is consumed by every future query without re-encoding. The bundle
    witness proves the file's identity to a ruLake cache, so a warm
-   cache hit (`src/cache.rs::VectorCache::can_skip_check_interned`)
+   cache hit (`crates/core/src/cache.rs::VectorCache::can_skip_check_interned`)
    returns answers without touching disk.
 3. **Cross-sample queries become trivial.** Federate over N samples
-   in one `lake.search_federated` call (`src/lake.rs:521`). 10k
+   in one `lake.search_federated` call (`crates/core/src/lake.rs:521`). 10k
    samples scales by registering each as a backend collection; the
    adaptive per-shard rerank already handles the fan-out cost
-   (`src/lake.rs:533`).
+   (`crates/core/src/lake.rs:533`).
 4. **IO + cache scaling, not compute scaling.** v2's tiered indexing
    model (§e) splits the format into hot/warm/cold tiers, each with
    its own ruLake `BackendAdapter` impl. Tier 0 (k-mer HNSW) lives
    in RAM with explicit `MAX_PULLED_VECTORS` caps
-   (`src/backend.rs:60`); Tier 1 mmap'd; Tier 2 lazily pulled. No
+   (`crates/core/src/backend.rs:60`); Tier 1 mmap'd; Tier 2 lazily pulled. No
    tier loads everything by default.
 5. **Fully local by default.** Same as v1's privacy stance
    (`vendor/ruvector/examples/dna/README.md` line 21), plus the
@@ -254,7 +254,7 @@ Eight entries (sections 0..7). Section 7 is new in v2 (biomarkers).
 ### c.4 Bundle pointer (96 bytes)
 
 This is the load-bearing addition. The bundle pointer is byte-for-byte
-isomorphic to a `RuLakeBundle` (`src/bundle.rs:113`) serialised in
+isomorphic to a `RuLakeBundle` (`crates/core/src/bundle.rs:113`) serialised in
 binary form. v2 readers construct an in-memory `RuLakeBundle` from
 this block; v2 writers encode their `RuLakeBundle` instance into it.
 The witness covers everything below (raw DNA, all tensors, metadata)
@@ -267,7 +267,7 @@ Off   Sz  Type    Field
 0x20   8  u64     dim                 vector dim of §1 k-mer vectors
 0x28   8  u64     rotation_seed       RaBitQ rotation seed (carried into ruLake)
 0x30   8  u64     rerank_factor       RaBitQ rerank factor
-0x38   1  u8      generation_kind     0x00=Num, 0x01=Opaque (matches src/bundle.rs:56)
+0x38   1  u8      generation_kind     0x00=Num, 0x01=Opaque (matches crates/core/src/bundle.rs:56)
 0x39   7  u8[7]   reserved            zero-fill
 0x40   8  u64     generation_value    if Num: the u64; if Opaque: byte offset into sidecar
 0x48   1  u8      pii_policy_class    0=research-open, 1=phi-strict, 2=opaque
@@ -410,7 +410,7 @@ only: a writer adds new samples, increments
 `epoch_start_unix_ms`-derived generation counter, rotates the witness,
 and rewrites the bundle pointer. ruLake's `Consistency::Eventual` and
 `Consistency::Fresh` modes pick up the rotation the next time they
-ask `current_bundle()` (`src/backend.rs:125`).
+ask `current_bundle()` (`crates/core/src/backend.rs:125`).
 
 Compression default: `Codec::None` (append-friendly; streaming mode
 needs to write the tail without re-encoding the prefix).
@@ -455,7 +455,7 @@ explicit. v2 carries both intentionally:
   is ~3× faster than SHA-256 on modern CPUs and parallelisable per
   64-byte chunk, which matters for the cold tier.
 - **SHAKE-256 for the bundle witness**. Forced by parity with
-  `src/bundle.rs::compute_witness`, which uses SHAKE-256 because the
+  `crates/core/src/bundle.rs::compute_witness`, which uses SHAKE-256 because the
   brain-substrate layer above ruLake (ADR-156, "rulake as memory
   substrate") consumes the same digest. Using BLAKE3 here would mean
   a `.rvdna` file's witness could not be compared with a ruLake
@@ -482,7 +482,7 @@ BLAKE3 (not XOR of CRCs).
 ### d.1 What the witness covers
 
 The 32-byte SHAKE-256 in the bundle pointer (offset `0x00`) is the
-output of `compute_witness` (`src/bundle.rs::compute_witness`) over a
+output of `compute_witness` (`crates/core/src/bundle.rs::compute_witness`) over a
 canonical input string built from:
 
 ```
@@ -515,15 +515,15 @@ line 151) made explicit and computable.
 Because two systems looking at the same `.rvdna` file must compute
 the same witness, byte-for-byte, without a shared library
 dependency. The v2 spec borrows the `compute_witness` formula from
-`src/bundle.rs:362` exactly: SHAKE-256 with the domain-separation
+`crates/core/src/bundle.rs:362` exactly: SHAKE-256 with the domain-separation
 prefix `"rulake-bundle-witness-v1|"`, length-prefixed concatenation,
 the variant-tag byte for `Generation::Num` vs `Opaque` (added in the
-2026-04-23 security audit, `src/bundle.rs::Generation::hash_bytes`).
+2026-04-23 security audit, `crates/core/src/bundle.rs::Generation::hash_bytes`).
 
 This means: a ruLake `BackendAdapter::current_bundle()` call and a
 `.rvdna` file's bundle pointer both produce the same 32 bytes when
 they describe the same data. Cache-sharing across deployments is a
-free consequence (`src/cache.rs` "the cross-backend share").
+free consequence (`crates/core/src/cache.rs` "the cross-backend share").
 
 ### d.3 Witness-rotation triggers
 
@@ -542,14 +542,14 @@ It does NOT change if:
 
 - Metadata (§7) annotations are added — annotations are caller-visible
   but not part of the digest (mirrors `RuLakeBundle::memory_class`'s
-  exclusion from witness, `src/bundle.rs:572`).
+  exclusion from witness, `crates/core/src/bundle.rs:572`).
 - The file is re-compressed with a different codec (the
   `uncompressed_size` and uncompressed bytes are what get hashed).
 - The footer's offset shifts because of compression.
 
 This is the same discipline ruLake's bundle has — the `pii_policy`,
 `lineage_id`, and `memory_class` fields are NOT part of the witness
-(`src/bundle.rs:135`); they're metadata for governance, not identity.
+(`crates/core/src/bundle.rs:135`); they're metadata for governance, not identity.
 
 ### d.4 Verifying a witness without trusting the file
 
@@ -600,7 +600,7 @@ file in-browser.
 The brief calls out a "memory pressure" gotcha: indexing everything
 naively eats RAM at population scale. v2's answer is three tiers,
 each implemented as a distinct ruLake `BackendAdapter`
-(`src/backend.rs:110`).
+(`crates/core/src/backend.rs:110`).
 
 ### e.1 Tier 0 (T0) — Hot: k-mer HNSW in RAM
 
@@ -608,13 +608,13 @@ each implemented as a distinct ruLake `BackendAdapter`
 - **Where**: in-process RAM via `RuLake::register_backend(...)` of an
   `RvdnaT0Backend` instance (one per loaded `.rvdna` file).
 - **Caps** (per
-  `src/backend.rs:60` `MAX_PULLED_*` constants):
+  `crates/core/src/backend.rs:60` `MAX_PULLED_*` constants):
   `MAX_PULLED_VECTORS=100M`, `MAX_PULLED_DIM=8192`,
   `MAX_PULLED_BYTES=16 GiB`. v2 enforces a tighter
   `MAX_T0_BYTES_PER_FILE=512 MiB` to prevent a single sample from
   exhausting tier 0.
 - **Cache behaviour**: `Consistency::Fresh` by default
-  (`src/cache.rs::Consistency`).
+  (`crates/core/src/cache.rs::Consistency`).
 - **Latency target**: < 1 ms p50 on warm cache; 12 ms p99 on cold
   prime (the v1 measured floor for full-pipeline encode).
 
@@ -636,8 +636,8 @@ each implemented as a distinct ruLake `BackendAdapter`
 - **What's loaded**: §0, §5.
 - **Where**: NEVER eagerly. Decoded only when a query asks for raw
   bases or methylation values. Behind a ruLake backend that proxies
-  to either local disk, GCS (`gcs-backend/`), or IPFS
-  (`ipfs-backend/`).
+  to either local disk, GCS (`crates/gcs-backend/`), or IPFS
+  (`crates/ipfs-backend/`).
 - **Caps**: `MAX_T2_DECODE_BYTES_PER_QUERY=64 MiB`. Anything above
   refuses with `RVDNA_T2_BUDGET_REFUSED`.
 - **Cache behaviour**: `Consistency::Frozen` — the cold tier is
@@ -647,12 +647,12 @@ each implemented as a distinct ruLake `BackendAdapter`
 
 ### e.4 `RvdnaT0Backend` sketch
 
-The trait at `src/backend.rs:110` is four methods plus an optional
+The trait at `crates/core/src/backend.rs:110` is four methods plus an optional
 `current_bundle` override (which v2 always implements — that's the
 witness-sharing path).
 
 ```rust
-// In rvdna-backend/src/t0.rs (sketch — not invented APIs).
+// In crates/rvdna-backend/src/t0.rs (sketch — not invented APIs).
 use rulake::{BackendAdapter, BackendId, CollectionId, PulledBatch,
              RuLakeBundle, Generation, Result, RuLakeError};
 
@@ -741,10 +741,10 @@ backends, respectively. Sketched in `integration-with-rulake.md`.
   stay on disk.
 - **Federation**: `lake.search_federated(&[("rvdna_sample_001", "HBB"),
    ("rvdna_sample_002", "HBB"), ...], &query, k=10)` already works
-  (`src/lake.rs:521`) the moment the backends are registered.
+  (`crates/core/src/lake.rs:521`) the moment the backends are registered.
 - **Witness sharing across copies**: the same `.rvdna` file copied to
   two hosts produces the same bundle witness (witness is over content,
-  not file path) — `src/cache.rs::install_prebuilt_interned` shares
+  not file path) — `crates/core/src/cache.rs::install_prebuilt_interned` shares
   the cache entry.
 
 ---
@@ -767,7 +767,7 @@ Outputs:
 - `<output>.rvdna` — the v2 file.
 - `<output>.bundle.json` — the bundle JSON for ruLake direct ingest
   (this is just the bundle pointer fields rendered as JSON; identical
-  to `src/bundle.rs::RuLakeBundle::to_json` output).
+  to `crates/core/src/bundle.rs::RuLakeBundle::to_json` output).
 
 ### f.2 Stage sequence
 
@@ -827,7 +827,7 @@ re-pinning to a different IPFS CID — does NOT rotate the witness.
 ```
 
 This file is what an operator drops next to a registered ruLake backend
-to refresh the cache (`mcp-server/src/server.rs:391`
+to refresh the cache (`crates/mcp-server/src/server.rs:391`
 `rulake_refresh_from_bundle_dir`).
 
 ---
@@ -916,8 +916,8 @@ under `score`.
 
 ## h. MCP tools (genomic surface for agents)
 
-Five tools exposed by a sibling `mcp-rvdna/` crate, mirroring the
-shape of `mcp-server/`'s tools (see `mcp-server/src/server.rs:189`
+Five tools exposed by a sibling `crates/mcp-rvdna/` crate, mirroring the
+shape of `crates/mcp-server/`'s tools (see `crates/mcp-server/src/server.rs:189`
 for the `tool_router` macro pattern).
 
 Capability tiers re-use the same enum as ruLake's `mcp-server`:
@@ -1063,7 +1063,7 @@ A new tier:
 ### h.6 The six-code refusal vocabulary
 
 Mirrors ruLake's `WITNESS_MISMATCH_REFUSED` discipline
-(`mcp-server/src/server.rs` audit codes). All `RVDNA_*` codes are
+(`crates/mcp-server/src/server.rs` audit codes). All `RVDNA_*` codes are
 disjoint from `RULAKE_*` so a single audit pipeline can serve both
 servers.
 
@@ -1083,10 +1083,10 @@ servers.
 The user's brief calls this the "real play": treating genomes like
 queryable vector memory and enabling population-scale pattern
 discovery without recompute. v2 implements it by leveraging the
-existing `search_federated` (`src/lake.rs:521`) with rayon parallel
+existing `search_federated` (`crates/core/src/lake.rs:521`) with rayon parallel
 fan-out and adaptive per-shard rerank
-(`src/lake.rs:533` `MIN_PER_SHARD_RERANK = 5`,
-`src/lake.rs:584` `over_request_k`).
+(`crates/core/src/lake.rs:533` `MIN_PER_SHARD_RERANK = 5`,
+`crates/core/src/lake.rs:584` `over_request_k`).
 
 ### i.1 The federation shape
 
@@ -1203,7 +1203,7 @@ Per epoch:
 
 ### j.2 ruLake's coherence model handles it
 
-`src/cache.rs::Consistency` already has the three states this needs:
+`crates/core/src/cache.rs::Consistency` already has the three states this needs:
 
 - `Fresh`: every search asks the backend for the current bundle. A
   streaming file's witness rotation is picked up immediately; the
@@ -1218,7 +1218,7 @@ Per epoch:
 
 ### j.3 The three-state bundle protocol read
 
-Reusing `mcp-server/src/server.rs:391`
+Reusing `crates/mcp-server/src/server.rs:391`
 `rulake_refresh_from_bundle_dir`'s three-state response:
 - `up_to_date`: cache witness matches file witness; no work.
 - `invalidated`: cache witness differs; cache flushed and re-primed.
@@ -1267,7 +1267,7 @@ replay.
 
 ### k.3 JWT-scope-driven tenant federation gate
 
-Per `mcp-server/src/auth.rs:294` `scopes_to_caps`, the JWT scope
+Per `crates/mcp-server/src/auth.rs:294` `scopes_to_caps`, the JWT scope
 list maps to a capability set. v2 extends this with tenant claims:
 
 ```
@@ -1288,7 +1288,7 @@ moving a file across hosts does not bypass the gate.
 
 In clinical mode, the `mcp-rvdna` server requires `--audit-tail` to be
 on. Every tool invocation emits a row to the JSONL audit log
-(`mcp-server/src/audit.rs::AuditRow`). The shape is:
+(`crates/mcp-server/src/audit.rs::AuditRow`). The shape is:
 
 ```json
 {
@@ -1311,7 +1311,7 @@ on. Every tool invocation emits a row to the JSONL audit log
 }
 ```
 
-Same row shape as `mcp-server/src/server.rs:300` (where
+Same row shape as `crates/mcp-server/src/server.rs:300` (where
 `RULAKE_INTERNAL` is set), so existing audit ingestion works.
 
 ### k.5 What clinical mode does NOT do
@@ -1378,14 +1378,14 @@ shape of `vendor/ruvector/examples/dna/benches/dna_bench.rs:1`.
 - **Workload**: 1000 sequential `rvdna_find` calls, all on the same
   warm backend.
 - **Target**: p99 audit emit overhead < 50 µs per call (matches
-  `mcp-server/src/audit.rs`'s measured ~30 µs append overhead).
+  `crates/mcp-server/src/audit.rs`'s measured ~30 µs append overhead).
 - **Failure mode**: audit emit dominating query latency (any audit
   emit > 200 µs).
 
 ### l.6 Test harness shape (mirror of v1's dna_bench)
 
 ```rust
-// rvdna-backend/benches/v2_acceptance.rs (sketch).
+// crates/rvdna-backend/benches/v2_acceptance.rs (sketch).
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 fn gate_g3_federated_query(c: &mut Criterion) {
@@ -1487,7 +1487,7 @@ The `rvdna v2 migrate` subcommand has its own acceptance test:
 
 ## n. Open questions
 
-Honest gaps. None of these block v0.0 of `rvdna-backend/`; all should
+Honest gaps. None of these block v0.0 of `crates/rvdna-backend/`; all should
 be resolved before v1.0.
 
 1. **Model-rotation policy**. When ESM-2 ships a new checkpoint,
@@ -1547,13 +1547,13 @@ be resolved before v1.0.
   `biomarker_stream.rs`.
 - v1 benches: `vendor/ruvector/examples/dna/benches/dna_bench.rs`.
 - v1 DDD: `vendor/ruvector/examples/dna/ddd/{architecture,domain-model,bounded-context-map}.md`.
-- ruLake bundle: `src/bundle.rs::compute_witness`,
-  `src/bundle.rs:113` `RuLakeBundle`.
-- ruLake backend trait: `src/backend.rs:110` `BackendAdapter`.
-- ruLake federation: `src/lake.rs:521` `search_federated`.
-- ruLake cache modes: `src/cache.rs::Consistency`.
-- ruLake MCP server: `mcp-server/src/server.rs:189` (tool router),
-  `mcp-server/src/auth.rs:294` `scopes_to_caps`.
+- ruLake bundle: `crates/core/src/bundle.rs::compute_witness`,
+  `crates/core/src/bundle.rs:113` `RuLakeBundle`.
+- ruLake backend trait: `crates/core/src/backend.rs:110` `BackendAdapter`.
+- ruLake federation: `crates/core/src/lake.rs:521` `search_federated`.
+- ruLake cache modes: `crates/core/src/cache.rs::Consistency`.
+- ruLake MCP server: `crates/mcp-server/src/server.rs:189` (tool router),
+  `crates/mcp-server/src/auth.rs:294` `scopes_to_caps`.
 - ruLake IPFS backend: `docs/adrs/sdk/ADR-005-ipfs-backend-and-deploy.md`.
 - ruLake Console: `docs/adrs/ADR-006-rulake-console-vite-github-pages.md`.
 - ruLake MCP server ADR: `docs/adrs/sdk/ADR-004-rulake-mcp-server.md`.

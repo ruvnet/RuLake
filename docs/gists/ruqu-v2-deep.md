@@ -10,7 +10,7 @@ Quantum execution has, historically, been a one-shot affair. You write a circuit
 
 ruQu v1 (`vendor/ruvector/crates/ruqu-core/`, 26,093 lines across 30 source files) took the audit-trail story further than most. Its `ExecutionRecord` (`vendor/ruvector/crates/ruqu-core/src/replay.rs:57`) covers `circuit_hash`, `seed`, `backend`, `noise_config`, `shots`, `software_version`, `timestamp_utc`. Its `WitnessLog` (`vendor/ruvector/crates/ruqu-core/src/witness.rs:88`) hash-chains those records with a 32-byte digest computed via `DefaultHasher` (SipHash, four rounds). The chain is tamper-evident; modify any link and verification fails. What v1 did not have was a way to *use* this record as a cache key across processes — the digest function was non-cryptographic (SipHash is designed for HashMap collision resistance, not for cryptographic identity), and the `WitnessLog` lived in process memory, serialised by hand-rolled JSON to a sidecar that no other system knew how to interpret.
 
-Meanwhile, ruLake had been shipping a different problem's solution. Its `RuLakeBundle` (`src/bundle.rs:113`) anchors a vector cache entry with a SHAKE-256(32) witness over `(data_ref, dim, rotation_seed, rerank_factor, generation)`, computed by `compute_witness` (`src/bundle.rs:362`). Two ruLake instances reading the same Parquet file derive the same witness independently and share the cache. The bundle has been ratified as a memory substrate (ADR-156), distributed over IPFS (ADR-005), and exposed through an MCP server with eight tools.
+Meanwhile, ruLake had been shipping a different problem's solution. Its `RuLakeBundle` (`crates/core/src/bundle.rs:113`) anchors a vector cache entry with a SHAKE-256(32) witness over `(data_ref, dim, rotation_seed, rerank_factor, generation)`, computed by `compute_witness` (`crates/core/src/bundle.rs:362`). Two ruLake instances reading the same Parquet file derive the same witness independently and share the cache. The bundle has been ratified as a memory substrate (ADR-156), distributed over IPFS (ADR-005), and exposed through an MCP server with eight tools.
 
 ADR-008 spotted the structural overlap (`docs/adrs/ADR-008-ruqu-as-rulake-substrate.md:106`-area): both designs produce a 32-byte digest over a deterministic concatenation of execution-affecting inputs. The v1 entropy fits inside the v2 hash; the only thing missing is the bridge. v2 builds it. The v1 `ExecutionRecord` field set folds into a `RuLakeBundle`, the SipHash chain becomes a SHAKE-256 chain (a strict upgrade in collision resistance), and the per-execution metadata that used to live in v1's `WitnessLog` lives in a `chain.rulake.json` companion sidecar with a `prev_witness` link per entry.
 
@@ -50,7 +50,7 @@ struct RuntimeContext {
 
 That packing is what makes the witness honest about everything that can perturb a bit-exact result. It is also what makes the witness *unintuitive* to first-time integrators — two workstations with different SIMD support cannot share cache entries for the same circuit, because the floating-point ordering differs and the witness rotates. The remediation is documented and operator-visible: pin `simd_path = "scalar"` to share across hardware at a speed cost, or accept per-host cache shards.
 
-The cost-model planner (`vendor/ruvector/crates/ruqu-core/src/planner.rs:213`) becomes cache-aware in v2 by way of a wrapper, `CacheAwarePlanner` (`docs/research/ruqu/v2-spec.md:632`-area). The wrapper computes the anticipated witness from inputs, queries `lake.cache_stats_by_backend()` (`src/lake.rs:127`) for any backend currently holding it, and returns `Hit { backend_id, witness }` on hit or `Miss { plan, anticipated_witness }` on miss. The first call pays the v1 simulation cost; subsequent calls pay microseconds.
+The cost-model planner (`vendor/ruvector/crates/ruqu-core/src/planner.rs:213`) becomes cache-aware in v2 by way of a wrapper, `CacheAwarePlanner` (`docs/research/ruqu/v2-spec.md:632`-area). The wrapper computes the anticipated witness from inputs, queries `lake.cache_stats_by_backend()` (`crates/core/src/lake.rs:127`) for any backend currently holding it, and returns `Hit { backend_id, witness }` on hit or `Miss { plan, anticipated_witness }` on miss. The first call pays the v1 simulation cost; subsequent calls pay microseconds.
 
 ## Capabilities
 
@@ -62,13 +62,13 @@ The cost-model planner (`vendor/ruvector/crates/ruqu-core/src/planner.rs:213`) b
 
 **Worked example.** Imagine you have an agent that runs VQE for a small chemistry problem. The ansatz has two parameters; the optimiser explores ~200 settings before converging. Without ruQu v2, every parameter setting is a fresh StateVector simulation (perhaps 50 ms each); the run takes ~10 seconds. With ruQu v2, the *first* trajectory pays full cost; subsequent runs of the *same* optimiser on the *same* ansatz with overlapping parameter visits pay 30 µs per cache hit. If a related agent five minutes later visits the same parameter region (because the optimiser landscape is unchanged), the cache hits compound. The benefit is not "make VQE faster" — it is "make repeated VQE-shaped queries free, so the agentic loop above the simulator can ask exploratory questions cheaply." For benchmarking or supremacy claims, the same agent passes `no_cache: true` on `ruqu_simulate` to bypass the cache pre-pass entirely; the result is still written for the next non-bench caller, but this caller's response comes from a fresh execution and the audit row carries `RUQU_NOCACHE_BENCH` so cost rollups exclude it.
 
-The federation surface follows from the same primitive that powers rvDNA and the GCS / IPFS backends. `lake.search_federated` (`src/lake.rs:521`) over `(simulation_backend, circuit_hash)` pairs becomes "ask all five quantum engines, in parallel, for prior runs of this circuit." Zero new federation code; zero new MCP tool.
+The federation surface follows from the same primitive that powers rvDNA and the GCS / IPFS backends. `lake.search_federated` (`crates/core/src/lake.rs:521`) over `(simulation_backend, circuit_hash)` pairs becomes "ask all five quantum engines, in parallel, for prior runs of this circuit." Zero new federation code; zero new MCP tool.
 
 ## Trust chain
 
 The trust chain rests on the same `compute_witness` function rvDNA uses, with a different `Generation` payload. Walking through it:
 
-`RuLakeBundle::new` (`src/bundle.rs:166`) constructs the bundle, computing the witness from `(data_ref, dim, rotation_seed, rerank_factor, generation)`. The witness is SHAKE-256(32), domain-prefixed by `rulake-bundle-witness-v1|`, length-prefixed at every variable-length input. The `Generation` variant tag at `src/bundle.rs:82` distinguishes `Num` from `Opaque` so a numeric generation cannot collide with a JSON-shaped one.
+`RuLakeBundle::new` (`crates/core/src/bundle.rs:166`) constructs the bundle, computing the witness from `(data_ref, dim, rotation_seed, rerank_factor, generation)`. The witness is SHAKE-256(32), domain-prefixed by `rulake-bundle-witness-v1|`, length-prefixed at every variable-length input. The `Generation` variant tag at `crates/core/src/bundle.rs:82` distinguishes `Num` from `Opaque` so a numeric generation cannot collide with a JSON-shaped one.
 
 For ruQu, the inputs are these:
 
@@ -77,7 +77,7 @@ For ruQu, the inputs are these:
 - `rotation_seed` and `rerank_factor` are inherited from the lake instance; constants from ruQu's perspective.
 - `generation = Generation::Opaque(serde_json(RuntimeContext))`. The full noise / decoder / mitigation / SIMD / runtime-class packing.
 
-Two replicas converge if and only if all of these match. They diverge cleanly when any one moves: a noise model bump, a decoder swap, a calibration snapshot, a SIMD path change. The reference impl asserts this property at `ruqu-backend/src/witness.rs:42` and the test below it.
+Two replicas converge if and only if all of these match. They diverge cleanly when any one moves: a noise model bump, a decoder swap, a calibration snapshot, a SIMD path change. The reference impl asserts this property at `crates/ruqu-backend/src/witness.rs:42` and the test below it.
 
 The hash function strengthens, not weakens, relative to v1. SipHash (the v1 `DefaultHasher`) is designed for HashMap collision resistance; SHAKE-256(32) is a NIST-approved extendable-output function with cryptographic collision resistance. The v1 hash-chain semantic — every entry's `prev_hash` links to the predecessor — is preserved by the v2 chain sidecar (every bundle's `prev_witness` field links to the predecessor's `rvf_witness`), but the per-link strength moves from non-cryptographic to cryptographic. ADR-008's gate G1 ("witness equivalence proves out") makes this a tested property: 1000 random circuits, 100% of two-encode pairs identical, 100% of mutation-of-witness-affecting-fields different, zero collisions.
 
@@ -85,19 +85,19 @@ The deliberate semantic relaxation is `software_version` and `timestamp_utc`. v1
 
 ## Reference implementation status
 
-The crate `ruvector-rulake-ruqu` v0.0.1 lives at `ruqu-backend/`. What it ships today:
+The crate `ruvector-rulake-ruqu` v0.0.1 lives at `crates/ruqu-backend/`. What it ships today:
 
-- `RuquStateVectorBackend`, the `BackendAdapter` impl for small-N exact simulation (`ruqu-backend/src/lib.rs:79`-area). v0.0.1 caps at 16 qubits to keep RAM bounded; the production backend handles up to 25.
-- A mini circuit IR — `Circuit`, `Gate { H, X, Y, Z, S, T, CNOT, RZ }` — at `ruqu-backend/src/circuit.rs`. Enough to run Bell pairs end-to-end and prove the witness path; the OpenQASM 3.0 frontend is roadmapped for v0.0.2.
-- `simulate` and complex-number type `C` at `ruqu-backend/src/state_vector.rs`. Exact dense simulation against the mini IR.
-- The `witness` module at `ruqu-backend/src/witness.rs:42`. Same construction path as any other lake backend (`RuLakeBundle::new`), tagging `memory_class = "quantum"`. Backend tag flows into `data_ref` so two backends over the same circuit get distinct witnesses.
+- `RuquStateVectorBackend`, the `BackendAdapter` impl for small-N exact simulation (`crates/ruqu-backend/src/lib.rs:79`-area). v0.0.1 caps at 16 qubits to keep RAM bounded; the production backend handles up to 25.
+- A mini circuit IR — `Circuit`, `Gate { H, X, Y, Z, S, T, CNOT, RZ }` — at `crates/ruqu-backend/src/circuit.rs`. Enough to run Bell pairs end-to-end and prove the witness path; the OpenQASM 3.0 frontend is roadmapped for v0.0.2.
+- `simulate` and complex-number type `C` at `crates/ruqu-backend/src/state_vector.rs`. Exact dense simulation against the mini IR.
+- The `witness` module at `crates/ruqu-backend/src/witness.rs:42`. Same construction path as any other lake backend (`RuLakeBundle::new`), tagging `memory_class = "quantum"`. Backend tag flows into `data_ref` so two backends over the same circuit get distinct witnesses.
 - Two Criterion benches scaffolded for eventual acceptance: `simulate` and `execute_and_pull`.
 
 What v0.0.1 does *not* ship, and which is roadmapped per ADR-008 §Decision 2 and the integration plan:
 
 - The four other simulation backends (Stabilizer, Clifford+T, TensorNetwork, Hardware). Each is a separate `BackendAdapter` impl gated by a Cargo feature. `state-vector` and `stabilizer` are intended as the WASM-default pair; `clifford-t`, `tensor-network`, `hardware` pull in heavier dependencies.
 - The `CacheAwarePlanner` wrapper around v1's `plan_execution`, plus the non-breaking ruLake addition that `PerBackendStats` exposes its `witnesses_held()` set (ADR-008 §Decision 3).
-- `mcp-ruqu/`, the sibling MCP server with the five intent verbs (`ruqu_simulate`, `ruqu_verify`, `ruqu_replay`, `ruqu_optimize`, `ruqu_qec_schedule`). PR 2 in the integration plan.
+- `crates/mcp-ruqu/`, the sibling MCP server with the five intent verbs (`ruqu_simulate`, `ruqu_verify`, `ruqu_replay`, `ruqu_optimize`, `ruqu_qec_schedule`). PR 2 in the integration plan.
 - The `chain.rulake.json` companion sidecar (the v1 `WitnessLog` semantic preserved as `prev_witness` links between bundles). PR 3.
 - The Console's seventh sidebar entry (`Quantum`) composing `ruqu-wasm` (in-tab simulation) with `rulake-wasm` (`verifyBundleJson` for witness verification). PR 4.
 - The `MockHardwareBackend` that lets gates G3 (hardware-cache attribution) and G4 (Clifford concordance) run in CI without a real device.
@@ -109,11 +109,11 @@ The five acceptance gates are itemised in ADR-008 §Verification: G1 witness equ
 
 The pattern is the same one rvDNA uses, applied to a different domain.
 
-**`BackendAdapter` is the contract.** Five `ruqu-*` adapters (one per simulation engine) implement the same trait at `src/backend.rs:110` that `LocalBackend`, GCS, IPFS, and `RvdnaT0Backend` implement. From ruLake's perspective, a registered ruQu backend is just another source of vectors, and a "circuit_hash" is just a collection name.
+**`BackendAdapter` is the contract.** Five `ruqu-*` adapters (one per simulation engine) implement the same trait at `crates/core/src/backend.rs:110` that `LocalBackend`, GCS, IPFS, and `RvdnaT0Backend` implement. From ruLake's perspective, a registered ruQu backend is just another source of vectors, and a "circuit_hash" is just a collection name.
 
-**The cache witness is shared.** Every ruQu backend's `current_bundle` constructs a `RuLakeBundle` through `RuLakeBundle::new`, which calls `compute_witness`. Two ruLake instances running the same circuit on the same backend with the same `RuntimeContext` derive the same witness independently and share the cache through `src/cache.rs::install_prebuilt_interned`. Cross-deployment via IPFS works the same way — a `circuit.rulake.json` published to IPFS at a CID is verifiable end-to-end without ever shipping the amplitude bytes.
+**The cache witness is shared.** Every ruQu backend's `current_bundle` constructs a `RuLakeBundle` through `RuLakeBundle::new`, which calls `compute_witness`. Two ruLake instances running the same circuit on the same backend with the same `RuntimeContext` derive the same witness independently and share the cache through `crates/core/src/cache.rs::install_prebuilt_interned`. Cross-deployment via IPFS works the same way — a `circuit.rulake.json` published to IPFS at a CID is verifiable end-to-end without ever shipping the amplitude bytes.
 
-**Federation is fan-out.** `RuLake::search_federated` over `(simulation_backend, circuit_hash)` pairs gives "ask all five engines for prior runs of this circuit" in one call. The `mcp-server` audit pipeline (`mcp-server/src/audit.rs::AuditEntry`) is shared with `mcp-ruqu`; disjoint `RUQU_*` vs `RULAKE_*` code prefixes let one log stream serve both servers, and a shared `audit-only` Cargo feature on `mcp-server` lets siblings depend on the schema without pulling the full ruLake-tool surface.
+**Federation is fan-out.** `RuLake::search_federated` over `(simulation_backend, circuit_hash)` pairs gives "ask all five engines for prior runs of this circuit" in one call. The `mcp-server` audit pipeline (`crates/mcp-server/src/audit.rs::AuditEntry`) is shared with `mcp-ruqu`; disjoint `RUQU_*` vs `RULAKE_*` code prefixes let one log stream serve both servers, and a shared `audit-only` Cargo feature on `mcp-server` lets siblings depend on the schema without pulling the full ruLake-tool surface.
 
 A substrate, in this framing, satisfies the trait, produces witnesses through the canonical recipe, and rides the federation primitive without inventing a new one. v2's job is not to invent federation, audit, or a cache layer; it is to be a substrate that ruLake can host. ADR-008 §Compatibility section confirms every existing ruLake artefact (the trait, the bundle struct, the witness function, the GCS / IPFS backends, the `mcp-server` audit row, the Console crypto) is unchanged.
 
@@ -127,10 +127,10 @@ The ADR is honest about several genuine unknowns (`docs/research/ruqu/v2-spec.md
 - v2 spec: `/home/ruvultra/projects/RuLake/docs/research/ruqu/v2-spec.md`
 - Integration plan: `/home/ruvultra/projects/RuLake/docs/research/ruqu/integration-with-rulake.md`
 - Corpus README: `/home/ruvultra/projects/RuLake/docs/research/ruqu/README.md`
-- Reference implementation (v0.0.1): `/home/ruvultra/projects/RuLake/ruqu-backend/`
-- ruLake bundle: `/home/ruvultra/projects/RuLake/src/bundle.rs:113` (`RuLakeBundle`), `/home/ruvultra/projects/RuLake/src/bundle.rs:166` (`RuLakeBundle::new`), `/home/ruvultra/projects/RuLake/src/bundle.rs:362` (`compute_witness`)
-- Backend trait: `/home/ruvultra/projects/RuLake/src/backend.rs:110`
-- Federation primitive: `src/lake.rs:521` (`search_federated`); cache stats: `src/lake.rs:127` (`cache_stats_by_backend`)
+- Reference implementation (v0.0.1): `/home/ruvultra/projects/RuLake/crates/ruqu-backend/`
+- ruLake bundle: `/home/ruvultra/projects/RuLake/crates/core/src/bundle.rs:113` (`RuLakeBundle`), `/home/ruvultra/projects/RuLake/crates/core/src/bundle.rs:166` (`RuLakeBundle::new`), `/home/ruvultra/projects/RuLake/crates/core/src/bundle.rs:362` (`compute_witness`)
+- Backend trait: `/home/ruvultra/projects/RuLake/crates/core/src/backend.rs:110`
+- Federation primitive: `crates/core/src/lake.rs:521` (`search_federated`); cache stats: `crates/core/src/lake.rs:127` (`cache_stats_by_backend`)
 - v1 ruqu-core source: `vendor/ruvector/crates/ruqu-core/`
   - `src/replay.rs::ExecutionRecord` (line 57), `circuit_canonical_bytes` (line 212)
   - `src/witness.rs::WitnessLog` (line 88), `append` (line 107), `verify_chain` (line 141)

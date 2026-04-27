@@ -203,7 +203,7 @@ double maintenance for no technical win. The positioning serves both.
 4. ~~**Does the substrate acceptance test need to live as a runnable
    test?**~~ **Resolved:** shipped as
    `brain_substrate_acceptance_recall_verify_forget_rehydrate` in
-   `tests/federation_smoke.rs`. Drives the six-guarantee loop
+   `crates/core/tests/federation_smoke.rs`. Drives the six-guarantee loop
    (recall → verify → forget → rehydrate → location-transparency,
    compact explicitly deferred per this ADR) against a single
    `LocalBackend`. If this test stays green on every commit, the

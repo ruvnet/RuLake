@@ -26,7 +26,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  PACKAGE_DIR: python
+  PACKAGE_DIR: sdk/python
 
 jobs:
   build:

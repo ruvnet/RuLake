@@ -10,7 +10,7 @@ This is a file-by-file, screen-by-screen, gap-by-gap audit of the design
 artifact the user dropped into the repo. Every claim about the design cites a
 file in `/tmp/rulake-dashboard-review/` (where the zip is extracted). Every
 claim about ruLake's server side cites a real path under
-`mcp-server/src/`, `node-wasm/src/`, `node/`, or `vendor/ruvector/`. The
+`crates/mcp-server/src/`, `node-wasm/src/`, `node/`, or `vendor/ruvector/`. The
 purpose of this document is to be the engineering substrate the
 ADR-006 decision rests on; the ADR is the short, normative version,
 this is the long, evidentiary version.
@@ -231,14 +231,14 @@ breakdown, and the ambient vector substrate at the bottom.
   `STALE_BUNDLE_GUARD`, `STALE_BUNDLE_FALLBACK`, `POLICY_DENIED`, `BUDGET_EXCEEDED`.
 
 **Backed by today.**
-- `rulake://stats` (mcp-server/src/server.rs:599, 649-664) — gives hits, misses,
+- `rulake://stats` (crates/mcp-server/src/server.rs:599, 649-664) — gives hits, misses,
   primes, hit-rate, avg-prime-ms in one rollup. **Maps cleanly.**
-- `rulake://stats/by-backend` (`mcp-server/src/server.rs:607, 665-684`) — per-backend
+- `rulake://stats/by-backend` (`crates/mcp-server/src/server.rs:607, 665-684`) — per-backend
   hits/misses/primes. **Maps cleanly.**
 
 **Gaps.**
 - **No latency histogram resource.** The audit log records `duration_ms`
-  per call (`AuditEntry` in `mcp-server/src/audit.rs`), but no rolled-up
+  per call (`AuditEntry` in `crates/mcp-server/src/audit.rs`), but no rolled-up
   p50/p99 surface exists. v0.1 falls back to client-side rolling
   bucketing of audit entries; v0.2 needs `rulake://stats/latency`.
 - **No throughput-series resource.** Same shape problem — derive client-side
@@ -264,7 +264,7 @@ JSON.
   `decision` (`chosen_action/reason_code/backends_used/refusals/...`).
 
 **Backed by today.**
-- `rulake_query` (`mcp-server/src/server.rs:191-318`) — the public
+- `rulake_query` (`crates/mcp-server/src/server.rs:191-318`) — the public
   decision-layer tool. Returns a `QueryResponse` with `data`,
   `provenance`, `trust_level`, `decision`. **Maps cleanly to the
   design's response shape.** The fixture in `data.js` matches the
@@ -299,7 +299,7 @@ canvas (`FederationGraph` at `screens.jsx:837-918`).
   { id, dim, gen, entries, witness, state, hits, misses, primes, lastPrimeMs } }`.
 
 **Backed by today.**
-- `rulake_list_backends` (`mcp-server/src/server.rs:319`) — returns
+- `rulake_list_backends` (`crates/mcp-server/src/server.rs:319`) — returns
   backend ids only (`ListBackendsResponse { backends: Vec<String> }` at
   line 526-529). **Insufficient.**
 
@@ -335,7 +335,7 @@ generation-chain table showing the lineage; pin/unpin to IndexedDB.
 - A way to fetch bundle bytes (or canonical JSON) from the server.
 
 **Backed by today.**
-- `rulake://bundle/{backend}/{collection}` (`mcp-server/src/server.rs:617,
+- `rulake://bundle/{backend}/{collection}` (`crates/mcp-server/src/server.rs:617,
   685-708`) — was added in v0.6. Reads cheaply from `cache_witness_of`
   (no full pull). Returns witness + provenance JSON. **Partial cover.**
 - `verifyBundleJson` in `rulake-wasm` (`node-wasm/src/lib.rs:157-209`) —
@@ -376,7 +376,7 @@ wipes the IndexedDB store; server audit is unaffected.
 
 **Backed by today.**
 - The server emits structured `AuditEntry` rows to a JSONL file
-  (`mcp-server/src/audit.rs`). **No streaming/tail surface to clients
+  (`crates/mcp-server/src/audit.rs`). **No streaming/tail surface to clients
   today.**
 
 **Gaps.**
@@ -404,7 +404,7 @@ table at the bottom.
 **Backed by today.**
 - `RuLakeHttp.connect()` (`node/http.mjs:124-159`) — initializes the
   MCP session. **Maps cleanly.**
-- Server capability tiers (`mcp-server/src/server.rs:455-469`): `Read` /
+- Server capability tiers (`crates/mcp-server/src/server.rs:455-469`): `Read` /
   `Publish` / `Admin` / `Internal`. The capability matrix in the design
   matches these tiers exactly.
 
@@ -499,10 +499,10 @@ The design exposes four auth modes; the server supports three of them
 | `mtls` | TLS client cert | `AuthMode::Mtls` (server checks cert) | **disabled in browser**; show the warning the design already wrote |
 
 The capability matrix (`screens.jsx:1289-1296`) is keyed by the server's
-capability tiers (`mcp-server/src/server.rs:455-469`): `read` /
+capability tiers (`crates/mcp-server/src/server.rs:455-469`): `read` /
 `publish` / `admin`. The matrix is populated by the server's
 `tools/list` response — which already filters by effective capabilities
-(`mcp-server/src/server.rs:566-585`), so the client can *infer* the
+(`crates/mcp-server/src/server.rs:566-585`), so the client can *infer* the
 capability tier from which tool names appeared.
 
 **One subtle thing.** The design's "Connect & initialize" button calls
@@ -755,7 +755,7 @@ In rough priority order. Each maps to a `mcp-server v0.9` task.
 generation, entries, witness, state, hits, misses, primes, last_prime_ms }] }`.
 **Effort.** ~150 LOC. The data is already in
 `planner.lake.cache_stats_by_collection()` (cited at
-`mcp-server/src/server.rs:615`). The tool is a wrapper.
+`crates/mcp-server/src/server.rs:615`). The tool is a wrapper.
 **Capability tier.** `Read`.
 
 ### Gap 2 — `rulake://audit/tail` resource
@@ -764,7 +764,7 @@ generation, entries, witness, state, hits, misses, primes, last_prime_ms }] }`.
 **Today.** Audit emits to JSONL on disk; no client-readable surface.
 **Need.** Resource returning the last N=200 entries; pagination via
 `?before=<ts>`.
-**Effort.** ~200 LOC. Add a ring buffer in `mcp-server/src/audit.rs`
+**Effort.** ~200 LOC. Add a ring buffer in `crates/mcp-server/src/audit.rs`
 that retains the last N entries in memory, expose via a new
 `rulake://audit/tail` resource handler in `server.rs`.
 **Capability tier.** `Read` (admin can see all principals; read sees
@@ -794,7 +794,7 @@ window.
 ### Gap 5 — Confirm `rulake://bundle/{b}/{c}` returns the full JSON
 
 **Blocks.** Bundle screen KV grid + `verifyBundleJson` recompute.
-**Today.** Resource exists (`mcp-server/src/server.rs:617`); returns
+**Today.** Resource exists (`crates/mcp-server/src/server.rs:617`); returns
 witness + provenance. Need to verify: does the JSON body include
 `format_version`, `data_ref`, `rotation_seed`, `rerank_factor`,
 `pii_policy`, `lineage_id`, `memory_class`, AND is the JSON byte-stable
@@ -829,7 +829,7 @@ hosted demos.
 ### Gap 8 — CORS preflight allow-list
 
 **Blocks.** Browser → server in any non-trivial deployment.
-**Today.** `mcp-server/src/http.rs` may or may not set CORS headers
+**Today.** `crates/mcp-server/src/http.rs` may or may not set CORS headers
 permissively (need to verify). The GitHub Pages origin
 (`https://ruvnet.github.io`) needs to be on the allow-list, OR the
 operator sets a wildcard for known consoles.
@@ -1033,7 +1033,7 @@ is fine — the user re-authenticates per session.
 
 ### 12.4 CORS
 
-The mcp-server today's HTTP transport (`mcp-server/src/http.rs`) needs
+The mcp-server today's HTTP transport (`crates/mcp-server/src/http.rs`) needs
 to be audited for CORS handling. For the GitHub Pages origin to call
 the user's mcp-server, the server must respond to preflight `OPTIONS`
 requests with appropriate `Access-Control-Allow-*` headers. This is

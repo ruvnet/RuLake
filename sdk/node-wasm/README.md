@@ -90,7 +90,7 @@ For the full surface, use [`rulake`](https://www.npmjs.com/package/rulake) (Node
 
 ```bash
 git clone --recurse-submodules https://github.com/ruvnet/RuLake
-cd RuLake/node-wasm
+cd RuLake/sdk/node-wasm
 rustup target add wasm32-unknown-unknown
 cargo install wasm-pack       # if not already installed
 ./build.sh                     # produces pkg-web/, pkg-nodejs/, pkg-bundler/

@@ -17,17 +17,18 @@ FROM rust:bookworm AS builder
 
 WORKDIR /build
 
-COPY Cargo.toml Cargo.lock ./
+COPY crates/core/Cargo.toml crates/core/Cargo.lock ./crates/core/
 COPY vendor ./vendor
-COPY src ./src
-COPY tests ./tests
+COPY crates/core/src ./crates/core/src
+COPY crates/core/tests ./crates/core/tests
+COPY crates/core/benches ./crates/core/benches
 COPY examples ./examples
 COPY README.md BENCHMARK.md LICENSE-MIT LICENSE-APACHE ./
 
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/build/target \
-    cargo build --release --bin rulake-demo \
-    && cp target/release/rulake-demo /usr/local/bin/rulake-demo
+    --mount=type=cache,target=/build/crates/core/target \
+    cargo build --release --manifest-path crates/core/Cargo.toml --bin rulake-demo \
+    && cp crates/core/target/release/rulake-demo /usr/local/bin/rulake-demo
 
 # ---- runtime ----
 FROM debian:bookworm-slim

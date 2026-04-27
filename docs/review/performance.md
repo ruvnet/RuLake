@@ -400,7 +400,7 @@ builder for embedded users. Low effort.
 
 ## 8. Cross-checks against `BENCHMARK.md`
 
-The benchmark numbers are reproducible from `src/bin/rulake-demo.rs`.
+The benchmark numbers are reproducible from `crates/core/src/bin/rulake-demo.rs`.
 Checked claim-by-claim against the code:
 
 | BENCHMARK.md claim | Code evidence | Verdict |

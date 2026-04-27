@@ -15,7 +15,7 @@ specific source file or ADR. Sizing tables are derived from the
 RaBitQ 1-bit storage model (`D/8` bytes per vector, plus rotation
 state and rerank buffers), the measured benchmarks in
 `/home/ruvultra/projects/RuLake/BENCHMARK.md`, and the cache geometry
-documented at `src/cache.rs`. Latency budgets are calibrated against
+documented at `crates/core/src/cache.rs`. Latency budgets are calibrated against
 `BENCHMARK.md`'s headline numbers (1.02× direct RaBitQ on the hit path;
 ~3,500 QPS at n=100k D=128 single-thread on a Ryzen-class laptop)
 and scaled for the relevant edge silicon. Where ruLake will not work
@@ -73,11 +73,11 @@ in-memory compressed cache (RaBitQ 1-bit codes; ~D/8 bytes per
 vector), it has a swappable `BackendAdapter` that can be a local
 filesystem, a memory-mapped file, or a cloud bucket polled at a
 human-paced interval, and it has a witness-anchored bundle protocol
-(`src/bundle.rs`, `RuLakeBundle`) that lets you say "the cloud just
+(`crates/core/src/bundle.rs`, `RuLakeBundle`) that lets you say "the cloud just
 republished its truth; refresh your cache" in ~10 lines of code
-(`src/lake.rs:200`, `refresh_from_bundle_dir`).
+(`crates/core/src/lake.rs:200`, `refresh_from_bundle_dir`).
 
-The three consistency modes (`src/cache.rs:55` `Consistency` enum)
+The three consistency modes (`crates/core/src/cache.rs:55` `Consistency` enum)
 map cleanly onto the edge requirement spectrum:
 
 - `Frozen` — burned-in mission data. The drone has a target list for
@@ -107,14 +107,14 @@ map cleanly onto the edge requirement spectrum:
 
 ruLake's distinguishing edge property is that the **bundle sidecar is
 the unit of sync**, not the whole index. A ~300-byte JSON file
-(`src/bundle.rs:113-155`) carries the witness, dim, seed, rerank, and
+(`crates/core/src/bundle.rs:113-155`) carries the witness, dim, seed, rerank, and
 generation; as long as the witness matches what the cache holds, the
 edge device serves out of memory and never round-trips. When the
 witness changes — the cloud rotated its data — the cache invalidates
 and the next query primes from whatever the local backend is, which
 on edge is usually the FsBackend over a directory the cloud has
 already filled with the new `ruvec1` binary
-(`src/fs_backend.rs:14-22`).
+(`crates/core/src/fs_backend.rs:14-22`).
 
 This split — small sidecar over the slow link, big binary already
 local — is the architectural shape that makes ruLake a real edge
@@ -153,7 +153,7 @@ compressed footprint per vector is `ceil(D/8)` bytes for the codes
 plus a small constant for rotation state and rerank buffer. The
 rotation matrix is per-index, not per-vector, so it disappears in the
 amortization at typical n. ruLake's `pos_to_id` map adds 8 bytes per
-vector (`src/cache.rs:223-232`) — the documented memory-audit
+vector (`crates/core/src/cache.rs:223-232`) — the documented memory-audit
 finding #2 — so the per-vector cost in the cache is `D/8 + 8` bytes.
 
 **Table 2.1 — Vectors per memory budget at common embedding dims**
@@ -254,7 +254,7 @@ transparently from the new file.
 
 Critically, `Eventual` mode means the user's queries do not block on
 the cloud poll. Stale results for up to 60 s after a cloud update
-is the explicit tradeoff documented in `src/cache.rs:62-65`.
+is the explicit tradeoff documented in `crates/core/src/cache.rs:62-65`.
 
 ### Where it stops being a fit
 
@@ -291,7 +291,7 @@ work has not been done, but the substrate is designed to allow it
 
 ### What a WASM build would look like
 
-`Cargo.toml` (`/home/ruvultra/projects/RuLake/Cargo.toml`) declares
+`Cargo.toml` (`/home/ruvultra/projects/RuLake/crates/core/Cargo.toml`) declares
 nine direct dependencies. Of those:
 
 - `serde`, `serde_json`, `thiserror`, `sha3`, `hex`, `rand`,
@@ -371,7 +371,7 @@ compression makes both viable.
 
 Three concrete pieces of work are missing:
 
-1. **A `WasmBackend` impl of `BackendAdapter`** (`src/backend.rs:110`).
+1. **A `WasmBackend` impl of `BackendAdapter`** (`crates/core/src/backend.rs:110`).
    The trait is 4 methods (`id`, `list_collections`, `pull_vectors`,
    `generation`) plus `current_bundle` override. A browser-side
    implementation pulls vectors from IndexedDB or fetches from a
@@ -425,7 +425,7 @@ A single robot fuses vision, lidar, and radar. Each modality
 produces embeddings at different dimensionalities — vision via a
 ResNet variant at D=2048, lidar via a PointNet at D=512, radar via
 a custom model at D=128. ruLake's `(backend_id, collection_id)`
-addressing (`src/cache.rs:166`) lets each modality be a separate
+addressing (`crates/core/src/cache.rs:166`) lets each modality be a separate
 collection within a single backend, with independent witness chains
 and independent generation tokens:
 
@@ -449,7 +449,7 @@ let _ = lake.search_one("radar",  "known_objects", &rad_embedding, 5)?;
 ```
 
 The dim mismatch between collections is enforced at search time
-(`src/cache.rs:750`, `DimensionMismatch` error), so a vision-dim
+(`crates/core/src/cache.rs:750`, `DimensionMismatch` error), so a vision-dim
 query against the lidar collection fails loud rather than silently
 returning garbage. That is the right failure mode for a safety
 system.
@@ -457,7 +457,7 @@ system.
 ### Frozen mode for the safety snapshot
 
 The safety system runs against a pre-validated, witness-pinned
-catalog of scenarios. `Consistency::Frozen` (`src/cache.rs:67-77`)
+catalog of scenarios. `Consistency::Frozen` (`crates/core/src/cache.rs:67-77`)
 asserts that the catalog is immutable for the cache's lifetime; the
 witness is computed once at boot, the cache primes, and from then
 on no automatic coherence check ever runs.
@@ -473,7 +473,7 @@ safety_lake.search_one("safety", "approved_envelopes", &probe, 1)?;
 ```
 
 The witness is recoverable — `safety_lake.cache_witness_of(&key)`
-returns the SHAKE-256 hex (`src/lake.rs:134`), which the system can
+returns the SHAKE-256 hex (`crates/core/src/lake.rs:134`), which the system can
 log, sign, and submit as evidence in a post-incident review. Because
 the witness is anchored on the bundle (`data_ref`, `dim`,
 `rotation_seed`, `rerank`, `generation`), it cryptographically pins
@@ -488,11 +488,11 @@ provably."
 ### Hard real-time — the honest take
 
 ruLake **is not a hard real-time system**. The hot path uses
-`std::sync::Mutex` (`src/cache.rs:239` — `Arc<Mutex<CacheState>>`),
+`std::sync::Mutex` (`crates/core/src/cache.rs:239` — `Arc<Mutex<CacheState>>`),
 and the documented review (`docs/review/performance.md` §2) calls
 out that every cache operation acquires a global mutex even for
 read-mostly bookkeeping. The mutex is short-held — the heavy scan
-runs unlocked via the Arc-drop-lock pattern (`src/cache.rs:734-762`)
+runs unlocked via the Arc-drop-lock pattern (`crates/core/src/cache.rs:734-762`)
 — but it is still a lock, with all the WCET (worst-case execution
 time) ambiguity that implies.
 
@@ -535,9 +535,9 @@ A useful corollary: because the witness is content-addressed, the
 on-vehicle log can record "(timestamp, query, top-k results,
 witness_hex)" and a post-trip analysis can rehydrate the **exact**
 cache state that produced the result by warm-loading from the
-matching bundle bytes. `RuLake::warm_from_dir` (`src/lake.rs:378`)
+matching bundle bytes. `RuLake::warm_from_dir` (`crates/core/src/lake.rs:378`)
 plus the recorded witness gives byte-exact replay
-(`src/lake.rs:378` doc says "byte-exact query results without
+(`crates/core/src/lake.rs:378` doc says "byte-exact query results without
 backend RTT"), which is the audit replay primitive a safety
 investigator actually wants.
 
@@ -581,8 +581,8 @@ ruLake's two relevant primitives for this:
    survival.** A vibration analyzer that builds an embedding catalog
    of "known healthy bearing signatures" runs its initial prime on
    first deployment, persists via `save_cache_to_dir`
-   (`src/lake.rs:263`), and on every reboot calls `warm_from_dir`
-   (`src/lake.rs:378`). The warm-load takes ~5 ms for n=5000 D=128
+   (`crates/core/src/lake.rs:263`), and on every reboot calls `warm_from_dir`
+   (`crates/core/src/lake.rs:378`). The warm-load takes ~5 ms for n=5000 D=128
    per ADR-155 §"Status" — fast enough that the gateway is back in
    anomaly-detection service before the SCADA poll cycle notices the
    reboot.
@@ -614,11 +614,11 @@ let target_refs: Vec<(&str, &str)> = targets.iter()
 let hits = plant.search_federated(&target_refs, &query_signature, 10)?;
 ```
 
-The federated path runs in parallel via rayon (`src/lake.rs:528`)
+The federated path runs in parallel via rayon (`crates/core/src/lake.rs:528`)
 with the adaptive per-shard rerank
-(`src/lake.rs:474`, `MIN_PER_SHARD_RERANK = 5`) keeping recall
+(`crates/core/src/lake.rs:474`, `MIN_PER_SHARD_RERANK = 5`) keeping recall
 above 0.85 even at K=50 shards. The over-request formula
-`k' = k + ceil(sqrt(k * ln(S)))` (`src/lake.rs:553-560`) compensates
+`k' = k + ceil(sqrt(k * ln(S)))` (`crates/core/src/lake.rs:553-560`) compensates
 for skewed distributions where one analyzer holds disproportionately
 more matches.
 
@@ -630,14 +630,14 @@ the same model machine, vibrating the same way), their bundles
 produce identical witnesses (data_ref, dim, seed, rerank, generation
 all match), and ruLake's content-addressed cache **shares the
 compressed entry between them**
-(`src/cache.rs:378-383`, the witness-already-cached fast path;
+(`crates/core/src/cache.rs:378-383`, the witness-already-cached fast path;
 `README.md` cell 11 advertises this as "Cross-process cache
 sharing").
 
 In a 50-analyzer fleet where 30 are the same model, the plant
 server caches 21 distinct signature catalogs instead of 50 — a
 ~40% memory saving with no extra code. The `cache_refcount_of`
-diagnostic (`src/lake.rs:147`) lets operators see the share factor
+diagnostic (`crates/core/src/lake.rs:147`) lets operators see the share factor
 explicitly.
 
 ### Bundle protocol over MQTT — concrete shape
@@ -750,12 +750,12 @@ Edge cameras lose power. Industrial buildings brown out. The
 camera reboots, and the application wants to be back in service in
 seconds, not minutes.
 
-`FsBackend` writes via temp+fsync+rename (`src/fs_backend.rs:166-202`),
+`FsBackend` writes via temp+fsync+rename (`crates/core/src/fs_backend.rs:166-202`),
 so a power loss during a write either leaves the previous version
 intact or leaves a `.tmp` file that is ignored on next read. The
 on-disk format (`ruvec1`, magic-byte-checked at
-`src/fs_backend.rs:247-252`) is fixed-stride and bounds-checked
-before allocation (`src/fs_backend.rs:259-281`), so a corrupt
+`crates/core/src/fs_backend.rs:247-252`) is fixed-stride and bounds-checked
+before allocation (`crates/core/src/fs_backend.rs:259-281`), so a corrupt
 truncation on power loss surfaces as `InvalidParameter` rather
 than a parser crash.
 
@@ -861,7 +861,7 @@ each edge, the steady state is:
   fleet — irrelevant.
 - **Binary download** when invalidated: full `ruvec1` file size,
   which is `n × (D × 4 + 8)` bytes plus a 24-byte header
-  (`src/fs_backend.rs:14-22`). At n=10k D=128 that is ~5.3 MB per
+  (`crates/core/src/fs_backend.rs:14-22`). At n=10k D=128 that is ~5.3 MB per
   edge per rotation. At n=100k D=768 it is ~310 MB — significant
   on a cellular link, fine on a wired LAN.
 
@@ -915,7 +915,7 @@ extension: each store is a collection, all live in a single
 
 ### Memory-class tags
 
-`RuLakeBundle.memory_class: Option<String>` (`src/bundle.rs:144-155`)
+`RuLakeBundle.memory_class: Option<String>` (`crates/core/src/bundle.rs:144-155`)
 is the substrate hook for exactly this pattern. The agent layer
 tags each bundle with `"episodic"`, `"semantic"`, `"procedural"`,
 `"identity"` — opaque to ruLake, meaningful to the agent. The tag
@@ -956,7 +956,7 @@ For a phone deployment, two implications:
 1. The witness is not a privacy leak — knowing the witness does not
    reveal embedding contents. It reveals which `data_ref` (typically
    a local file path or content hash) was used, and which generation.
-2. The bundle's `pii_policy` field (`src/bundle.rs:138`) is
+2. The bundle's `pii_policy` field (`crates/core/src/bundle.rs:138`) is
    passthrough opaque on the substrate side. The agent layer
    populates it with whatever PII classification the application
    demands; ruLake does not interpret or enforce it. M4 in the
@@ -985,9 +985,9 @@ the phone is comfortably under 50 MB even for a power user.
 ### Thrash-avoidance via LRU cap
 
 If the agent has many active sessions and the cache grows beyond
-budget, `with_max_cache_entries(n)` (`src/lake.rs:78`) caps the
+budget, `with_max_cache_entries(n)` (`crates/core/src/lake.rs:78`) caps the
 distinct compressed entries; LRU evicts the least-recently-used
-**unpinned** entry (`src/cache.rs:548-565`). Two notes for mobile:
+**unpinned** entry (`crates/core/src/cache.rs:548-565`). Two notes for mobile:
 
 - "Unpinned" means refcount-zero. As long as there is an active
   pointer for a `(backend, collection)`, that entry is never evicted
@@ -1118,11 +1118,11 @@ hard reasons:
    No `no_std` mode is documented or feasible without a major
    refactor.
 2. **`alloc`-heavy.** Every prime allocates an `Arc<RabitqPlusIndex>`
-   and a `Vec<Vec<f32>>` for the pulled batch (`src/cache.rs:399`).
+   and a `Vec<Vec<f32>>` for the pulled batch (`crates/core/src/cache.rs:399`).
    Cortex-M parts have 64–512 KB of RAM total; allocating per-query
    is not viable.
 3. **rayon.** The federated path uses `rayon::par_iter`
-   (`src/lake.rs:528`), which requires real OS threads. Cortex-M
+   (`crates/core/src/lake.rs:528`), which requires real OS threads. Cortex-M
    typically has zero or one thread of execution under an RTOS.
 
 So the question is not "can ruLake run on an ESP32?" — it cannot —
@@ -1269,7 +1269,7 @@ loads the snapshot directory, runs ruLake in `Frozen` mode against
 that snapshot, replays the queries, and gets **byte-exact** results
 — because the `Frozen` + `warm_from_dir` path skips any backend
 RTT and reproduces the exact compressed cache state
-(`src/lake.rs:378`, doc: "byte-exact query results without backend
+(`crates/core/src/lake.rs:378`, doc: "byte-exact query results without backend
 RTT").
 
 This is the property automotive functional-safety engineers actually
@@ -1388,7 +1388,7 @@ A pragmatic policy:
   pre-rotation witness" so the post-flight analyst can identify
   which queries used stale data.
 
-ruLake's `cache_witness_of` (`src/lake.rs:134`) gives the witness
+ruLake's `cache_witness_of` (`crates/core/src/lake.rs:134`) gives the witness
 that resolved each query for free; no extra logging hook needed.
 
 ### Per-mission warm-restart
@@ -1514,7 +1514,7 @@ might work with extension.
   with no shared state.
 - **Cryptographic forget / GDPR shred at the substrate level.**
   The cache can drop pointers (`invalidate_cache`,
-  `src/lake.rs:154`), but the underlying bytes (in the FsBackend
+  `crates/core/src/lake.rs:154`), but the underlying bytes (in the FsBackend
   or in another process's cache) are not crypto-shredded. That is
   the M2+ RVF responsibility.
 - **End-to-end network encryption.** ruLake does not encrypt
@@ -1714,7 +1714,7 @@ state would extend mission duration:
 This is application-layer logic today; the substrate already
 exposes `with_consistency` as a builder that could be re-applied,
 but `with_consistency` is a builder method that creates a new
-`RuLake` (`src/lake.rs:70`), not a runtime mutator. A
+`RuLake` (`crates/core/src/lake.rs:70`), not a runtime mutator. A
 `set_consistency(&mut self, c)` method would be the substrate hook;
 trivial to add, semver-minor.
 
@@ -1733,7 +1733,7 @@ is sufficient; this matters at the high end.
 
 ### 15.10 Witness in a 32-byte raw form for radio links
 
-The witness is currently 64 hex chars (`src/bundle.rs:386`,
+The witness is currently 64 hex chars (`crates/core/src/bundle.rs:386`,
 `hex::encode(out)`). For radio-budget-constrained edges
 (LoRaWAN), a 32-byte raw form would halve the wire cost. This is
 a serialization detail, not a substrate change — the bundle's
@@ -1808,20 +1808,20 @@ is in good shape for the edge.
 
 ## File and ADR references
 
-- `/home/ruvultra/projects/RuLake/Cargo.toml` — dependency
+- `/home/ruvultra/projects/RuLake/crates/core/Cargo.toml` — dependency
   surface (9 direct, no async runtime, no FFI).
-- `/home/ruvultra/projects/RuLake/src/lib.rs` — public re-exports
+- `/home/ruvultra/projects/RuLake/crates/core/src/lib.rs` — public re-exports
   (six modules).
-- `/home/ruvultra/projects/RuLake/src/lake.rs` — `RuLake` entry
+- `/home/ruvultra/projects/RuLake/crates/core/src/lake.rs` — `RuLake` entry
   point, search APIs, persistence, federation.
-- `/home/ruvultra/projects/RuLake/src/cache.rs` — `VectorCache`,
+- `/home/ruvultra/projects/RuLake/crates/core/src/cache.rs` — `VectorCache`,
   `Consistency` enum, Arc-drop-lock hot path.
-- `/home/ruvultra/projects/RuLake/src/backend.rs` —
+- `/home/ruvultra/projects/RuLake/crates/core/src/backend.rs` —
   `BackendAdapter` trait (4 methods + bundle override),
   `LocalBackend`, DoS caps.
-- `/home/ruvultra/projects/RuLake/src/fs_backend.rs` — `FsBackend`,
+- `/home/ruvultra/projects/RuLake/crates/core/src/fs_backend.rs` — `FsBackend`,
   `ruvec1` format, atomic writes, path-traversal validation.
-- `/home/ruvultra/projects/RuLake/src/bundle.rs` —
+- `/home/ruvultra/projects/RuLake/crates/core/src/bundle.rs` —
   `RuLakeBundle`, witness scheme, sidecar I/O, `memory_class`.
 - `/home/ruvultra/projects/RuLake/BENCHMARK.md` — measured
   numbers; the calibration source for all latency / QPS tables in

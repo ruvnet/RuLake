@@ -8,7 +8,7 @@
 #
 # This is the production sibling to:
 #   - ui/scripts/smoke.sh            (Console WASM-local mode)
-#   - mcp-rvdna/scripts/http-smoke.sh (rvdna-mcp HTTP, in-isolation)
+#   - crates/mcp-rvdna/scripts/http-smoke.sh (rvdna-mcp HTTP, in-isolation)
 #   - ui/scripts/smoke-cross-mcp.sh  (Console + local rvdna-mcp wire)
 #
 # What it catches that the local smokes don't:

@@ -2,12 +2,12 @@
 
 ## Status
 
-**Accepted (2026-04-25 → v0.9 as of 2026-04-27)** — `mcp-server/` is
+**Accepted (2026-04-25 → v0.9 as of 2026-04-27)** — `crates/mcp-server/` is
 shipping. The crate has progressed through nine numbered milestones;
 v0.9 closed the first ADR-006 server-gap (`rulake_list_collections`
 tool + permissive CORS layer for browser callers). The TypeScript
 example at `examples/nodejs/04-mcp-tool/` remains the prior-art /
-reference implementation; the Rust crate at `mcp-server/` is the
+reference implementation; the Rust crate at `crates/mcp-server/` is the
 shipped entry point.
 
 ### Version timeline
@@ -93,7 +93,7 @@ A working TypeScript MCP server already lives in this repo at
 `examples/nodejs/04-mcp-tool/src/server.ts`. It exposes three tools
 (`rulake_search`, `rulake_verify_witness`, `rulake_bundle_info`) over
 stdio against a *snapshot directory* — `(table.rulake.json,
-index.rbpx)` written by `RuLake::save_cache_to_dir` (`src/lake.rs:263`).
+index.rbpx)` written by `RuLake::save_cache_to_dir` (`crates/core/src/lake.rs:263`).
 It's deliberately small. Honest scope from its README: brute-force
 exact L2 because the Node side has no RaBitQ decoder; one-shot demo
 shape; no auth; no audit. It works as a developer demo and as proof
@@ -149,7 +149,7 @@ posture is materially worse).
 
 ## Decision
 
-We ship a Rust-native MCP server crate **`mcp-server/`** (sibling of
+We ship a Rust-native MCP server crate **`crates/mcp-server/`** (sibling of
 `python/` and `node/` per ADR-001) that links the public ruLake API
 in-process, exposes a **capability-gated tool surface** governed by a
 **read-only-by-default** posture, supports **stdio + Streamable HTTP**
@@ -168,7 +168,7 @@ stays in-tree as a working reference for users who want a thin
 JS-only path.
 
 ```text
-mcp-server/
+crates/mcp-server/
 ├── Cargo.toml          # ruvector-rulake-mcp, no workspace
 ├── README.md           # install & wire-up for Claude / Cursor / agentic-flow
 ├── src/
@@ -210,7 +210,7 @@ The Rust ecosystem has settled. As of April 2026 the choices are:
 | Hand-rolled JSON-RPC over `serde_json` | Total control | Reject for v1. The official SDK is ~2k LOC of glue we'd otherwise have to write, audit, and maintain against an actively-versioned spec. The win is too small. |
 
 ```toml
-# mcp-server/Cargo.toml — illustrative, not final
+# crates/mcp-server/Cargo.toml — illustrative, not final
 [package]
 name = "ruvector-rulake-mcp"
 version = "2.2.0"
@@ -254,7 +254,7 @@ the same goal the Python SDK reaches via `py.allow_threads`
 but with explicit bounds because the MCP server is a multi-tenant
 control plane, not a per-process binding.
 
-### 2. Crate placement — sibling `mcp-server/`, not `examples/`, not `crates/`
+### 2. Crate placement — sibling `crates/mcp-server/`, not `examples/`, not `crates/`
 
 Per ADR-001 we have *no* root workspace; the existing pattern is `python/`
 + `node/` as standalone Cargo packages that depend on the parent crate
@@ -262,10 +262,10 @@ via `path = ".."`. The MCP server slots in as the third sibling.
 
 | Option | Verdict |
 |---|---|
-| `mcp-server/` sibling crate | **Pick.** Mirrors `python/` and `node/`. One binary `cargo install`s; ships in CI like the SDK wheels. |
+| `crates/mcp-server/` sibling crate | **Pick.** Mirrors `python/` and `node/`. One binary `cargo install`s; ships in CI like the SDK wheels. |
 | `bin/rulake-mcp` inside the main crate | Reject. Forces every ruLake user (incl. people who only want `cargo add rulake`) to pull tokio + rmcp + hyper + rustls into their dep graph. ~50 transitive deps; a serving-process build just for the library doubles. |
 | `crates/rulake-mcp/` workspace member | Reject. Requires a root workspace, which ADR-001 §2 explicitly rejects. |
-| `examples/rust/05-mcp-server/` | Reject for v1 production. Examples are not where we ask operators to point their `cargo install`. The TypeScript demo at `examples/nodejs/04-mcp-tool/` stays as a *demo*, and its README will gain a "for production use, see `mcp-server/`" pointer. |
+| `examples/rust/05-crates/mcp-server/` | Reject for v1 production. Examples are not where we ask operators to point their `cargo install`. The TypeScript demo at `examples/nodejs/04-mcp-tool/` stays as a *demo*, and its README will gain a "for production use, see `crates/mcp-server/`" pointer. |
 
 ### 3. Transports — stdio in v1, Streamable HTTP in v1, no SSE
 
@@ -304,7 +304,7 @@ The MCP server decides on every call:
 4. **How much to spend** — k cap, batch cap, rerank factor, backend fan-out cap.
 5. **How to degrade** — return partials, reduce k, fall back to cache, advise the agent to narrow.
 
-The full ruLake surface from `src/lib.rs:53-58` is:
+The full ruLake surface from `crates/core/src/lib.rs:53-58` is:
 
 ```rust
 pub use backend::{BackendAdapter, BackendId, CollectionId, LocalBackend, PulledBatch};
@@ -490,7 +490,7 @@ For agents, the only call is `rulake_query`.
 not OAuth-issued; only granted via `--capabilities read,internal` on
 the binary command line):
 
-| Internal tool | Wraps (`src/lake.rs`) | Composed by `rulake_query` intent |
+| Internal tool | Wraps (`crates/core/src/lake.rs`) | Composed by `rulake_query` intent |
 |---|---|---|
 | `rulake_search_one` | `search_one`             | `search` (single-backend plan) |
 | `rulake_search_federated` | `search_federated` | `search` (multi-backend plan; default per-shard rerank) |
@@ -509,7 +509,7 @@ the binary command line):
 **Mutation tools** (NOT in the `internal` capability — separately
 gated by `publish` or `admin`, AND require an OAuth scope on HTTP):
 
-| Mutation tool | Wraps (`src/lake.rs`) | Capability | OAuth scope | Composed by |
+| Mutation tool | Wraps (`crates/core/src/lake.rs`) | Capability | OAuth scope | Composed by |
 |---|---|---|---|---|
 | `rulake_publish_bundle` | `publish_bundle` | `publish` | `mcp:rulake:publish` | `intent: "refresh"` (write side) |
 | `rulake_refresh_from_bundle_dir` | `refresh_from_bundle_dir` | `publish` | `mcp:rulake:publish` | `intent: "refresh"` (read side) |
@@ -552,7 +552,7 @@ struct SearchOneArgs {
     /// Collection name within that backend.
     collection: String,
     /// Query vector. Length must match the collection's dim.
-    /// Bounded to MAX_PULLED_DIM=8192 to mirror src/backend.rs:61.
+    /// Bounded to MAX_PULLED_DIM=8192 to mirror crates/core/src/backend.rs:61.
     #[schemars(length(min = 1, max = 8192))]
     query: Vec<f32>,
     /// Top-k. 1..=1000.
@@ -589,7 +589,7 @@ async fn search_one(&self, args: SearchOneArgs) -> Result<Vec<SearchResultJson>,
 on-disk bundle (`rulake_bundle_info`, `rulake_verify_witness`,
 `rulake_warm_from_dir`) refuses to return data when the witness check
 fails. This matches the existing posture of
-`RuLakeBundle::read_from_dir` (`src/bundle.rs:349` — the
+`RuLakeBundle::read_from_dir` (`crates/core/src/bundle.rs:349` — the
 `if !bundle.verify_witness()` guard inside `read_from_dir` at line 340)
 and the TS demo
 (`examples/nodejs/04-mcp-tool/src/server.ts:102`); we propagate it
@@ -611,7 +611,7 @@ scheme is registered with these exposers:
 | `rulake://bundle/{backend}/{collection}` | `BackendAdapter::current_bundle` (cached pointer) | **must not call default impl** | The live witness for the (backend, collection). Returns the cached witness from `cache_witness_of`; on cache miss returns a `404`-style empty resource rather than triggering the default `current_bundle` impl. Vector data is never exposed. |
 
 **Performance note on `rulake://bundle/...`:** the default
-`BackendAdapter::current_bundle` impl in `src/backend.rs:131` does a
+`BackendAdapter::current_bundle` impl in `crates/core/src/backend.rs:131` does a
 full `pull_vectors` to learn the dim. Calling it on every resource
 read would melt a remote backend (e.g. BigQuery scans the table
 every read). The MCP server therefore **never invokes the default
@@ -659,7 +659,7 @@ trusting them. The mitigations baked into this ADR:
    string literals on `#[tool]` attributes. They never interpolate
    runtime state.
 2. **Lint policy on the description text.** A test under
-   `mcp-server/tests/description_lint.rs` walks every tool registered
+   `crates/mcp-server/tests/description_lint.rs` walks every tool registered
    on `buildServer()`, runs each description through a deny-list
    (`"ignore previous"`, `"system prompt"`, `<script>`, control bytes,
    common injection prefixes from the Snyk/Palo Alto corpora), and
@@ -684,8 +684,8 @@ trusting them. The mitigations baked into this ADR:
 | **Malicious agent prompt** ("call `rulake_search_one('foo', 'bar', vec![…128k floats…], k=1_000_000)`") | Any read tool | JSON Schema bounds (`k ∈ [1,1000]`, query length ≤ 8192, batch ≤ 256). Per-client rate limit (§6). |
 | **Hostile MCP client** speaking the wire directly | HTTP transport | Bind localhost by default; mandatory auth on the HTTP path; OAuth 2.1 PRM in production; mTLS when an operator wants it. `Origin` header validated on every request (DNS-rebinding). |
 | **Network attacker** (TLS strip, MitM, replay) | HTTP transport | TLS terminated by `rulake-mcp` itself or by the operator's reverse proxy; mTLS option for environments that want client identity at the network layer; OAuth 2.1 with PKCE + Resource Indicators (RFC 8707) so a token issued for service A cannot be replayed at service B. |
-| **Supply-chain — poisoned bundle on disk** | `rulake_warm_from_dir`, `rulake_bundle_info`, `rulake_verify_witness` | All three propagate `RuLakeBundle::read_from_dir`'s witness verification (`src/bundle.rs:349`). Witness mismatch → tool returns `isError: true`, never serves data. Path arguments must resolve under an allow-listed root (see below). |
-| **Path traversal** through the snapshot-dir argument | Tools that accept paths | Path canonicalization + allow-list of roots in `mcp.toml`. The discipline is already in place for `FsBackend` filename validation (`src/fs_backend.rs:82,105`); we propagate it to tool arguments. |
+| **Supply-chain — poisoned bundle on disk** | `rulake_warm_from_dir`, `rulake_bundle_info`, `rulake_verify_witness` | All three propagate `RuLakeBundle::read_from_dir`'s witness verification (`crates/core/src/bundle.rs:349`). Witness mismatch → tool returns `isError: true`, never serves data. Path arguments must resolve under an allow-listed root (see below). |
+| **Path traversal** through the snapshot-dir argument | Tools that accept paths | Path canonicalization + allow-list of roots in `mcp.toml`. The discipline is already in place for `FsBackend` filename validation (`crates/core/src/fs_backend.rs:82,105`); we propagate it to tool arguments. |
 | **DoS via giant queries** | Read tools | Schema caps + concurrency cap (`--max-inflight 64`) + per-call timeout (`--tool-timeout 30s`) + per-client token bucket. |
 | **Tool description poisoning** | Tool registration time | Static descriptions, CI lint (§4). |
 | **OAuth confused deputy** | HTTP transport with OAuth | Resource Indicators (RFC 8707) mandatory in v1 — tokens carry the MCP endpoint URL they're valid for. |
@@ -795,18 +795,18 @@ server's job is to propagate, not duplicate:
 
 | Check | Source of truth |
 |---|---|
-| Query length cap (8192) | `MAX_PULLED_DIM` at `src/backend.rs:61` |
-| Vector count cap (100M) | `MAX_PULLED_VECTORS` at `src/backend.rs:60` |
-| Per-batch byte cap (16 GiB) | `MAX_PULLED_BYTES` at `src/backend.rs:62` |
-| Bundle JSON size (64 KiB) | `MAX_JSON_BYTES` at `src/bundle.rs:218` |
-| Bundle field size (4 KiB) | `MAX_FIELD_BYTES` at `src/bundle.rs:219` |
-| Witness length (128) | `src/bundle.rs:255` |
-| Path traversal | `FsBackend::validate_filename` (`src/fs_backend.rs:105`) — generalized to `validate_path_under_allowed_roots` |
+| Query length cap (8192) | `MAX_PULLED_DIM` at `crates/core/src/backend.rs:61` |
+| Vector count cap (100M) | `MAX_PULLED_VECTORS` at `crates/core/src/backend.rs:60` |
+| Per-batch byte cap (16 GiB) | `MAX_PULLED_BYTES` at `crates/core/src/backend.rs:62` |
+| Bundle JSON size (64 KiB) | `MAX_JSON_BYTES` at `crates/core/src/bundle.rs:218` |
+| Bundle field size (4 KiB) | `MAX_FIELD_BYTES` at `crates/core/src/bundle.rs:219` |
+| Witness length (128) | `crates/core/src/bundle.rs:255` |
+| Path traversal | `FsBackend::validate_filename` (`crates/core/src/fs_backend.rs:105`) — generalized to `validate_path_under_allowed_roots` |
 | Control bytes in arg strings | propagated from `validate_filename` |
 
 The MCP server's `policy::validate_search_args` consults these
 constants directly (`use rulake::backend::MAX_PULLED_DIM`),
-so a future bump in `src/backend.rs` lifts the cap everywhere with no
+so a future bump in `crates/core/src/backend.rs` lifts the cap everywhere with no
 duplicate edit.
 
 ### 6. Rate limiting, backpressure & concurrency
@@ -975,7 +975,7 @@ network mirror an attacker can MITM. ruLake-MCP is an installed
 binary; the install is a deliberate operator action.
 
 The Claude Desktop / Cursor / agentic-flow wire-up stanzas — copied
-verbatim into `mcp-server/README.md`:
+verbatim into `crates/mcp-server/README.md`:
 
 ```jsonc
 // stdio: parent-process trust
@@ -1113,14 +1113,14 @@ The right place to harden is the calling agent, with the
 
 - **Tokio in the binary.** ~6 MB stripped binary, dominated by tokio +
   hyper + rustls. Acceptable for a serving binary; documented as the
-  reason `mcp-server/` is a sibling crate, not bin in the main crate.
+  reason `crates/mcp-server/` is a sibling crate, not bin in the main crate.
 - **stdio has no auth.** This is the spec's posture, but it means a
   multi-user host with a shared rulake-mcp stdio config has the
-  trust-everyone-on-the-machine model. Documented in `mcp-server/README.md`
+  trust-everyone-on-the-machine model. Documented in `crates/mcp-server/README.md`
   with a "use HTTP + OAuth for multi-tenant" warning.
 - **The TS demo at `examples/nodejs/04-mcp-tool/` becomes legacy.**
   We keep it as a demo for the JS-only audience; its README gains a
-  banner pointing at `mcp-server/`. Eventually retired (v1.5 if no
+  banner pointing at `crates/mcp-server/`. Eventually retired (v1.5 if no
   user pushes back).
 - **No DCR, no prompts, no resource-subscriptions in v1.** Each is a
   documented v1.5/v2 reopener with a real-customer trigger; we don't
@@ -1131,7 +1131,7 @@ The right place to harden is the calling agent, with the
 
 ### Neutral
 
-- The Rust MCP server is the third sibling crate; `mcp-server/`
+- The Rust MCP server is the third sibling crate; `crates/mcp-server/`
   follows the layout `python/` and `node/` already validated under
   ADR-001. CI gains one more matrix row (release build per
   platform). No workspace introduced.
@@ -1139,11 +1139,11 @@ The right place to harden is the calling agent, with the
   transitive set (tokio, hyper, rustls, oauth2, http, tower) is
   bog-standard for a Rust service binary and adds no novel licence
   concerns (MIT/Apache pattern matches the rest of the repo).
-- The `mcp-server/` crate adds ~1500 LOC of glue (handler impls,
+- The `crates/mcp-server/` crate adds ~1500 LOC of glue (handler impls,
   config parsing, audit, transport wiring). ~2 engineer-weeks to
   ship v1 (M2-tier work, parallel with the Parquet adapter).
 
-### Verification (acceptance for the PR that lands `mcp-server/`)
+### Verification (acceptance for the PR that lands `crates/mcp-server/`)
 
 ```text
 $ cargo build --release -p ruvector-rulake-mcp
@@ -1196,7 +1196,7 @@ $ cargo test -p ruvector-rulake-mcp
 ```
 
 A bench gate, mirroring the Python and Node SDK budget:
-`mcp-server/tests/bench_tax.rs` measures stdio-transport
+`crates/mcp-server/tests/bench_tax.rs` measures stdio-transport
 `rulake_query intent=search` end-to-end QPS against direct
 `RuLake::search_one` at `n = 100k, D = 128, k = 10` and asserts the
 ratio stays ≤ 1.20×. The budget is wider than the Python SDK's 1.10×
@@ -1282,7 +1282,7 @@ every other decision in this document.
 
 - **Transport in v1.** stdio + Streamable HTTP. SSE rejected.
 - **Library.** `rmcp` 1.x.
-- **Crate placement.** `mcp-server/` sibling, no workspace.
+- **Crate placement.** `crates/mcp-server/` sibling, no workspace.
 - **Default capability.** Read.
 - **Public tool surface.** `rulake_query` only. The eight low-level
   tools become an internal kernel exposed only via
@@ -1374,7 +1374,7 @@ every other decision in this document.
 - JFrog on prompt-hijack via session ID (CVE-2025-6515): [`jfrog.com/blog/mcp-prompt-hijacking-vulnerability`](https://jfrog.com/blog/mcp-prompt-hijacking-vulnerability/)
 - Anthropic git-mcp prompt-injection-via-description coverage: [`theregister.com/2026/01/20/anthropic_prompt_injection_flaws`](https://www.theregister.com/2026/01/20/anthropic_prompt_injection_flaws/), [`infosecurity-magazine.com/news/prompt-injection-bugs-anthropic`](https://www.infosecurity-magazine.com/news/prompt-injection-bugs-anthropic/)
 - Existing TS MCP demo this ADR supersedes: `examples/nodejs/04-mcp-tool/`
-- Public Rust surface this ADR wraps: `src/lib.rs:53-58`, methods on `src/lake.rs`
-- Bundle-validation discipline propagated: `src/bundle.rs:215-262`
-- Path-validation discipline propagated: `src/fs_backend.rs:82-150`
-- Backend caps the schemas mirror: `src/backend.rs:60-62`
+- Public Rust surface this ADR wraps: `crates/core/src/lib.rs:53-58`, methods on `crates/core/src/lake.rs`
+- Bundle-validation discipline propagated: `crates/core/src/bundle.rs:215-262`
+- Path-validation discipline propagated: `crates/core/src/fs_backend.rs:82-150`
+- Backend caps the schemas mirror: `crates/core/src/backend.rs:60-62`

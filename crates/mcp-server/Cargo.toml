@@ -32,7 +32,7 @@ path = "src/main.rs"
 # The ruLake crate the server wraps. Per ADR-001, sibling-crate path-dep.
 # Pinned to the alpha (cargo refuses pre-release matches via plain
 # major versions). When the root crate goes 2.3.0 stable, bump here.
-rulake = { path = "..", version = "2.3.0-alpha.1" }
+rulake = { path = "../core", version = "2.3.0-alpha.1" }
 
 # Official Rust MCP SDK (Anthropic, modelcontextprotocol/rust-sdk).
 # `server` feature enables the request/response handler scaffolding;

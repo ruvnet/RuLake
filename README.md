@@ -26,7 +26,7 @@ Agents need to *remember things* — past conversations, documents you've shown 
 
 #### Why agents in particular
 
-- **One tool. The agent asks; ruLake decides.** Plug [`rulake-mcp`](mcp-server/) into Claude Desktop, Cursor, Cline, Continue, or agentic-flow and your agent gets a single `rulake_query` tool. The agent says what it wants ("find similar to X", "verify this answer is still current", "explain why you picked these"), ruLake figures out where to look, how strict to be, and whether to refuse — and returns a short trace of how it decided. Built on the open [Model Context Protocol](https://modelcontextprotocol.io).
+- **One tool. The agent asks; ruLake decides.** Plug [`rulake-mcp`](crates/mcp-server/) into Claude Desktop, Cursor, Cline, Continue, or agentic-flow and your agent gets a single `rulake_query` tool. The agent says what it wants ("find similar to X", "verify this answer is still current", "explain why you picked these"), ruLake figures out where to look, how strict to be, and whether to refuse — and returns a short trace of how it decided. Built on the open [Model Context Protocol](https://modelcontextprotocol.io).
 - **Same answer everywhere, provably.** Every result comes with a small fingerprint (a SHAKE-256 hash) of the data it was drawn from. Two agents on two different machines querying the same data get the **same fingerprint** and the **same byte-for-byte answer**. No more "the model hallucinated again" guessing — you can prove what it saw.
 - **It says no when it should.** If the local copy is stale and the source can't be reached, ruLake refuses with a clear reason instead of serving an old answer dressed up as a new one. The agent retries with a narrower question. Saying "I don't know" is a feature, not a bug.
 
@@ -46,7 +46,7 @@ Agents need to *remember things* — past conversations, documents you've shown 
 ruLake is built to run wherever the agent runs — including small places.
 
 - **Server side** — small static binary (the demo + `rulake-mcp` are ~5 MB stripped), distroless Docker, Streamable HTTP transport that fits behind any reverse proxy. Runs on a Raspberry Pi or an EC2 t4g.nano, not just a serving cluster.
-- **Edge runtimes (shipped)** — [`rulake-wasm`](node-wasm/) builds for **browsers, Cloudflare Workers, Deno-deploy, Bun, and Node.js fallback**. Same witness-anchored memory model with a feature-reduced surface (no AVX-512, no rayon — they don't exist on the edge anyway). ~149 KB compiled. Wired as an `optionalDependencies` peer of `rulake` per [ADR-003 §A](docs/adrs/sdk/ADR-003-nodejs-typescript-sdk.md): npm consumers on edge platforms get it transparently.
+- **Edge runtimes (shipped)** — [`rulake-wasm`](sdk/node-wasm/) builds for **browsers, Cloudflare Workers, Deno-deploy, Bun, and Node.js fallback**. Same witness-anchored memory model with a feature-reduced surface (no AVX-512, no rayon — they don't exist on the edge anyway). ~149 KB compiled. Wired as an `optionalDependencies` peer of `rulake` per [ADR-003 §A](docs/adrs/sdk/ADR-003-nodejs-typescript-sdk.md): npm consumers on edge platforms get it transparently.
 - **HTTP client variant (shipped)** — `import { RuLakeHttp } from "rulake/http"` gives you a fetch-based MCP-Streamable-HTTP client. Edge runtimes that can't load any binary (extreme-cold-start Workers, browser ServiceWorkers) still consume a remote `rulake-mcp` server through one tool, and round-trip the witness for local re-verification with `rulake-wasm`.
 - **Why it matters** — agent memory at the edge means the personal AI doesn't round-trip your private context to a far-away cluster. Latency is local; cost is zero per query; the witness story keeps it verifiable.
 
@@ -148,7 +148,7 @@ Open source. ❤️ Free forever.
 | 19 | **Per-shard over-request** | `k' = k + ⌈√(k·ln S)⌉` — closes the Weaviate/Elasticsearch data-skew recall gap |
 | 20 | **`search_batch` API** | One lock + one coherence check per N queries; plug-point for future GPU kernels |
 
-**Backends** ([`BackendAdapter` trait](src/backend.rs))
+**Backends** ([`BackendAdapter` trait](crates/core/src/backend.rs))
 
 | # | Capability | What It Does |
 |---|------------|--------------|
@@ -451,13 +451,13 @@ impl BackendAdapter for ParquetBackend {
 }
 ```
 
-See [`src/fs_backend.rs`](src/fs_backend.rs) for a 250-line reference implementation.
+See [`crates/core/src/fs_backend.rs`](crates/core/src/fs_backend.rs) for a 250-line reference implementation.
 
 </details>
 
 ### Python — `pip install rulake`
 
-PyO3 bindings live in [`python/`](python/). Wheels (cp39+, manylinux_2_28 / macOS / Windows) per [ADR-002](docs/adrs/sdk/ADR-002-python-sdk.md).
+PyO3 bindings live in [`sdk/python/`](sdk/python/). Wheels (cp39+, manylinux_2_28 / macOS / Windows) per [ADR-002](docs/adrs/sdk/ADR-002-python-sdk.md).
 
 ```python
 import numpy as np
@@ -486,7 +486,7 @@ print("hit_rate:", lake.cache_stats().hit_rate())
 
 ```bash
 git clone --recurse-submodules https://github.com/ruvnet/RuLake
-cd RuLake/python
+cd RuLake/sdk/python
 python -m venv .venv && source .venv/bin/activate
 pip install maturin pytest numpy
 maturin develop --release      # builds + installs the _rulake extension
@@ -536,7 +536,7 @@ n = fresh.warm_from_dir("local", "docs", "/var/rulake/snap/")
 
 ### Node.js / TypeScript — `npm install rulake`
 
-napi-rs bindings live in [`node/`](node/). Per-platform `.node` binaries via npm `optionalDependencies` (Prisma / next-swc pattern), per [ADR-003](docs/adrs/sdk/ADR-003-nodejs-typescript-sdk.md).
+napi-rs bindings live in [`sdk/node/`](sdk/node/). Per-platform `.node` binaries via npm `optionalDependencies` (Prisma / next-swc pattern), per [ADR-003](docs/adrs/sdk/ADR-003-nodejs-typescript-sdk.md).
 
 ```ts
 import { RuLake, LocalBackend, Consistency } from "rulake";
@@ -567,7 +567,7 @@ console.log("hitRate:", lake.cacheStats().hitRate);
 
 ```bash
 git clone --recurse-submodules https://github.com/ruvnet/RuLake
-cd RuLake/node
+cd RuLake/sdk/node
 cargo build --release
 cp target/release/libruvector_rulake_node.so rulake.linux-x64-gnu.node
 # (.dylib → rulake.darwin-arm64.node ; .dll → rulake.win32-x64-msvc.node)
@@ -647,7 +647,7 @@ See [ADR-002](docs/adrs/sdk/ADR-002-python-sdk.md) and [ADR-003](docs/adrs/sdk/A
 
 ### MCP server — `rulake-mcp` (agent-callable governed memory)
 
-Rust-native MCP server in [`mcp-server/`](mcp-server/). Lets any MCP-compatible client (Claude Desktop, Cursor, Cline, Continue, agentic-flow) talk to a live ruLake over **stdio** or **Streamable HTTP**, with the planner deciding *where* to search, *how strict* to be, *whether to refuse*, and emitting a decision trace alongside every answer. Implements [ADR-004](docs/adrs/sdk/ADR-004-rulake-mcp-server.md).
+Rust-native MCP server in [`crates/mcp-server/`](crates/mcp-server/). Lets any MCP-compatible client (Claude Desktop, Cursor, Cline, Continue, agentic-flow) talk to a live ruLake over **stdio** or **Streamable HTTP**, with the planner deciding *where* to search, *how strict* to be, *whether to refuse*, and emitting a decision trace alongside every answer. Implements [ADR-004](docs/adrs/sdk/ADR-004-rulake-mcp-server.md).
 
 ```bash
 # stdio (default — parent-process trust):
@@ -774,7 +774,7 @@ docker run --rm -p 7440:7440 rulake-mcp http --bind 0.0.0.0:7440 --auth none --i
 
 ### Cloud backends — `gcs-backend` (Parquet on GCS)
 
-The first cloud backend, in [`gcs-backend/`](gcs-backend/) — reads vector columns from Parquet files on Google Cloud Storage with cache coherence riding GCS's per-object generation token. Implements [ADR-155 §M2](docs/adrs/ADR-155-rulake-datalake-layer.md).
+The first cloud backend, in [`crates/gcs-backend/`](crates/gcs-backend/) — reads vector columns from Parquet files on Google Cloud Storage with cache coherence riding GCS's per-object generation token. Implements [ADR-155 §M2](docs/adrs/ADR-155-rulake-datalake-layer.md).
 
 ```rust
 use std::sync::Arc;
@@ -807,9 +807,9 @@ let hits = lake.search_one("gcs-prod", "docs", &query, 10)?;
 
 **Auth** — Application Default Credentials. Run `gcloud auth application-default login` once or set `GOOGLE_APPLICATION_CREDENTIALS=/path/to/sa.json`; the `object_store` crate handles the rest.
 
-**Cache coherence** — `Generation = u64` from the GCS object's generation number. Every `gcloud storage cp` of a Parquet file bumps the generation → ruLake's witness picks up the change automatically through the existing `Generation::Num` variant in `src/bundle.rs:55`.
+**Cache coherence** — `Generation = u64` from the GCS object's generation number. Every `gcloud storage cp` of a Parquet file bumps the generation → ruLake's witness picks up the change automatically through the existing `Generation::Num` variant in `crates/core/src/bundle.rs:55`.
 
-**Cheap `current_bundle()` override** — the default impl in `src/backend.rs:131` does a full `pull_vectors` to learn the dim, which would melt a remote backend at resource-read rates. We override to do a HEAD on the GCS object (~1 RTT) + a Parquet-footer-only schema read (a few KiB). ADR-004's `rulake://bundle/{backend}/{collection}` resource explicitly forbids the default-impl behaviour for any backend it's pointed at.
+**Cheap `current_bundle()` override** — the default impl in `crates/core/src/backend.rs:131` does a full `pull_vectors` to learn the dim, which would melt a remote backend at resource-read rates. We override to do a HEAD on the GCS object (~1 RTT) + a Parquet-footer-only schema read (a few KiB). ADR-004's `rulake://bundle/{backend}/{collection}` resource explicitly forbids the default-impl behaviour for any backend it's pointed at.
 
 **Build + test** (4 offline tests against `object_store::memory::InMemory` + 1 live test gated on env var):
 
@@ -836,20 +836,20 @@ cargo test --release -- --ignored gcs_live
 
 > The Console's **App Store** route — every shipped substrate listed with status tag, install commands (Rust crate · MCP companion · npm), and per-card links to its ADR, deep gist, and research dir. Operators can browse what's available at a glance.
 
-Beyond GCS, ruLake plugs into anything that fits the [`BackendAdapter`](src/backend.rs) trait. The standalone-repo strategy ([ADR-001](docs/adrs/ADR-001-standalone-repo-strategy.md)) means every adapter is its own Cargo crate — pin it independently, ship it independently, and reuse it under any other ruLake deployment.
+Beyond GCS, ruLake plugs into anything that fits the [`BackendAdapter`](crates/core/src/backend.rs) trait. The standalone-repo strategy ([ADR-001](docs/adrs/ADR-001-standalone-repo-strategy.md)) means every adapter is its own Cargo crate — pin it independently, ship it independently, and reuse it under any other ruLake deployment.
 
 | Crate | ADR | Status | What it adds |
 |---|---|---|---|
-| [`ipfs-backend/`](ipfs-backend/) | [ADR-005](docs/adrs/sdk/ADR-005-ipfs-backend-and-deploy.md) | **v0.1 shipping** | Witness-anchored bundle distribution by CIDv1 over kubo + gateway-fallback. Cache key = SHAKE-256 witness; CID is just the transport. R-IPFS-1 hard-refuses on `data_ref ≠ ipfs://{cid}` mismatch. |
-| [`rvdna-backend/`](rvdna-backend/) | [ADR-007](docs/adrs/ADR-007-rvdna-as-rulake-substrate.md) | **v0.0.1 scaffolded** | Hot-tier (T0) k-mer vectors from `.rvdna` v2 files. Witness derivation byte-isomorphic to a `RuLakeBundle`; `memory_class = "genomic"`. T1/T2 land in v0.1/v0.2. Bench: `pull_vectors` at **35.9 GiB/s**, cache cold→hot ratio **555×**. |
-| [`ruqu-backend/`](ruqu-backend/) | [ADR-008](docs/adrs/ADR-008-ruqu-as-rulake-substrate.md) | **v0.0.1 scaffolded** | StateVector quantum simulator (≤16 qubits, mini-IR: H/X/Y/Z/S/T/Rz/CX). Witness derivation byte-isomorphic; `memory_class = "quantum"`. Stabilizer / TensorNetwork land in v0.1; Hardware + QEC scheduler in v0.2. Bench: simulate at **2.15 Gelem/s**. |
+| [`crates/ipfs-backend/`](crates/ipfs-backend/) | [ADR-005](docs/adrs/sdk/ADR-005-ipfs-backend-and-deploy.md) | **v0.1 shipping** | Witness-anchored bundle distribution by CIDv1 over kubo + gateway-fallback. Cache key = SHAKE-256 witness; CID is just the transport. R-IPFS-1 hard-refuses on `data_ref ≠ ipfs://{cid}` mismatch. |
+| [`crates/rvdna-backend/`](crates/rvdna-backend/) | [ADR-007](docs/adrs/ADR-007-rvdna-as-rulake-substrate.md) | **v0.0.1 scaffolded** | Hot-tier (T0) k-mer vectors from `.rvdna` v2 files. Witness derivation byte-isomorphic to a `RuLakeBundle`; `memory_class = "genomic"`. T1/T2 land in v0.1/v0.2. Bench: `pull_vectors` at **35.9 GiB/s**, cache cold→hot ratio **555×**. |
+| [`crates/ruqu-backend/`](crates/ruqu-backend/) | [ADR-008](docs/adrs/ADR-008-ruqu-as-rulake-substrate.md) | **v0.0.1 scaffolded** | StateVector quantum simulator (≤16 qubits, mini-IR: H/X/Y/Z/S/T/Rz/CX). Witness derivation byte-isomorphic; `memory_class = "quantum"`. Stabilizer / TensorNetwork land in v0.1; Hardware + QEC scheduler in v0.2. Bench: simulate at **2.15 Gelem/s**. |
 
 Each substrate gets a companion MCP server so agents can call into it over the same Streamable HTTP transport as `rulake-mcp`:
 
 | Crate | Tools | Status |
 |---|---|---|
-| [`mcp-rvdna/`](mcp-rvdna/) | `rvdna_lineage` (live; trust-anchor demo with `RVDNA_WITNESS_DRIFT` refusal) + 4 witnessed stubs | v0.0.1 |
-| [`mcp-ruqu/`](mcp-ruqu/) | `ruqu_simulate` / `ruqu_verify` / `ruqu_replay` (live) + `ruqu_optimize` / `ruqu_qec_schedule` (stubs) | v0.0.1 |
+| [`crates/mcp-rvdna/`](crates/mcp-rvdna/) | `rvdna_lineage` (live; trust-anchor demo with `RVDNA_WITNESS_DRIFT` refusal) + 4 witnessed stubs | v0.0.1 |
+| [`crates/mcp-ruqu/`](crates/mcp-ruqu/) | `ruqu_simulate` / `ruqu_verify` / `ruqu_replay` (live) + `ruqu_optimize` / `ruqu_qec_schedule` (stubs) | v0.0.1 |
 
 All four substrate adapters and both MCP companion servers carry criterion benches at [`docs/research/benchmarks/`](docs/research/benchmarks/) and a focused security review at [`docs/research/security/`](docs/research/security/) (4 Med findings, all addressed).
 
@@ -915,9 +915,9 @@ Three scripts cover the wire from different angles. Each runs in seconds and exi
 |---|---|---|
 | [`ui/scripts/smoke.sh`](ui/scripts/smoke.sh) | Console **WASM-local** mode (no server). With `--live`, also Console + `mcp-server`. | 7 routes navigated · 5 audit codes (`WITNESS_MATCH`, `IPFS_BUNDLE_VERIFIED`, `OK_VERIFIED`, `IPFS_OK`, `CONNECT_FAILED`) · App Store renders 4 cards with `SHIPPING`/`SCAFFOLDED` tags · `--live` adds `INIT_OK` + `LIST_COLLECTIONS_OK` and asserts 8 tools surfaced from `mcp-server` |
 | [`ui/scripts/smoke-cross-mcp.sh`](ui/scripts/smoke-cross-mcp.sh) | Console + `mcp-rvdna` full wire — the test that surfaced the iter 32 CORS + SSE-parser bugs. | MCP handshake completes · Console banner reads `initialize OK · Nms · 5 tools` · `INIT_OK` audit row lands · `Browse.refresh` against `mcp-rvdna` (which has no `rulake_list_collections`) refuses cleanly with `LIST_COLLECTIONS_FAILED` · 0 console errors |
-| [`mcp-rvdna/scripts/http-smoke.sh`](mcp-rvdna/scripts/http-smoke.sh) | `rvdna-mcp` HTTP transport in isolation (no browser). | Binary launches · MCP handshake completes · all 5 tools (`rvdna_find`, `rvdna_call_variants`, `rvdna_translate`, `rvdna_score`, `rvdna_lineage`) appear in `tools/list` · `rvdna_lineage` against an unknown `(backend, collection)` refuses with `RVDNA_UNKNOWN_COLLECTION` |
+| [`crates/mcp-rvdna/scripts/http-smoke.sh`](crates/mcp-rvdna/scripts/http-smoke.sh) | `rvdna-mcp` HTTP transport in isolation (no browser). | Binary launches · MCP handshake completes · all 5 tools (`rvdna_find`, `rvdna_call_variants`, `rvdna_translate`, `rvdna_score`, `rvdna_lineage`) appear in `tools/list` · `rvdna_lineage` against an unknown `(backend, collection)` refuses with `RVDNA_UNKNOWN_COLLECTION` |
 
-Run all three after any change that touches `mcp-server/`, `mcp-rvdna/`, `ui/src/`, or the BackendAdapter trait — they take ~90 s combined and catch most cross-component regressions a single-crate `cargo test` would miss.
+Run all three after any change that touches `crates/mcp-server/`, `crates/mcp-rvdna/`, `ui/src/`, or the BackendAdapter trait — they take ~90 s combined and catch most cross-component regressions a single-crate `cargo test` would miss.
 
 ```bash
 ./scripts/smoke-all.sh           # runs all three in sequence with a unified pass/fail summary
@@ -1118,15 +1118,15 @@ Per-language details and the cross-cutting story are in the index at
 - 43 core tests (21 unit + 22 integration)
 
 **Audience shells:**
-- **Python SDK** ([`python/`](python/)) — PyO3 + ABI3 wheels, NumPy zero-copy, GIL release on hot paths. **14/14 tests.**
-- **Node.js SDK** ([`node/`](node/)) — napi-rs, Float32Array zero-copy, async-only, `bigint` IDs. **10/10 tests.**
-- **MCP server** ([`mcp-server/`](mcp-server/)) — `rulake-mcp` binary; stdio + Streamable HTTP; **four auth modes**: none / bearer (dev-only embarrassing-flag) / **JWT (HMAC + RSA + EC + JWKS hot rotation, scope→capability per request)** / **mTLS (TLS termination at the server, client cert SHA-256 in the audit principal AND in the session-binding tuple)**; **session binding** ((session_id) → (principal, client_id, mTLS-cert) tuple, mismatch → 401); 4 intents (search/verify/explain/refresh) — `verify` can read disk OR call through `BackendAdapter::current_bundle` for any registered backend (transparent IPFS / GCS / Local support, returns real dim+witness via `RuLake::current_bundle`); 7 tools across read/internal/publish/admin capability tiers; **per-collection RBAC** via `[[allow]]` blocks; **per-call CapabilitySet** intersected from server-wide ceiling × per-token JWT scopes (server is ceiling, token is grant); **layered rate limiting** (3 governor buckets) with **structured backpressure** at the HTTP layer (429 + `Retry-After` + JSON body with `layer`, `retry_after_ms`, `hints[]`); **replay protection** (MCP-Request-Id nonce LRU); **`tools/list` filtered by effective capability**; **3 MCP resources** (`rulake://stats`, `rulake://stats/by-backend`, **`rulake://bundle/{backend}/{collection}`**); bounded rayon worker pool; JSONL audit file with §7 schema. **64/64 tests.**
+- **Python SDK** ([`sdk/python/`](sdk/python/)) — PyO3 + ABI3 wheels, NumPy zero-copy, GIL release on hot paths. **14/14 tests.**
+- **Node.js SDK** ([`sdk/node/`](sdk/node/)) — napi-rs, Float32Array zero-copy, async-only, `bigint` IDs. **10/10 tests.**
+- **MCP server** ([`crates/mcp-server/`](crates/mcp-server/)) — `rulake-mcp` binary; stdio + Streamable HTTP; **four auth modes**: none / bearer (dev-only embarrassing-flag) / **JWT (HMAC + RSA + EC + JWKS hot rotation, scope→capability per request)** / **mTLS (TLS termination at the server, client cert SHA-256 in the audit principal AND in the session-binding tuple)**; **session binding** ((session_id) → (principal, client_id, mTLS-cert) tuple, mismatch → 401); 4 intents (search/verify/explain/refresh) — `verify` can read disk OR call through `BackendAdapter::current_bundle` for any registered backend (transparent IPFS / GCS / Local support, returns real dim+witness via `RuLake::current_bundle`); 7 tools across read/internal/publish/admin capability tiers; **per-collection RBAC** via `[[allow]]` blocks; **per-call CapabilitySet** intersected from server-wide ceiling × per-token JWT scopes (server is ceiling, token is grant); **layered rate limiting** (3 governor buckets) with **structured backpressure** at the HTTP layer (429 + `Retry-After` + JSON body with `layer`, `retry_after_ms`, `hints[]`); **replay protection** (MCP-Request-Id nonce LRU); **`tools/list` filtered by effective capability**; **3 MCP resources** (`rulake://stats`, `rulake://stats/by-backend`, **`rulake://bundle/{backend}/{collection}`**); bounded rayon worker pool; JSONL audit file with §7 schema. **64/64 tests.**
 
 **First cloud backend:**
-- **GCS Parquet** ([`gcs-backend/`](gcs-backend/)) — reads `LIST<FLOAT32>` columns from Parquet on GCS, generation = GCS object generation, cheap `current_bundle()` override. **4/4 offline + 1 live (gated) tests.**
+- **GCS Parquet** ([`crates/gcs-backend/`](crates/gcs-backend/)) — reads `LIST<FLOAT32>` columns from Parquet on GCS, generation = GCS object generation, cheap `current_bundle()` override. **4/4 offline + 1 live (gated) tests.**
 
 **Bundle distribution:**
-- **IPFS** ([`ipfs-backend/`](ipfs-backend/)) — publishes `table.rulake.json` bundles to kubo over HTTP RPC, addresses them by CIDv1; bundle-only (vector bodies stay on the body-store backend). Three modes: kubo / gateway-only / kubo + gateway-fallback. Witness ↔ CID via two-anchors-one-cache-key (ADR-005 §3). Per-VM cost ~$20–25/month on Compute Engine `e2-small`. **5/5 offline + 1 live (gated) tests.** ([ADR-005](docs/adrs/sdk/ADR-005-ipfs-backend-and-deploy.md))
+- **IPFS** ([`crates/ipfs-backend/`](crates/ipfs-backend/)) — publishes `table.rulake.json` bundles to kubo over HTTP RPC, addresses them by CIDv1; bundle-only (vector bodies stay on the body-store backend). Three modes: kubo / gateway-only / kubo + gateway-fallback. Witness ↔ CID via two-anchors-one-cache-key (ADR-005 §3). Per-VM cost ~$20–25/month on Compute Engine `e2-small`. **5/5 offline + 1 live (gated) tests.** ([ADR-005](docs/adrs/sdk/ADR-005-ipfs-backend-and-deploy.md))
 
 **ADRs:**
 - ADR-001 (standalone repo), ADR-155 (cache-first), ADR-156 (substrate), ADR-157 (accelerator plane), ADR-158 (Hadamard + QVCache positioning), [ADR-002](docs/adrs/sdk/ADR-002-python-sdk.md) (Python SDK), [ADR-003](docs/adrs/sdk/ADR-003-nodejs-typescript-sdk.md) (Node SDK), [ADR-004](docs/adrs/sdk/ADR-004-rulake-mcp-server.md) (MCP server, 1340 lines), [ADR-005](docs/adrs/sdk/ADR-005-ipfs-backend-and-deploy.md) (IPFS backend + GCP deploy, 1306 lines)
