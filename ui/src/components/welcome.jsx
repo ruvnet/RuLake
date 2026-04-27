@@ -62,35 +62,32 @@ function IntroSlideshow() {
       ),
     },
     {
-      tag: 'the usual options',
-      head: 'Three shapes today. Each has a trade-off.',
-      body: <>A <strong>vector database</strong> is purpose-built but means standing up another service and replicating your data into it. A <strong>warehouse</strong> already holds your data but charges per query. A <strong>local library</strong> is fast but lives inside one process — there's no shared layer agents on different machines can both verify against.</>,
+      tag: 'where memory lives today',
+      head: 'Three shapes. Each works for what it was built for.',
+      body: <>Most teams already use one of these to give agents memory. They're all valid; they just answer different questions. The next slide is what we noticed was missing in between them.</>,
       art: (
         <svg viewBox="0 0 360 130" width="100%" height="130">
           <g className="intro-anim-stagger">
             <g transform="translate(20,30)">
               <rect width="100" height="70" fill="none" stroke="#7a8190" strokeWidth="0.8"/>
               <text x="50" y="20" textAnchor="middle" fill="#d6dae0" fontSize="11" fontFamily="Inter" fontWeight="500">Vector DB</text>
-              <text x="50" y="38" textAnchor="middle" fill="#7a8190" fontSize="8.5" fontFamily="JetBrains Mono">purpose-built</text>
-              <text x="50" y="50" textAnchor="middle" fill="#7a8190" fontSize="8.5" fontFamily="JetBrains Mono">replicates data</text>
-              <text x="50" y="64" textAnchor="middle" fill="#7a8190" fontSize="9" fontFamily="JetBrains Mono">cost: a new service</text>
+              <text x="50" y="40" textAnchor="middle" fill="#7a8190" fontSize="9" fontFamily="JetBrains Mono">purpose-built</text>
+              <text x="50" y="55" textAnchor="middle" fill="#7a8190" fontSize="9" fontFamily="JetBrains Mono">for vector search</text>
             </g>
             <g transform="translate(130,30)">
               <rect width="100" height="70" fill="none" stroke="#7a8190" strokeWidth="0.8"/>
               <text x="50" y="20" textAnchor="middle" fill="#d6dae0" fontSize="11" fontFamily="Inter" fontWeight="500">Warehouse</text>
-              <text x="50" y="38" textAnchor="middle" fill="#7a8190" fontSize="8.5" fontFamily="JetBrains Mono">data already there</text>
-              <text x="50" y="50" textAnchor="middle" fill="#7a8190" fontSize="8.5" fontFamily="JetBrains Mono">queries hit cluster</text>
-              <text x="50" y="64" textAnchor="middle" fill="#7a8190" fontSize="9" fontFamily="JetBrains Mono">cost: $ per query</text>
+              <text x="50" y="40" textAnchor="middle" fill="#7a8190" fontSize="9" fontFamily="JetBrains Mono">where the data</text>
+              <text x="50" y="55" textAnchor="middle" fill="#7a8190" fontSize="9" fontFamily="JetBrains Mono">already lives</text>
             </g>
             <g transform="translate(240,30)">
               <rect width="100" height="70" fill="none" stroke="#7a8190" strokeWidth="0.8"/>
               <text x="50" y="20" textAnchor="middle" fill="#d6dae0" fontSize="11" fontFamily="Inter" fontWeight="500">Library</text>
-              <text x="50" y="38" textAnchor="middle" fill="#7a8190" fontSize="8.5" fontFamily="JetBrains Mono">in-process · fast</text>
-              <text x="50" y="50" textAnchor="middle" fill="#7a8190" fontSize="8.5" fontFamily="JetBrains Mono">per-agent state</text>
-              <text x="50" y="64" textAnchor="middle" fill="#7a8190" fontSize="9" fontFamily="JetBrains Mono">cost: no shared view</text>
+              <text x="50" y="40" textAnchor="middle" fill="#7a8190" fontSize="9" fontFamily="JetBrains Mono">embedded in</text>
+              <text x="50" y="55" textAnchor="middle" fill="#7a8190" fontSize="9" fontFamily="JetBrains Mono">one process</text>
             </g>
           </g>
-          <text x="180" y="120" textAnchor="middle" fill="#7a8190" fontSize="9.5" fontFamily="JetBrains Mono">none of them give agents a shared, verifiable middle layer</text>
+          <text x="180" y="120" textAnchor="middle" fill="#7a8190" fontSize="9.5" fontFamily="JetBrains Mono">all three are useful · all three solve different problems</text>
         </svg>
       ),
     },

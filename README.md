@@ -784,6 +784,10 @@ cargo test --release -- --ignored gcs_live
 
 ### Substrate adapters — IPFS, genomic, quantum
 
+<a href="https://ruvnet.github.io/RuLake/"><img src="assets/console-appstore.png" alt="App Store route — substrate marketplace listing rvDNA v2, ruQu v2, gcs-backend, ipfs-backend with install commands and per-card links to ADR / gist / research" width="100%" /></a>
+
+> The Console's **App Store** route — every shipped substrate listed with status tag, install commands (Rust crate · MCP companion · npm), and per-card links to its ADR, deep gist, and research dir. Operators can browse what's available at a glance.
+
 Beyond GCS, ruLake plugs into anything that fits the [`BackendAdapter`](src/backend.rs) trait. The standalone-repo strategy ([ADR-001](docs/adrs/ADR-001-standalone-repo-strategy.md)) means every adapter is its own Cargo crate — pin it independently, ship it independently, and reuse it under any other ruLake deployment.
 
 | Crate | ADR | Status | What it adds |
