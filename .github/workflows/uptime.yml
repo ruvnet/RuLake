@@ -1,0 +1,148 @@
+# Live-MCP uptime probes — closes issue #8.
+#
+# Hits each of the three production MCP endpoints every 15 min using
+# scripts/smoke-live.sh (the same script `scripts/smoke-all.sh` uses for
+# its production rows), then writes a shields.io endpoint-format JSON
+# per target into badges/. The README references those JSON files via
+# https://img.shields.io/endpoint?url=... so the README's status badges
+# flip red within ~15 min of any target going down.
+#
+# Why 15 min, not 5: Cloud Run scales to zero. Hitting it more
+# aggressively would just measure cold-start latency and produce false
+# RED on healthy services. 15 min matches the README's CTA expectation
+# ("the wire's up") without paying for warm instances.
+#
+# Why we commit to main (not gh-pages): the JSON files are <100 B each,
+# rebuilt every 15 min, and shields.io reads them via raw.githubusercontent
+# off main — no Pages build needed. The commit message + [skip ci] tag
+# keeps these out of the ci.yml + release-* workflows' notification
+# stream.
+
+name: uptime
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write       # required to push badges/*.json back to main
+  issues: write         # required for the optional auto-issue on first failure
+
+jobs:
+  probe:
+    name: Probe live MCPs + refresh badges
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Probe each target independently. We capture the per-target
+      # exit code (smoke-live.sh exits 1 on any assertion failure) and
+      # synthesize the shields.io JSON from it. We deliberately do NOT
+      # `set -e` the whole step so one red probe doesn't skip the others
+      # — the badge for a healthy sibling should still flip green.
+      - name: Probe rulake-mcp.ruv.io (8 tools)
+        id: rulake
+        continue-on-error: true
+        run: |
+          set +e
+          URL=https://rulake-mcp.ruv.io/ EXPECTED_TOOLS=8 ./scripts/smoke-live.sh
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Probe rvdna-mcp.ruv.io (5 tools)
+        id: rvdna
+        continue-on-error: true
+        run: |
+          set +e
+          URL=https://rvdna-mcp.ruv.io/ EXPECTED_TOOLS=5 ./scripts/smoke-live.sh
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Probe ruqu-mcp.ruv.io (5 tools)
+        id: ruqu
+        continue-on-error: true
+        run: |
+          set +e
+          URL=https://ruqu-mcp.ruv.io/ EXPECTED_TOOLS=5 ./scripts/smoke-live.sh
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Generate shields.io endpoint JSON for each target
+        run: |
+          mkdir -p badges
+          gen_badge() {
+            local label="$1"
+            local tools="$2"
+            local exit_code="$3"
+            local file="badges/${label}.json"
+            if [ "${exit_code}" = "0" ]; then
+              printf '{"schemaVersion":1,"label":"%s","message":"up · %s tools","color":"brightgreen"}\n' \
+                "${label}" "${tools}" > "${file}"
+            else
+              printf '{"schemaVersion":1,"label":"%s","message":"down","color":"red"}\n' \
+                "${label}" > "${file}"
+            fi
+            echo "wrote ${file}: $(cat ${file})"
+          }
+          gen_badge "rulake-mcp" 8 "${{ steps.rulake.outputs.exit_code }}"
+          gen_badge "rvdna-mcp"  5 "${{ steps.rvdna.outputs.exit_code }}"
+          gen_badge "ruqu-mcp"   5 "${{ steps.ruqu.outputs.exit_code }}"
+
+      # Commit only if a badge actually changed. Empty `git diff --cached`
+      # → skip the commit so we don't spam main with "no-op uptime probe"
+      # commits when every target is steady-state green.
+      - name: Commit refreshed badges to main
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add badges/
+          if git diff --cached --quiet; then
+            echo "no badge changes — skipping commit"
+            exit 0
+          fi
+          git commit -m "ci(uptime): refresh live-MCP status badges [skip ci]"
+          # Push to whatever branch the workflow is running on (main on
+          # schedule, the dispatching branch on workflow_dispatch).
+          git push origin "HEAD:${GITHUB_REF#refs/heads/}"
+
+      # Optional auto-issue on red. Only opens one issue per outage —
+      # checks for an existing open issue with the `live-down` label
+      # before filing a new one. Skip with comment if you don't want
+      # this; the badge alone is enough signal for most operators.
+      - name: Open `live-down` issue on first red
+        if: |
+          steps.rulake.outputs.exit_code != '0' ||
+          steps.rvdna.outputs.exit_code  != '0' ||
+          steps.ruqu.outputs.exit_code   != '0'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const failed = [];
+            if ('${{ steps.rulake.outputs.exit_code }}' !== '0') failed.push('rulake-mcp.ruv.io');
+            if ('${{ steps.rvdna.outputs.exit_code  }}' !== '0') failed.push('rvdna-mcp.ruv.io');
+            if ('${{ steps.ruqu.outputs.exit_code   }}' !== '0') failed.push('ruqu-mcp.ruv.io');
+
+            const { data: existing } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              state: 'open',
+              labels: 'live-down',
+            });
+            if (existing.length > 0) {
+              core.info(`live-down issue #${existing[0].number} already open — not filing duplicate`);
+              return;
+            }
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              title: `live-MCP down: ${failed.join(', ')}`,
+              labels: ['live-down'],
+              body: [
+                `Uptime workflow detected RED on the following live MCP target(s):`,
+                ``,
+                ...failed.map(t => `- \`${t}\``),
+                ``,
+                `Workflow run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+                ``,
+                `Auto-filed by \`.github/workflows/uptime.yml\`. Will not refile while open.`,
+              ].join('\n'),
+            });

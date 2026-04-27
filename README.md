@@ -10,6 +10,10 @@
 [![ruv.io](https://img.shields.io/badge/ruv.io-website-purple.svg)](https://ruv.io)
 [![MIT / Apache-2.0](https://img.shields.io/badge/License-MIT%2FApache--2.0-blue.svg)](#license)
 
+[![rulake-mcp](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/ruvnet/RuLake/main/badges/rulake-mcp.json)](https://rulake-mcp.ruv.io/)
+[![rvdna-mcp](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/ruvnet/RuLake/main/badges/rvdna-mcp.json)](https://rvdna-mcp.ruv.io/)
+[![ruqu-mcp](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/ruvnet/RuLake/main/badges/ruqu-mcp.json)](https://ruqu-mcp.ruv.io/)
+
 ### **Give your AI agents fast, trustworthy memory — without standing up a vector database.**
 
 ruLake is the layer between your **agents** and the **data they remember**. Plug in the storage you already have (S3, BigQuery, Snowflake, Parquet, files), expose it through one MCP tool, and every agent on every host gets the same low-latency, content-addressed view of memory.
