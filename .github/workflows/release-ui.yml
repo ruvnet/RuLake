@@ -64,6 +64,22 @@ jobs:
           VITE_BASE: /RuLake/
         run: npm run build
 
+      # Smoke test gate — runs the same scripts/smoke.sh that local
+      # /loop iterations use. Failures show up in the CI log with the
+      # exact missing audit code or browser console error. Non-fatal
+      # for now (continue-on-error: true) until the runner image's
+      # Chrome install is verified across runs; flip to fatal once
+      # a green CI run lands.
+      - name: E2E smoke (build + preview + agent-browser)
+        working-directory: ui
+        continue-on-error: true
+        run: |
+          # Use the SPA's gh-pages base for the smoke too.
+          export VITE_BASE=/RuLake/
+          npx --yes agent-browser install --with-deps || \
+            npx --yes agent-browser install || true
+          ./scripts/smoke.sh
+
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:

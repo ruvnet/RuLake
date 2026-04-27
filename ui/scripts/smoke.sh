@@ -33,7 +33,14 @@ info()  { printf '    %s\n' "$*"; }
 
 FAILED=0
 KEEP_SERVER=0
-[[ "${1:-}" == "--keep-server" ]] && KEEP_SERVER=1
+RUN_LIVE=0
+for arg in "$@"; do
+  case "$arg" in
+    --keep-server)  KEEP_SERVER=1 ;;
+    --live)         RUN_LIVE=1 ;;        # also exercise live mcp-server path
+    --live=*)       RUN_LIVE=1 ;;
+  esac
+done
 
 hdr "build"
 if ! npm run build > /tmp/rulake-smoke-build.log 2>&1; then
@@ -60,13 +67,46 @@ if ! curl -fsS -o /dev/null "$URL"; then
 fi
 ok "preview live at $URL"
 
+MCP_PID=""
 cleanup() {
   if [[ "$KEEP_SERVER" -eq 0 ]]; then
     pkill -f "vite preview" 2>/dev/null || true
     info "preview server stopped"
   fi
+  if [[ -n "$MCP_PID" ]] && kill -0 "$MCP_PID" 2>/dev/null; then
+    kill "$MCP_PID" 2>/dev/null || true
+    info "mcp-server stopped (pid $MCP_PID)"
+  fi
 }
 trap cleanup EXIT
+
+# Optionally boot a local mcp-server for the live-MCP path. Best-effort:
+# if the binary isn't built we skip the live phase silently.
+MCP_PORT=9099
+MCP_URL="http://127.0.0.1:${MCP_PORT}/"
+MCP_BIN="$UI_DIR/../mcp-server/target/release/rulake-mcp"
+if [[ "$RUN_LIVE" -eq 1 ]]; then
+  hdr "mcp-server (live)"
+  if [[ ! -x "$MCP_BIN" ]]; then
+    info "mcp-server binary not found at $MCP_BIN — skipping live phase"
+    info "(build with: cd mcp-server && cargo build --release)"
+    RUN_LIVE=0
+  else
+    pkill -f "rulake-mcp http" 2>/dev/null || true
+    sleep 0.4
+    "$MCP_BIN" http --auth none --bind "127.0.0.1:${MCP_PORT}" \
+      > /tmp/rulake-smoke-mcp.log 2>&1 &
+    MCP_PID=$!
+    sleep 1.5
+    # Sanity-check via curl-OPTIONS preflight (tests CORS too).
+    if curl -fsS -X OPTIONS "$MCP_URL" -H 'Origin: http://127.0.0.1:4173' -o /dev/null; then
+      ok "mcp-server up (pid $MCP_PID, CORS preflight 204)"
+    else
+      err "mcp-server did not respond — see /tmp/rulake-smoke-mcp.log"
+      RUN_LIVE=0
+    fi
+  fi
+fi
 
 hdr "browser session"
 npx --yes agent-browser open "$URL" --args "--no-sandbox" > /dev/null 2>&1 || true
@@ -165,7 +205,7 @@ npx --yes agent-browser eval "
     setter.call(epIn, 'http://127.0.0.1:65535/');
     epIn.dispatchEvent(new Event('input', { bubbles: true }));
   }
-  const noneCard = Array.from(document.querySelectorAll('.seg-item')).find(el => el.textContent.trim() === 'No auth');
+  const noneCard = Array.from(document.querySelectorAll('.seg-item')).find(el => /^No auth/.test(el.textContent.trim()));
   noneCard && noneCard.click();
   await new Promise(r => setTimeout(r, 300));
   const test = Array.from(document.querySelectorAll('button')).find(b => /Test only/i.test(b.textContent));
@@ -173,6 +213,24 @@ npx --yes agent-browser eval "
   await new Promise(r => setTimeout(r, 2500));
 })()" > /dev/null 2>&1
 ok "Connect.test fired (port 65535 — expected to fail with CONNECT_FAILED)"
+
+if [[ "$RUN_LIVE" -eq 1 ]]; then
+  npx --yes agent-browser eval "
+  (async () => {
+    const inputs = Array.from(document.querySelectorAll('input[type=text], input:not([type])'));
+    const epIn = inputs.find(i => /127\.0\.0\.1/i.test(i.value));
+    if (epIn) {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(epIn, '${MCP_URL}');
+      epIn.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    await new Promise(r => setTimeout(r, 200));
+    const test = Array.from(document.querySelectorAll('button')).find(b => /Test only/i.test(b.textContent));
+    test && test.click();
+    await new Promise(r => setTimeout(r, 3000));
+  })()" > /dev/null 2>&1
+  ok "Connect.test fired against live mcp-server at ${MCP_URL}"
+fi
 
 hdr "audit ledger"
 AUDIT_CODES=$(npx --yes agent-browser eval "
@@ -196,6 +254,9 @@ expect_substr IPFS_BUNDLE_VERIFIED
 expect_substr OK_VERIFIED
 expect_substr IPFS_OK
 expect_substr CONNECT_FAILED
+if [[ "$RUN_LIVE" -eq 1 ]]; then
+  expect_substr INIT_OK
+fi
 
 hdr "console errors"
 ERRORS=$(npx --yes agent-browser console --errors 2>&1 | grep -E '^\[(error|warning)\]' || true)
