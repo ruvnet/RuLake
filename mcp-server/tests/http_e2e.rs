@@ -283,8 +283,6 @@ async fn jwt_scope_downgrade_filters_tools_list_on_the_wire() {
         AllowBearerOnPublic, CapabilitySet, InsecureAllowNoAuth, JwtAuth, JwtConfig,
     };
 
-    let server = make_server();
-
     // Server starts with the maximum capability set — admin is the
     // ceiling. Per-call grants come from the token (the v0.8a contract).
     let server = ruvector_rulake_mcp::RuLakeMcpServer::from_lake_with_caps(

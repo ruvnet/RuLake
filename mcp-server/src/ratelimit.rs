@@ -48,6 +48,9 @@ struct Inner {
     /// Eviction tracker — when DashMap-backed key counts grow past
     /// 10k we drop the layered limiters and rebuild. Cheaper than
     /// a real LRU and keys age out within a few minutes anyway.
+    /// Field initialized but the eviction step itself is still
+    /// scaffolded; v0.11 wires the rebuild trigger.
+    #[allow(dead_code)]
     last_reset: std::sync::Mutex<Instant>,
     keys: DashMap<String, ()>,
 }

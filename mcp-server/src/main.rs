@@ -204,7 +204,10 @@ struct HttpArgs {
 }
 
 fn parse_args() -> anyhow::Result<Args> {
-    let mut transport: Option<Transport> = None;
+    // `transport` is assigned exactly once below from `transport_kind`
+    // after CLI parsing completes; declared without an initial value
+    // so the compiler doesn't warn about the dead `None`.
+    let transport: Option<Transport>;
     let mut config = None;
     let mut capabilities: Option<String> = None;
     let mut audit_file: Option<PathBuf> = None;

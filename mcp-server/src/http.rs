@@ -27,7 +27,7 @@ use rmcp::transport::streamable_http_server::tower::{
 };
 
 use crate::auth::{BearerAuth, JwtAuth};
-use crate::mtls::{MtlsConfig, build_acceptor as build_mtls_acceptor, principal_for_client_cert};
+use crate::mtls::{MtlsConfig, build_acceptor as build_mtls_acceptor};
 use crate::policy::{CapabilitySet, REQUEST_CAPS};
 use crate::ratelimit::{LayeredRateLimiter, RateLimitDecision};
 use crate::replay::ReplayGuard;
