@@ -105,9 +105,31 @@ for tool in "${EXPECTED[@]}"; do
   fi
 done
 
+hdr "tools/call rvdna_lineage (no backend registered → expect RVDNA_UNKNOWN_COLLECTION)"
+# The binary starts with an empty registry — no backends pinned at
+# launch in v0.0.1. Calling rvdna_lineage against an unknown
+# (backend, collection) MUST refuse cleanly with the documented code,
+# not panic or return a malformed envelope. This proves the error
+# path of the trust-anchor tool over HTTP, complementing the in-process
+# integration test in tests/http_e2e.rs.
+LINEAGE_RAW=$(curl -fsS -X POST "${URL}" \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -H "mcp-session-id: ${SESSION}" \
+  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"rvdna_lineage","arguments":{"backend":"nope","collection":"nope"}}}')
+LINEAGE_JSON=$(echo "${LINEAGE_RAW}" | grep -E '^data: ' | grep -v '^data: $' | head -1 | sed 's/^data: //')
+if [[ -z "${LINEAGE_JSON}" ]]; then
+  err "rvdna_lineage returned no SSE data line"
+  echo "${LINEAGE_RAW}" | head -10 >&2
+elif echo "${LINEAGE_JSON}" | grep -q 'RVDNA_UNKNOWN_COLLECTION'; then
+  ok "refusal carries RVDNA_UNKNOWN_COLLECTION"
+else
+  err "expected RVDNA_UNKNOWN_COLLECTION refusal, got: ${LINEAGE_JSON:0:200}..."
+fi
+
 if [[ "${FAILED}" -eq 0 ]]; then
   echo
-  printf '\033[32m\033[1m✓ mcp-rvdna http smoke green\033[0m — all 5 tools served, trust-anchor gated by --capabilities internal\n'
+  printf '\033[32m\033[1m✓ mcp-rvdna http smoke green\033[0m — all 5 tools served, trust-anchor refusal path verified\n'
   exit 0
 else
   echo
