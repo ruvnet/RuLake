@@ -1,20 +1,27 @@
 //! ruQu v2 BackendAdapter for ruLake (ADR-008).
 //!
-//! v0.0 ships the StateVector backend only — small-N exact circuit
-//! simulation with witness-anchored execution. Stabilizer / Clifford+T
-//! / TensorNetwork / Hardware backends land in v0.1 / v0.2 per
-//! ADR-008 §4 and `docs/research/ruqu/integration-with-rulake.md`.
+//! v0.0 shipped the StateVector backend; **v0.1 adds the Stabilizer
+//! backend** ([`RuquStabilizerBackend`] / [`stabilizer::simulate`])
+//! built on the Aaronson–Gottesman tableau formalism. Clifford-only
+//! circuits run in polynomial time and at much wider `n` than the
+//! exponential StateVector path — see the bench at
+//! `benches/stabilizer.rs` for the headline numbers. The TensorNetwork
+//! / Clifford+T / Hardware backends land in v0.2 per ADR-008 §4 and
+//! `docs/research/ruqu/integration-with-rulake.md`.
 //!
 //! Trust boundary: the witness ([`witness::ruqu_bundle`]) is byte-
 //! isomorphic to a native `RuLakeBundle`. Two deployments running the
 //! same circuit at the same seed produce identical SHAKE-256(32)
 //! witnesses and share cache — that's the cross-process replay
-//! property the ADR §3 trust chain hinges on.
+//! property the ADR §3 trust chain hinges on. v0.1 keeps the per-
+//! backend tag in `data_ref` (`"sv"` vs `"stabilizer"`), so the same
+//! all-Clifford circuit on the two backends produces *distinct*
+//! witnesses. v0.2 introduces a `--concordance-mode` strip per
+//! ADR-008 §G4 so the two backends can attest the same result.
 //!
-//! v0.0 is deliberately schema-light: a small mini-IR (H/X/Y/Z/S/T/
-//! Rz/CX) is enough to demo Bell pairs and prove the witness path
-//! end-to-end. v0.0.2 adds an OpenQASM 3.0 frontend; v0.1 adds the
-//! Stabilizer + TensorNetwork backends.
+//! v0.1 is still schema-light: the mini-IR (H/X/Y/Z/S/T/Rz/CX) is
+//! enough to demo Bell pairs end-to-end on both backends. v0.0.2
+//! adds an OpenQASM 3.0 frontend.
 
 #![deny(unsafe_code)]
 #![warn(missing_docs)]
@@ -27,10 +34,14 @@ use rulake::error::Result;
 
 pub mod circuit;
 pub mod limits;
+pub mod stabilizer;
 pub mod state_vector;
 pub mod witness;
 
 pub use circuit::{Circuit, Gate};
+pub use stabilizer::{
+    simulate as simulate_stabilizer, StabilizerError, StabilizerState, Tableau,
+};
 pub use state_vector::{simulate, C};
 pub use witness::{inputs_for, ruqu_bundle, RuquWitnessInputs, RuquWitnessInputsOwned};
 
@@ -124,6 +135,111 @@ impl BackendAdapter for RuquStateVectorBackend {
     fn id(&self) -> &str {
         &self.id
     }
+
+    fn list_collections(&self) -> Result<Vec<CollectionId>> {
+        Ok(self.executions.read().expect("poisoned").keys().cloned().collect())
+    }
+
+    fn pull_vectors(&self, collection: &str) -> Result<PulledBatch> {
+        let g = self.executions.read().expect("poisoned");
+        let c = g.get(collection).ok_or_else(|| {
+            rulake::error::RuLakeError::UnknownCollection {
+                backend: self.id.clone(),
+                collection: collection.to_string(),
+            }
+        })?;
+        Ok(PulledBatch {
+            collection: collection.to_string(),
+            ids: c.ids.clone(),
+            vectors: c.vectors.clone(),
+            dim: c.dim,
+            generation: c.generation,
+        })
+    }
+
+    fn generation(&self, collection: &str) -> Result<u64> {
+        let g = self.executions.read().expect("poisoned");
+        let c = g.get(collection).ok_or_else(|| {
+            rulake::error::RuLakeError::UnknownCollection {
+                backend: self.id.clone(),
+                collection: collection.to_string(),
+            }
+        })?;
+        Ok(c.generation)
+    }
+}
+
+/// Stabilizer BackendAdapter for ruQu (v0.1).
+///
+/// Mirrors [`RuquStateVectorBackend`]'s shape: operators construct it,
+/// call [`Self::execute`] to simulate a Clifford circuit, then
+/// register it with `RuLake`. The backing simulator is the Aaronson–
+/// Gottesman tableau in [`stabilizer`]; non-Clifford gates (`T`,
+/// `Rz`) are rejected with a [`StabilizerError`] mapped onto
+/// [`rulake::error::RuLakeError::Backend`] for the adapter surface.
+///
+/// The witness flowing into the [`RuLakeBundle`] uses the
+/// `"stabilizer"` backend tag, so the same Clifford circuit on the
+/// StateVector backend produces a *distinct* witness in v0.1. The
+/// concordance-mode strip per ADR-008 §G4 lands in v0.2.
+pub struct RuquStabilizerBackend {
+    id: String,
+    executions: RwLock<BTreeMap<String, RuquExecution>>,
+}
+
+impl RuquStabilizerBackend {
+    /// Create an empty Stabilizer backend with a stable id.
+    pub fn new(id: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            executions: RwLock::new(BTreeMap::new()),
+        }
+    }
+
+    /// Simulate `circuit` on the tableau, store the packed state under
+    /// `name`, and return the witness bundle. Returns a
+    /// [`rulake::error::RuLakeError::Backend`] when the circuit
+    /// contains a non-Clifford gate or breaches the v0.1 qubit cap.
+    pub fn execute(
+        &self,
+        name: impl Into<String>,
+        circuit: &Circuit,
+    ) -> Result<rulake::RuLakeBundle> {
+        let state = stabilizer::simulate(circuit).map_err(|e| {
+            rulake::error::RuLakeError::Backend {
+                backend: self.id.clone(),
+                detail: e.to_string(),
+            }
+        })?;
+        let vectors = stabilizer::to_pulled_batch_form(&state);
+        let dim = vectors.first().map(|v| v.len()).unwrap_or(0);
+        let ids: Vec<u64> = (0..vectors.len() as u64).collect();
+        let exec = RuquExecution { ids, vectors, dim, generation: 1 };
+        let inputs = witness::inputs_for(circuit, "stabilizer", 0, exec.generation);
+        let bundle = witness::ruqu_bundle(&inputs.as_borrowed());
+        self.executions.write().expect("poisoned").insert(name.into(), exec);
+        Ok(bundle)
+    }
+
+    /// Bump the generation of an executed circuit — same semantics as
+    /// [`RuquStateVectorBackend::bump_generation`].
+    pub fn bump_generation(&self, name: &str) -> Result<u64> {
+        let mut g = self.executions.write().expect("poisoned");
+        match g.get_mut(name) {
+            Some(c) => {
+                c.generation = c.generation.checked_add(1).unwrap_or(c.generation);
+                Ok(c.generation)
+            }
+            None => Err(rulake::error::RuLakeError::UnknownCollection {
+                backend: self.id.clone(),
+                collection: name.to_string(),
+            }),
+        }
+    }
+}
+
+impl BackendAdapter for RuquStabilizerBackend {
+    fn id(&self) -> &str { &self.id }
 
     fn list_collections(&self) -> Result<Vec<CollectionId>> {
         Ok(self.executions.read().expect("poisoned").keys().cloned().collect())

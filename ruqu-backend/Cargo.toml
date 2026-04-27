@@ -1,34 +1,40 @@
 # ruQu backend — quantum execution BackendAdapter (ADR-008).
 #
-# v0.0 ships the StateVector backend only — small-N exact simulation
-# with witness-anchored execution that round-trips through the ruLake
-# cache. Stabilizer / Clifford+T / TensorNetwork / Hardware backends
-# land in v0.1 / v0.2 per ADR-008 §4 and the ship table in
+# v0.0 shipped the StateVector backend (small-N exact simulation with
+# witness-anchored execution that round-trips through the ruLake
+# cache). v0.1 adds the Stabilizer backend (Aaronson–Gottesman
+# tableau, polynomial-time Clifford-only simulation, qubit cap 32).
+# Clifford+T / TensorNetwork / Hardware backends land in v0.2 per
+# ADR-008 §4 and the ship table in
 # docs/research/ruqu/integration-with-rulake.md §1.6.
 #
 # Standalone Cargo package per ADR-001 (no root workspace; rulake from
 # crates.io v2.2 is the only ruLake-side dep).
 #
-# Scope of v0.0:
-#   - `RuquStateVectorBackend` (≤16 qubits to keep RAM bounded;
-#     production uses up to 25).
-#   - `Circuit` mini-IR: H, X, Y, Z, S, T, CNOT, RZ.
+# Scope of v0.1:
+#   - `RuquStateVectorBackend` (≤16 qubits, exact f64 amplitudes).
+#   - `RuquStabilizerBackend` (≤32 qubits, Clifford-only via tableau).
+#   - `Circuit` mini-IR: H, X, Y, Z, S, T, CNOT, RZ. Stabilizer
+#     refuses T and Rz with a descriptive `StabilizerError`.
 #   - Witness derivation byte-isomorphic to a `RuLakeBundle` —
-#     `RuLakeBundle::new(data_ref="ruqu://<circuit-id>", dim=Hilbert,
-#     rotation_seed, rerank_factor=1, generation)`.
+#     `RuLakeBundle::new(data_ref="ruqu://<circuit-id>@<backend-tag>",
+#     dim, rotation_seed, rerank_factor=1, generation)`. The backend
+#     tag (`"sv"` vs `"stabilizer"`) flows into the witness; the
+#     concordance-mode strip per ADR-008 §G4 lands in v0.2.
 #
 # Build:  cargo build --release
 # Test:   cargo test --release
+# Bench:  cargo bench --bench stabilizer
 
 [package]
 name        = "ruvector-rulake-ruqu"
-version     = "0.0.1"
+version     = "0.1.0"
 edition     = "2021"
 rust-version = "1.89"
 license     = "MIT OR Apache-2.0"
 authors     = ["Ruvector Team"]
 repository  = "https://github.com/ruvnet/RuLake"
-description = "ruQu v2 BackendAdapter for ruLake — quantum execution substrate, StateVector backend (ADR-008)"
+description = "ruQu v2 BackendAdapter for ruLake — quantum execution substrate, StateVector + Stabilizer backends (ADR-008)"
 readme      = "README.md"
 
 [dependencies]
@@ -49,6 +55,10 @@ harness = false
 
 [[bench]]
 name    = "execute_and_pull"
+harness = false
+
+[[bench]]
+name    = "stabilizer"
 harness = false
 
 [profile.release]
