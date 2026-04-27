@@ -1,5 +1,9 @@
 # ruLake — A Memory Lake for Agentic AI
 
+<a href="https://ruvnet.github.io/RuLake/"><img src="assets/console-hero.png" alt="ruLake Console — live demo at ruvnet.github.io/RuLake/" width="100%" /></a>
+
+> **[Try the live Console →](https://ruvnet.github.io/RuLake/)** — boots in DEMO, auto-probes the hosted MCP at [`rulake-mcp.ruv.io`](https://rulake-mcp.ruv.io/), and flips the top-right pill to `● LIVE` when the wire's up. Eight tools served, zero install.
+
 [![Crates.io](https://img.shields.io/crates/v/rulake.svg)](https://crates.io/crates/rulake)
 [![Rust 1.89+](https://img.shields.io/badge/rust-1.89%2B-orange.svg)](https://www.rust-lang.org)
 [![RuVector](https://img.shields.io/badge/part_of-ruvector-purple.svg)](https://github.com/ruvnet/ruvector)
