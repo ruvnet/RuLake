@@ -13,21 +13,23 @@
 # v0.0 ships T0 only. v0.1 adds T1 (warm mmap tier — protein embeddings,
 # attention, variant tensors decoded from mmap'd `.rvdna` v2 sections
 # §2/§3/§4 — see `src/t1.rs` and `docs/research/rvdna/v2-spec.md`).
-# T2 (cold lazy raw DNA + epigenomic series) lands in v0.2 per the ship
-# table in docs/research/rvdna/integration-with-rulake.md §1.6.
+# v0.2 adds T2 (cold lazy tier — raw DNA + epigenomic series, sections
+# §5–§8). T2 keeps a `std::fs::File` handle (no mmap) and does lazy
+# seek+read on each pull, with a small per-collection LRU window so the
+# second hit on a range is page-cache fast. See `src/t2.rs`.
 #
 # Build:  cargo build --release
 # Test:   cargo test --release
 
 [package]
 name        = "ruvector-rulake-rvdna"
-version     = "0.1.0"
+version     = "0.2.0"
 edition     = "2021"
 rust-version = "1.89"
 license     = "MIT OR Apache-2.0"
 authors     = ["Ruvector Team"]
 repository  = "https://github.com/ruvnet/RuLake"
-description = "rvDNA v2 BackendAdapter for ruLake — genomic substrate, T0 hot-tier + T1 warm-mmap tier (ADR-007)"
+description = "rvDNA v2 BackendAdapter for ruLake — genomic substrate, T0 hot-tier + T1 warm-mmap tier + T2 cold-lazy tier (ADR-007)"
 readme      = "README.md"
 
 [dependencies]
@@ -39,6 +41,8 @@ sha3 = "0.10"
 hex = "0.4"
 memmap2 = "0.9"
 bytemuck = { version = "1.16", features = ["derive"] }
+# T2 (v0.2) — small per-collection LRU window for the cold lazy tier.
+lru = "0.13"
 
 [dev-dependencies]
 tempfile = "3"
@@ -54,6 +58,10 @@ harness = false
 
 [[bench]]
 name    = "t1_pull_vectors"
+harness = false
+
+[[bench]]
+name    = "t2_pull_vectors"
 harness = false
 
 [profile.release]

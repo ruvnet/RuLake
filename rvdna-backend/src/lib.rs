@@ -1,23 +1,32 @@
 //! rvDNA v2 BackendAdapter for ruLake (ADR-007).
 //!
 //! v0.0 shipped the hot-tier (T0) only — k-mer vectors held in RAM.
-//! **v0.1 adds the warm tier (T1)**: `.rvdna` v2 sections §2 (protein
+//! v0.1 added the warm tier (T1): `.rvdna` v2 sections §2 (protein
 //! embeddings), §3 (attention), and §4 (variant tensors) served as
-//! `f32` slices straight out of an mmap'd file region. T2 (cold lazy
-//! raw DNA + epigenomic series) lands in v0.2 per ADR-007 §6 and
-//! `docs/research/rvdna/integration-with-rulake.md`.
+//! `f32` slices straight out of an mmap'd file region.
+//! **v0.2 ships T2** — cold lazy tier for raw DNA + epigenomic series
+//! (sections §5–§8 per ADR-007 §6 and
+//! `docs/research/rvdna/integration-with-rulake.md` §1.6). T2 differs
+//! from T1 in storage path: it does **not** mmap the file. Raw DNA
+//! payloads are gigabytes; T2 keeps a [`std::fs::File`] handle and
+//! does lazy `seek+read` on each `pull_vectors` call, with a small
+//! per-collection LRU window so repeated searches on the same range
+//! avoid re-reading from disk.
 //!
 //! Trust boundary: the file's witness (SHAKE-256(32) over the bundle
 //! pointer at byte 0x00B0) is the cache-key anchor. Two deployments
 //! reading the same `.rvdna` file produce identical witnesses and share
-//! cache via ruLake's content-addressed dedup (`src/cache.rs`). T1
-//! reuses the T0 witness derivation [`witness::rvdna_bundle`] verbatim
-//! — the trust contract is unchanged across tiers.
+//! cache via ruLake's content-addressed dedup (`src/cache.rs`). T1 and
+//! T2 both reuse the T0 witness derivation [`witness::rvdna_bundle`]
+//! verbatim — the trust contract is unchanged across all three tiers.
+//! `tests/t2_smoke.rs::t2_witness_matches_t0_and_t1_for_same_inputs`
+//! pins this byte-equality invariant.
 //!
-//! v0.1 is deliberately schema-light: T1 takes section offsets directly
-//! from the operator at `register_file` time. The full v2 header parser
-//! lands in v0.0.2 / a future point release without changing the
-//! [`t1::RvdnaT1Backend`] surface.
+//! v0.2 is deliberately schema-light, same as v0.1: T1 and T2 take
+//! section offsets directly from the operator at `register_file` time.
+//! The full v2 header parser lands in a future point release without
+//! changing the [`t1::RvdnaT1Backend`] or [`t2::RvdnaT2Backend`]
+//! surfaces.
 
 #![deny(unsafe_code)]
 #![warn(missing_docs)]
@@ -29,9 +38,11 @@ use rulake::backend::{BackendAdapter, CollectionId, PulledBatch};
 use rulake::error::Result;
 
 pub mod t1;
+pub mod t2;
 pub mod witness;
 
 pub use t1::RvdnaT1Backend;
+pub use t2::{RvdnaT2Backend, T2LruStats};
 
 /// One in-memory hot-tier collection — the k-mer vectors from one gene
 /// (or whatever the encoder considered a coherent block).
