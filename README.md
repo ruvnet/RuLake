@@ -778,6 +778,54 @@ cargo test --release -- --ignored gcs_live
 
 </details>
 
+### Substrate adapters — IPFS, genomic, quantum
+
+Beyond GCS, ruLake plugs into anything that fits the [`BackendAdapter`](src/backend.rs) trait. The standalone-repo strategy ([ADR-001](docs/adrs/ADR-001-standalone-repo-strategy.md)) means every adapter is its own Cargo crate — pin it independently, ship it independently, and reuse it under any other ruLake deployment.
+
+| Crate | ADR | Status | What it adds |
+|---|---|---|---|
+| [`ipfs-backend/`](ipfs-backend/) | [ADR-005](docs/adrs/sdk/ADR-005-ipfs-backend-and-deploy.md) | **v0.1 shipping** | Witness-anchored bundle distribution by CIDv1 over kubo + gateway-fallback. Cache key = SHAKE-256 witness; CID is just the transport. R-IPFS-1 hard-refuses on `data_ref ≠ ipfs://{cid}` mismatch. |
+| [`rvdna-backend/`](rvdna-backend/) | [ADR-007](docs/adrs/ADR-007-rvdna-as-rulake-substrate.md) | **v0.0.1 scaffolded** | Hot-tier (T0) k-mer vectors from `.rvdna` v2 files. Witness derivation byte-isomorphic to a `RuLakeBundle`; `memory_class = "genomic"`. T1/T2 land in v0.1/v0.2. Bench: `pull_vectors` at **35.9 GiB/s**, cache cold→hot ratio **555×**. |
+| [`ruqu-backend/`](ruqu-backend/) | [ADR-008](docs/adrs/ADR-008-ruqu-as-rulake-substrate.md) | **v0.0.1 scaffolded** | StateVector quantum simulator (≤16 qubits, mini-IR: H/X/Y/Z/S/T/Rz/CX). Witness derivation byte-isomorphic; `memory_class = "quantum"`. Stabilizer / TensorNetwork land in v0.1; Hardware + QEC scheduler in v0.2. Bench: simulate at **2.15 Gelem/s**. |
+
+Each substrate gets a companion MCP server so agents can call into it over the same Streamable HTTP transport as `rulake-mcp`:
+
+| Crate | Tools | Status |
+|---|---|---|
+| [`mcp-rvdna/`](mcp-rvdna/) | `rvdna_lineage` (live; trust-anchor demo with `RVDNA_WITNESS_DRIFT` refusal) + 4 witnessed stubs | v0.0.1 |
+| [`mcp-ruqu/`](mcp-ruqu/) | `ruqu_simulate` / `ruqu_verify` / `ruqu_replay` (live) + `ruqu_optimize` / `ruqu_qec_schedule` (stubs) | v0.0.1 |
+
+All four substrate adapters and both MCP companion servers carry criterion benches at [`docs/research/benchmarks/`](docs/research/benchmarks/) and a focused security review at [`docs/research/security/`](docs/research/security/) (4 Med findings, all addressed).
+
+For deeper reading, every shipped ADR has a 2,500–3,700-word narrative companion in [`docs/gists/`](docs/gists/) — `rvdna-v2-deep.md`, `ruqu-v2-deep.md`, `ipfs-backend-deep.md`, `mcp-server-deep.md`, `console-deep.md`, plus the foundational ones (`standalone-repo-deep.md`, `python-sdk-deep.md`, `node-sdk-deep.md`, `datalake-layer-deep.md`, `memory-substrate-deep.md`).
+
+### Console — `ui/`
+
+A full management UI ([ADR-006](docs/adrs/ADR-006-rulake-console-vite-github-pages.md)) at [`ui/`](ui/), built with Vite + React, deployed to GitHub Pages, and validated end-to-end via `agent-browser`. Three modes:
+
+- **Demo** — animated mock data, no dependencies.
+- **WASM-local** — `rulake-wasm` running in your browser; verify bundles, compute witnesses, search via Web Worker. Zero server required.
+- **Live MCP** — point at any running `rulake-mcp` (or `mcp-rvdna`) and the same UI drives the live server.
+
+The 7th route is an **App Store** that lists every shipped substrate with install commands for the Rust crate, MCP companion, and (where applicable) npm package.
+
+### End-to-end smoke contracts
+
+Three scripts cover the wire from different angles. Each runs in seconds and exits non-zero on the first failure — drop any one of them into CI to catch regressions:
+
+| Script | What it covers | Asserts |
+|---|---|---|
+| [`ui/scripts/smoke.sh`](ui/scripts/smoke.sh) | Console **WASM-local** mode (no server). With `--live`, also Console + `mcp-server`. | 7 routes navigated · 5 audit codes (`WITNESS_MATCH`, `IPFS_BUNDLE_VERIFIED`, `OK_VERIFIED`, `IPFS_OK`, `CONNECT_FAILED`) · App Store renders 4 cards with `SHIPPING`/`SCAFFOLDED` tags · `--live` adds `INIT_OK` + `LIST_COLLECTIONS_OK` and asserts 8 tools surfaced from `mcp-server` |
+| [`ui/scripts/smoke-cross-mcp.sh`](ui/scripts/smoke-cross-mcp.sh) | Console + `mcp-rvdna` full wire — the test that surfaced the iter 32 CORS + SSE-parser bugs. | MCP handshake completes · Console banner reads `initialize OK · Nms · 5 tools` · `INIT_OK` audit row lands · `Browse.refresh` against `mcp-rvdna` (which has no `rulake_list_collections`) refuses cleanly with `LIST_COLLECTIONS_FAILED` · 0 console errors |
+| [`mcp-rvdna/scripts/http-smoke.sh`](mcp-rvdna/scripts/http-smoke.sh) | `rvdna-mcp` HTTP transport in isolation (no browser). | Binary launches · MCP handshake completes · all 5 tools (`rvdna_find`, `rvdna_call_variants`, `rvdna_translate`, `rvdna_score`, `rvdna_lineage`) appear in `tools/list` · `rvdna_lineage` against an unknown `(backend, collection)` refuses with `RVDNA_UNKNOWN_COLLECTION` |
+
+Run all three after any change that touches `mcp-server/`, `mcp-rvdna/`, `ui/src/`, or the BackendAdapter trait — they take ~90 s combined and catch most cross-component regressions a single-crate `cargo test` would miss.
+
+```bash
+./scripts/smoke-all.sh           # runs all three in sequence with a unified pass/fail summary
+./scripts/smoke-all.sh --skip-cross   # skip the 18 s cross-mcp smoke
+```
+
 ---
 
 ## How it works

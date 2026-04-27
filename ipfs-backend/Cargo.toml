@@ -60,6 +60,11 @@ tokio = { version = "1.39", features = ["rt-multi-thread", "macros", "net"] }
 hyper = { version = "1", features = ["server", "http1"] }
 hyper-util = { version = "0.1", features = ["tokio", "server-auto", "service"] }
 http-body-util = "0.1"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name    = "verify_bundle"
+harness = false
 
 [profile.release]
 opt-level = 3

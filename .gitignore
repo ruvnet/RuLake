@@ -31,3 +31,8 @@
 
 # Tooling caches
 .claude-flow/
+
+# Claude Code wakeup scheduler internal state
+.claude/scheduled_tasks.lock
+.claude/scheduled_tasks/
+

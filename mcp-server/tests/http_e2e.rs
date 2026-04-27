@@ -169,6 +169,96 @@ async fn bearer_auth_rejects_missing_header() {
     assert_eq!(err, http::StatusCode::UNAUTHORIZED);
 }
 
+// ─── v0.9: CORS for browser callers (ADR-006 §"server-side gaps") ────
+//
+// The ruLake Console (Vite SPA on GitHub Pages) and any other browser
+// app must be able to talk to mcp-server cross-origin. Preflight OPTIONS
+// returns 204 + the standard CORS headers; every actual response carries
+// the origin echo + exposes the MCP-specific session/protocol headers.
+
+#[tokio::test(flavor = "multi_thread")]
+async fn cors_preflight_returns_204_with_browser_friendly_headers() {
+    use ruvector_rulake_mcp::{AllowBearerOnPublic, AuthMode, InsecureAllowNoAuth};
+
+    let server = make_server();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    drop(listener);
+    let bind: std::net::SocketAddr = format!("127.0.0.1:{port}").parse().unwrap();
+
+    let serve = tokio::spawn(async move {
+        ruvector_rulake_mcp::http::serve(
+            server,
+            bind,
+            AuthMode::None,
+            AllowBearerOnPublic(false),
+            InsecureAllowNoAuth(true),
+        )
+        .await
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .request(reqwest::Method::OPTIONS, format!("http://127.0.0.1:{port}/"))
+        .header("Origin", "http://127.0.0.1:4173")
+        .header("Access-Control-Request-Method", "POST")
+        .header(
+            "Access-Control-Request-Headers",
+            "authorization, content-type, mcp-session-id",
+        )
+        .send()
+        .await
+        .expect("OPTIONS sent");
+
+    serve.abort();
+
+    assert_eq!(
+        resp.status(),
+        reqwest::StatusCode::NO_CONTENT,
+        "preflight must return 204 No Content"
+    );
+    let headers = resp.headers();
+    assert_eq!(
+        headers
+            .get("access-control-allow-origin")
+            .and_then(|v| v.to_str().ok()),
+        Some("http://127.0.0.1:4173"),
+        "must echo the requesting Origin"
+    );
+    let allowed_methods = headers
+        .get("access-control-allow-methods")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    assert!(
+        allowed_methods.contains("POST"),
+        "must allow POST (saw: {allowed_methods})"
+    );
+    let allowed_headers = headers
+        .get("access-control-allow-headers")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    for required in &[
+        "authorization",
+        "content-type",
+        "mcp-session-id",
+        "mcp-request-id",
+    ] {
+        assert!(
+            allowed_headers.contains(required),
+            "must allow `{required}` header (saw: {allowed_headers})"
+        );
+    }
+    let exposed = headers
+        .get("access-control-expose-headers")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    assert!(
+        exposed.contains("mcp-session-id"),
+        "must expose `mcp-session-id` so the browser can read the post-init session id"
+    );
+}
+
 // ─── v0.8c: end-to-end JWT scope downgrade on the wire ────────────────
 //
 // Status: scaffolded but `#[ignore]`d. The v0.8a scope-downgrade contract
@@ -192,8 +282,6 @@ async fn jwt_scope_downgrade_filters_tools_list_on_the_wire() {
     use ruvector_rulake_mcp::{
         AllowBearerOnPublic, CapabilitySet, InsecureAllowNoAuth, JwtAuth, JwtConfig,
     };
-
-    let server = make_server();
 
     // Server starts with the maximum capability set — admin is the
     // ceiling. Per-call grants come from the token (the v0.8a contract).

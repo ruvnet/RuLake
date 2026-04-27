@@ -2,12 +2,52 @@
 
 ## Status
 
-**Proposed (2026-04-25)** — no `mcp-server/` crate yet. This ADR fixes
-the shape *before* the first PR opens so we don't relitigate the
-transport / auth / tool-surface questions at code review. The
-TypeScript example at `examples/nodejs/04-mcp-tool/` is the prior art;
-this ADR specifies its Rust-native successor and supersedes it as the
-shipped MCP entry point.
+**Accepted (2026-04-25 → v0.9 as of 2026-04-27)** — `mcp-server/` is
+shipping. The crate has progressed through nine numbered milestones;
+v0.9 closed the first ADR-006 server-gap (`rulake_list_collections`
+tool + permissive CORS layer for browser callers). The TypeScript
+example at `examples/nodejs/04-mcp-tool/` remains the prior-art /
+reference implementation; the Rust crate at `mcp-server/` is the
+shipped entry point.
+
+### Version timeline
+
+| Version | Commit | Headline |
+|---------|--------|----------|
+| v0.1 | `3bcd237` | ADR-004 skeleton, decision-layer first |
+| v0.2 | `488e36c` | Streamable HTTP + bearer auth |
+| v0.3 | `2fc675c` | verify/explain intents + stats resources + GitHub Actions CI |
+| v0.4 | `efba70d` | RBAC + JWT + rate limit + replay; `tools/list` capability filter |
+| v0.5 | `0c3801c` | RS256/ES256 + JWKS hot rotation + session binding |
+| v0.6 | `d100073` | mTLS + `rulake://bundle` resource + IPFS-aware verify |
+| v0.7 | `428575b` | `RuLake::current_bundle` accessor + structured backpressure |
+| v0.8 | `67fc821` | Per-call CapabilitySet from JWT scopes + HTTP backpressure |
+| v0.9 | `26dbe2b` + `5b956a9` | **`rulake_list_collections` tool + CORS layer for browser callers** (closes ADR-006 server-gap §V #1) |
+
+### Tools shipping in v0.9 (8 total)
+
+| Tool | Tier | Notes |
+|---|---|---|
+| `rulake_query` | read | search/verify/explain/refresh intents |
+| `rulake_list_backends` | read | enumerate registered backend ids |
+| **`rulake_list_collections`** | **read** | **NEW v0.9 — per-backend collection list** |
+| `rulake_publish_bundle` | publish | atomic write of `table.rulake.json` |
+| `rulake_refresh_from_bundle_dir` | publish | three-state refresh |
+| `rulake_save_cache_to_dir` | admin | snapshot to disk |
+| `rulake_warm_from_dir` | admin | restore from disk |
+| `rulake_invalidate_cache` | admin | drop pointer (substrate forget) |
+
+`tools/list` filters by the request's effective `CapabilitySet`
+(server-wide × per-token JWT scopes intersected). Read-only callers
+see 3 tools; admin sees 8.
+
+### Tests at v0.9
+
+- 37 unit
+- 8 e2e (HTTP) + 1 ignored (rmcp SSE-keepalive — see commit `fdc2aee`)
+- 20 smoke (in-process tool dispatch, capability filter, planner)
+- 1 doc-test
+- **65 passing total**, 1 ignored.
 
 ## Date
 

@@ -1,0 +1,81 @@
+# ruQu backend — quantum execution BackendAdapter (ADR-008).
+#
+# v0.0 shipped the StateVector backend (small-N exact simulation with
+# witness-anchored execution that round-trips through the ruLake
+# cache). v0.1 added the Stabilizer backend (Aaronson–Gottesman
+# tableau, polynomial-time Clifford-only simulation, qubit cap 32).
+# **v0.2 adds the TensorNetwork backend** — a Matrix Product State
+# (MPS) simulator using `ndarray` rank-3 tensors with SVD-based
+# truncation to a configurable bond-dimension cap. Unlike Stabilizer
+# the TensorNetwork backend is universal (handles T / Rz); unlike
+# StateVector it scales to 100+ qubits at low entanglement. Clifford+T
+# / Hardware backends land in v0.3 per ADR-008 §4.
+#
+# Standalone Cargo package per ADR-001 (no root workspace; rulake from
+# crates.io v2.2 is the only ruLake-side dep).
+#
+# Scope of v0.2:
+#   - `RuquStateVectorBackend` (≤16 qubits, exact f64 amplitudes).
+#   - `RuquStabilizerBackend` (≤32 qubits, Clifford-only via tableau).
+#   - `RuquTensorNetworkBackend` (≤MAX_QUBITS_TN qubits, MPS with
+#     bond-dim cap; supports the full mini-IR including T / Rz).
+#   - `Circuit` mini-IR: H, X, Y, Z, S, T, CNOT, RZ. TensorNetwork
+#     handles all of these; Stabilizer still refuses T / Rz.
+#   - Witness derivation byte-isomorphic to a `RuLakeBundle` —
+#     `RuLakeBundle::new(data_ref="ruqu://<circuit-id>@<backend-tag>",
+#     dim, rotation_seed, rerank_factor=1, generation)`. The backend
+#     tag (`"sv"` / `"stabilizer"` / `"tensor_network"`) flows into
+#     the witness; the concordance-mode strip per ADR-008 §G4 is still
+#     deferred (now to v0.3).
+#
+# Build:  cargo build --release
+# Test:   cargo test --release
+# Bench:  cargo bench --bench tensor_network
+
+[package]
+name        = "ruvector-rulake-ruqu"
+version     = "0.2.0"
+edition     = "2021"
+rust-version = "1.89"
+license     = "MIT OR Apache-2.0"
+authors     = ["Ruvector Team"]
+repository  = "https://github.com/ruvnet/RuLake"
+description = "ruQu v2 BackendAdapter for ruLake — quantum execution substrate, StateVector + Stabilizer + TensorNetwork backends (ADR-008)"
+readme      = "README.md"
+
+[dependencies]
+rulake = "2.2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+sha3 = "0.10"
+hex = "0.4"
+# v0.2: ndarray rank-3 tensors back the MPS chain. `default-features
+# = false` strips the (off-by-default) `serde` and `rayon` features so
+# the transitive surface stays flat; we use only the core array API.
+ndarray = { version = "0.16", default-features = false }
+
+[dev-dependencies]
+tempfile = "3"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name    = "simulate"
+harness = false
+
+[[bench]]
+name    = "execute_and_pull"
+harness = false
+
+[[bench]]
+name    = "stabilizer"
+harness = false
+
+[[bench]]
+name    = "tensor_network"
+harness = false
+
+[profile.release]
+opt-level     = 3
+lto           = "thin"
+codegen-units = 1

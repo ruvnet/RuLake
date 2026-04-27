@@ -282,11 +282,25 @@ impl IpfsBackend {
         let bundle = RuLakeBundle::from_json(body_str)?;
         let expected = format!("ipfs://{cid}");
         if bundle.data_ref != expected {
-            tracing::warn!(
+            // Hard refuse — security finding R-IPFS-1. Witness equality
+            // alone does not catch CID-substitution attacks where a
+            // legitimately-witnessed bundle is re-pinned under a
+            // different CID and served back to a caller that recorded
+            // the original. The data_ref ↔ CID binding IS the trust
+            // anchor; a mismatch means the operator is lying about
+            // which bundle this is.
+            tracing::error!(
                 got = %bundle.data_ref,
                 expected = %expected,
-                "bundle data_ref CID does not match the fetched CID"
+                "IPFS_BUNDLE_CID_MISMATCH: bundle data_ref does not match fetched CID — refusing"
             );
+            return Err(RuLakeError::Backend {
+                backend: self.id.clone(),
+                detail: format!(
+                    "IPFS_BUNDLE_CID_MISMATCH: bundle.data_ref={:?} but fetched cid={:?} — refusing to trust",
+                    bundle.data_ref, expected
+                ),
+            });
         }
         Ok(bundle)
     }

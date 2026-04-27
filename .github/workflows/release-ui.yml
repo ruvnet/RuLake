@@ -1,0 +1,97 @@
+# ruLake Console — Vite + React static SPA, deployed to GitHub Pages.
+# Per ADR-006 (docs/adrs/ADR-006-rulake-console-vite-github-pages.md).
+#
+# Triggers:
+#   - push to main with paths ui/** (rolling demo at the Pages URL)
+#   - push of tags ui-v*  (cut releases — same build, kept for tracking)
+#   - workflow_dispatch (manual)
+#
+# No gh-pages branch — uses the official actions/deploy-pages@v4 OIDC flow.
+
+name: release-ui
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "ui/**"
+      - "node-wasm/**"
+      - ".github/workflows/release-ui.yml"
+    tags:
+      - "ui-v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install + build node-wasm (rulake-wasm sibling, file: dep)
+        run: |
+          # ui/ depends on rulake-wasm via `file:../node-wasm`. wasm-pack
+          # build emits the artifacts the package.json files[] field
+          # publishes. Skip wasm-opt (host wasm-pack's bundled binary
+          # rejects rustc bulk-memory ops; we build raw and Vite serves
+          # them as-is).
+          rustup target add wasm32-unknown-unknown
+          cargo install --locked wasm-pack || true
+          (cd node-wasm && unset RUSTFLAGS CARGO_BUILD_RUSTFLAGS && ./build.sh)
+
+      - name: Install ui/ deps
+        working-directory: ui
+        run: npm ci || npm install
+
+      - name: Build static SPA
+        working-directory: ui
+        env:
+          VITE_BASE: /RuLake/
+        run: npm run build
+
+      # Smoke test gate — runs the same scripts/smoke.sh that local
+      # /loop iterations use. Failures show up in the CI log with the
+      # exact missing audit code or browser console error. Non-fatal
+      # for now (continue-on-error: true) until the runner image's
+      # Chrome install is verified across runs; flip to fatal once
+      # a green CI run lands.
+      - name: E2E smoke (build + preview + agent-browser)
+        working-directory: ui
+        continue-on-error: true
+        run: |
+          # Use the SPA's gh-pages base for the smoke too.
+          export VITE_BASE=/RuLake/
+          npx --yes agent-browser install --with-deps || \
+            npx --yes agent-browser install || true
+          ./scripts/smoke.sh
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ui/dist
+
+  deploy:
+    name: deploy
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

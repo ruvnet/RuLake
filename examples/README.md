@@ -125,6 +125,29 @@ would look like.
 | [`02-wgpu-portable/`](gpu/02-wgpu-portable/) | wgpu / WGSL — runs on Vulkan/Metal/DX12 | Same shape, no CUDA toolkit needed. ~21× kernel-only speedup. Top-K agreement with CPU = 100% (exact L2). 1/1 test passes. |
 | [`03-rabitq-gpu-design-note/`](gpu/03-rabitq-gpu-design-note/) | Markdown only | Design note for the missing rabitq GPU port: per-candidate `__popc()` kernel, AoS↔SoA layout, `VectorKernel` trait integration, recall guarantees, witness compatibility, 7-step implementation checklist. |
 
+## Substrate adapters — `rvdna-backend`, `ruqu-backend`, `mcp-rvdna`, `mcp-ruqu`
+
+The substrate adapters that landed in the iter 18–22 batch ship with their own
+end-to-end tests + benches that double as worked examples. They're not in
+this `examples/` tree because each one is a published Cargo crate (per
+[ADR-001](../docs/adrs/ADR-001-standalone-repo-strategy.md)) with its own
+README, smoke script, and integration tests. Read the source there:
+
+| Substrate | What to read | What it shows |
+|---|---|---|
+| [`rvdna-backend/tests/smoke.rs`](../rvdna-backend/tests/smoke.rs) | 3 e2e tests | Build a synthetic rvDNA collection · register with a `RuLake` · `search_one` round-trips through the cache · generation bump invalidates per `Consistency::Fresh` |
+| [`rvdna-backend/benches/`](../rvdna-backend/benches/) | criterion benches | `pull_vectors` at 35.9 GiB/s · cache cold→hot 555× ratio for n=256 dim=384 |
+| [`ruqu-backend/tests/smoke.rs`](../ruqu-backend/tests/smoke.rs) | 3 e2e tests | Bell-pair circuit through `RuquStateVectorBackend` · witness round-trips through the lake · generation bump under `Fresh` |
+| [`ruqu-backend/src/state_vector.rs`](../ruqu-backend/src/state_vector.rs) | `mod tests` block | H gate creates uniform superposition, X flips |0⟩ → |1⟩, H+CX builds a Bell pair |
+| [`mcp-rvdna/scripts/http-smoke.sh`](../mcp-rvdna/scripts/http-smoke.sh) | bash + curl | Build · launch · MCP handshake · 5 tools served · `rvdna_lineage` refusal path |
+| [`ui/scripts/smoke-cross-mcp.sh`](../ui/scripts/smoke-cross-mcp.sh) | bash + agent-browser | Console at :4173 → mcp-rvdna at :17441 · CORS · SSE parser · Browse refusal path |
+
+For a one-command demo of all the cross-component wires:
+
+```bash
+./scripts/smoke-all.sh           # ~50 s · auto-detects mcp-server, runs --live when present
+```
+
 ## What's NOT in here (and why)
 
 - **No wasm-bindgen binding to the full ruLake crate.** v2 — see

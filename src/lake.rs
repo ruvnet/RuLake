@@ -104,6 +104,16 @@ impl RuLake {
         self.backends.read().unwrap().keys().cloned().collect()
     }
 
+    /// List the collections registered backend `id` exposes.
+    ///
+    /// Returns `RuLakeError::UnknownBackend` if `id` isn't registered.
+    /// Delegates to `BackendAdapter::list_collections`. Backed by
+    /// the `rulake_list_collections` MCP tool (mcp-server v0.9 — closes
+    /// ADR-006 server-gap #1 for the Console's Browse screen live mode).
+    pub fn list_collections(&self, id: &str) -> crate::error::Result<Vec<crate::backend::CollectionId>> {
+        self.get_backend(id)?.list_collections()
+    }
+
     /// Access the cache stats for diagnostics / benchmarking.
     pub fn cache_stats(&self) -> crate::CacheStats {
         self.cache.stats()

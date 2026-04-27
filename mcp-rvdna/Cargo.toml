@@ -1,0 +1,86 @@
+# mcp-rvdna — MCP companion server for the rvDNA v2 substrate (ADR-007 §6).
+#
+# v0.0.1 scope:
+# - 5 read-tier tools: rvdna_find, rvdna_call_variants, rvdna_translate,
+#   rvdna_score, rvdna_lineage. Only `rvdna_lineage` works end-to-end —
+#   the other four return shaped stubs plus the live witness so callers
+#   exercise the same wire path full impls will use.
+# - Witness-pinned reads: every tool re-derives `current_bundle` against
+#   the registered `RvdnaT0Backend` and refuses with `RVDNA_WITNESS_DRIFT`
+#   when the cached lineage's witness disagrees (R-1 mitigation, per
+#   docs/research/security/v0.0-substrates.md).
+# - JSONL audit lines with the same shape as mcp-server (commit 56b497b)
+#   so operators can diff rvdna-side and rulake-side traces verbatim.
+# - Capability gating (read|publish|admin|internal) but with the rvdna
+#   scope vocabulary (`mcp:rvdna:read`, `mcp:rvdna:internal`, …).
+# - Stdio + Streamable HTTP transports, mirroring mcp-server's surface.
+# - Mutation surface is intentionally zero: NO put_collection / publish /
+#   admin tools in v0.0.1. The operator wires `RvdnaT0Backend`s in at
+#   process start; the wire surface is read-only.
+#
+# Standalone Cargo package per ADR-001 (no root workspace; rvdna-backend
+# reached via `path = "../rvdna-backend"` for now since it isn't published
+# yet — flips to a versioned crates.io dep when rvdna-backend ships).
+
+[package]
+name        = "ruvector-rulake-mcp-rvdna"
+version     = "0.0.1"
+edition     = "2021"
+rust-version = "1.89"
+license     = "MIT OR Apache-2.0"
+authors     = ["Ruvector Team"]
+repository  = "https://github.com/ruvnet/RuLake"
+description = "MCP companion server for the rvDNA v2 substrate (ADR-007 §6) — five witness-pinned read-tier tools"
+
+[[bin]]
+name = "rvdna-mcp"
+path = "src/main.rs"
+
+[dependencies]
+# The rulake crate carries `RuLakeBundle` + `BackendAdapter` — same
+# version mcp-server pins.
+rulake = "2.2"
+# Path-dep on the sibling rvdna-backend crate; flip to crates.io when
+# rvdna-backend is published.
+ruvector-rulake-rvdna = { path = "../rvdna-backend" }
+
+# Match the rmcp version + features mcp-server uses (rmcp 1.5). Keeping
+# the dep tree byte-identical avoids dragging two rmcp copies into the
+# workspace target/ when both crates are built together in CI.
+rmcp = { version = "1.5", default-features = false, features = [
+    "server",
+    "transport-io",
+    "transport-streamable-http-server",
+    "macros",
+    "schemars",
+] }
+
+# Streamable HTTP transport stack — hyper 1.x (matches what rmcp uses
+# internally for `transport-streamable-http-server`). Mirror mcp-server.
+hyper = { version = "1", features = ["server", "http1", "http2"] }
+hyper-util = { version = "0.1", features = ["tokio", "server-auto", "service"] }
+http = "1"
+http-body-util = "0.1"
+bytes = "1"
+
+tokio = { version = "1.39", features = ["rt-multi-thread", "macros", "io-std", "signal", "sync", "net", "time"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+schemars = "1.0"
+
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+thiserror = "2.0"
+anyhow = "1"
+sha2 = "0.10"
+
+[dev-dependencies]
+tempfile = "3"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+
+[profile.release]
+opt-level     = 3
+lto           = "thin"
+codegen-units = 1
+strip         = "symbols"

@@ -192,7 +192,11 @@ async fn tools_list_filtered_by_capability_set() {
     )
     .unwrap();
     let names = list_tool_names_via_handler(&read_only).await;
-    assert_eq!(names, vec!["rulake_list_backends", "rulake_query"]);
+    // v0.9 added rulake_list_collections — also a Read-tier tool.
+    assert_eq!(
+        names,
+        vec!["rulake_list_backends", "rulake_list_collections", "rulake_query"],
+    );
 
     // read,publish: + 2 publish tools.
     let publish = RuLakeMcpServer::from_lake_with_caps(
@@ -218,9 +222,9 @@ async fn tools_list_filtered_by_capability_set() {
     )
     .unwrap();
     let names = list_tool_names_via_handler(&admin).await;
-    assert_eq!(names.len(), 7, "admin sees all 7 tools, got {names:?}");
+    assert_eq!(names.len(), 8, "admin sees all 8 tools, got {names:?}");
     for required in &[
-        "rulake_query", "rulake_list_backends",
+        "rulake_query", "rulake_list_backends", "rulake_list_collections",
         "rulake_publish_bundle", "rulake_refresh_from_bundle_dir",
         "rulake_save_cache_to_dir", "rulake_warm_from_dir",
         "rulake_invalidate_cache",

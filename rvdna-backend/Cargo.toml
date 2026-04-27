@@ -1,0 +1,70 @@
+# rvDNA backend — `.rvdna` v2 file-format BackendAdapter (ADR-007).
+#
+# Hot-tier (T0) implementation for the rvDNA v2 file format: serves
+# k-mer vector batches from a memory-mapped `.rvdna` file's section 1
+# directly to the ruLake cache. Witness derived from the file's bundle
+# pointer at byte 0x00B0 — byte-isomorphic to a `RuLakeBundle` so two
+# deployments reading the same `.rvdna` file produce identical SHAKE-256
+# witnesses and share cache transparently.
+#
+# Standalone Cargo package per ADR-001 (no root workspace; rulake from
+# crates.io v2.2 is the only ruLake-side dep).
+#
+# v0.0 ships T0 only. v0.1 adds T1 (warm mmap tier — protein embeddings,
+# attention, variant tensors decoded from mmap'd `.rvdna` v2 sections
+# §2/§3/§4 — see `src/t1.rs` and `docs/research/rvdna/v2-spec.md`).
+# v0.2 adds T2 (cold lazy tier — raw DNA + epigenomic series, sections
+# §5–§8). T2 keeps a `std::fs::File` handle (no mmap) and does lazy
+# seek+read on each pull, with a small per-collection LRU window so the
+# second hit on a range is page-cache fast. See `src/t2.rs`.
+#
+# Build:  cargo build --release
+# Test:   cargo test --release
+
+[package]
+name        = "ruvector-rulake-rvdna"
+version     = "0.2.0"
+edition     = "2021"
+rust-version = "1.89"
+license     = "MIT OR Apache-2.0"
+authors     = ["Ruvector Team"]
+repository  = "https://github.com/ruvnet/RuLake"
+description = "rvDNA v2 BackendAdapter for ruLake — genomic substrate, T0 hot-tier + T1 warm-mmap tier + T2 cold-lazy tier (ADR-007)"
+readme      = "README.md"
+
+[dependencies]
+rulake = "2.2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+sha3 = "0.10"
+hex = "0.4"
+memmap2 = "0.9"
+bytemuck = { version = "1.16", features = ["derive"] }
+# T2 (v0.2) — small per-collection LRU window for the cold lazy tier.
+lru = "0.13"
+
+[dev-dependencies]
+tempfile = "3"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name    = "pull_vectors"
+harness = false
+
+[[bench]]
+name    = "cache_priming"
+harness = false
+
+[[bench]]
+name    = "t1_pull_vectors"
+harness = false
+
+[[bench]]
+name    = "t2_pull_vectors"
+harness = false
+
+[profile.release]
+opt-level     = 3
+lto           = "thin"
+codegen-units = 1

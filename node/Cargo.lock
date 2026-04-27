@@ -384,19 +384,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc897dd8d9e8bd1ed8cdad82b5966c3e0ecae09fb1907d58efaa013543185d0a"
 
 [[package]]
-name = "ruvector-rabitq"
-version = "2.2.0"
-dependencies = [
- "rand",
- "rand_distr",
- "rayon",
- "serde",
- "serde_json",
- "thiserror",
-]
-
-[[package]]
-name = "ruvector-rulake"
+name = "rulake"
 version = "2.2.0"
 dependencies = [
  "hex",
@@ -411,13 +399,25 @@ dependencies = [
 ]
 
 [[package]]
-name = "ruvector-rulake-node"
+name = "rulake-node"
 version = "2.2.0"
 dependencies = [
  "napi",
  "napi-build",
  "napi-derive",
- "ruvector-rulake",
+ "rulake",
+]
+
+[[package]]
+name = "ruvector-rabitq"
+version = "2.2.0"
+dependencies = [
+ "rand",
+ "rand_distr",
+ "rayon",
+ "serde",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]

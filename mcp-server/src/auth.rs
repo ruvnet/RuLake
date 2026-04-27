@@ -18,7 +18,9 @@ use serde::{Deserialize, Serialize};
 use subtle::ConstantTimeEq;
 
 use crate::jwks::JwksKeys;
-use crate::policy::{Capability, CapabilitySet};
+use crate::policy::CapabilitySet;
+#[cfg(test)]
+use crate::policy::Capability;
 
 /// Bearer-token verifier. Cheap to clone (Arc-wrapped state).
 #[derive(Clone)]

@@ -111,6 +111,15 @@ anyhow = "1"
 
 [dev-dependencies]
 tempfile = "3"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name    = "audit_sink"
+harness = false
+
+[[bench]]
+name    = "tools_list_filter"
+harness = false
 
 [profile.release]
 opt-level = 3
