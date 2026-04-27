@@ -41,7 +41,7 @@ cp pkg-bundler/rulake_wasm.js \
    .
 
 echo "==> sizes"
-for d in pkg-web pkg-nodejs pkg-bundler; do
+for d in web nodejs pkg-bundler; do
     f=$(find "$d" -name '*.wasm' -print -quit)
     if [[ -n "$f" ]]; then
         size=$(stat -c%s "$f")
@@ -51,7 +51,7 @@ done
 
 if command -v wasm-opt >/dev/null 2>&1; then
     echo "==> wasm-opt -Oz pass"
-    for d in pkg-web pkg-nodejs pkg-bundler; do
+    for d in web nodejs pkg-bundler; do
         f=$(find "$d" -name '*.wasm' -print -quit)
         if [[ -n "$f" ]]; then
             wasm-opt -Oz "$f" -o "$f.opt" && mv "$f.opt" "$f"
