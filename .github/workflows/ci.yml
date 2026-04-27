@@ -131,6 +131,17 @@ jobs:
       - name: Build mcp-rvdna binary
         working-directory: crates/mcp-rvdna
         run: cargo build --release --bin rvdna-mcp
+      - name: "Install + build sdk/node-wasm (rulake-wasm sibling, file: dep)"
+        # ui depends on rulake-wasm via `file:../sdk/node-wasm`. Vite picks
+        # the package.json `exports.".".browser` entry which is `./web/...`,
+        # but `web/` and `nodejs/` are gitignored (wasm-pack outputs).
+        # Build them now or Vite hard-fails with
+        # `[commonjs--resolver] Failed to resolve entry for package "rulake-wasm"`.
+        # Mirror what release-ui.yml does.
+        run: |
+          rustup target add wasm32-unknown-unknown
+          cargo install --locked wasm-pack || true
+          (cd sdk/node-wasm && unset RUSTFLAGS CARGO_BUILD_RUSTFLAGS && ./build.sh)
       - name: Install ui deps + build dist
         working-directory: ui
         run: |
