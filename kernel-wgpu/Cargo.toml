@@ -1,0 +1,43 @@
+# ruLake wgpu kernel — portable GPU impl of the ADR-157 `VectorKernel`
+# trait via wgpu / WebGPU.
+#
+# This crate provides a `WgpuKernel` that uses WGSL compute shaders to
+# accelerate the L2² distance and rabitq Hamming popcount paths on any
+# wgpu-supported backend (Vulkan, Metal, DX12, GL, WebGPU). Construction
+# is fail-closed: `WgpuKernel::new_async()` / `new_blocking()` return
+# `None` if no compatible adapter / device can be acquired, so a binary
+# linked against this crate still loads on headless CI.
+#
+# Standalone Cargo package per ADR-001 (no root workspace).
+#
+# Build:  cargo build --release --manifest-path kernel-wgpu/Cargo.toml
+# Test:   cargo test  --release --manifest-path kernel-wgpu/Cargo.toml
+# Bench:  cargo bench --manifest-path kernel-wgpu/Cargo.toml
+
+[package]
+name = "ruvector-rulake-kernel-wgpu"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+authors = ["Ruvector Team"]
+repository = "https://github.com/ruvnet/RuLake"
+description = "Portable GPU VectorKernel impl for ruLake via wgpu (ADR-157)"
+readme = "README.md"
+
+[dependencies]
+rulake   = { path = "..", version = "2.3.0-alpha.1" }
+wgpu     = "22"
+pollster = "0.3"
+bytemuck = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name    = "kernel_l2"
+harness = false
+
+[profile.release]
+opt-level     = 3
+lto           = "thin"
+codegen-units = 1
