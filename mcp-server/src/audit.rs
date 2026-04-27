@@ -16,6 +16,7 @@
 //! when no `--audit-file` is configured every emit goes to stderr
 //! with the same shape. Operators get coherent audit either way.
 
+use std::collections::VecDeque;
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -23,9 +24,16 @@ use std::sync::{Arc, Mutex};
 use serde::Serialize;
 use serde_json::Value;
 
+/// Bounded ring buffer of recently-emitted audit lines. Backs the
+/// `rulake://audit/tail` resource (mcp-server v0.10) — operators
+/// (and the Console's Audit screen in live mode) can read the last
+/// N lines without needing the audit-file path or shell access.
+const TAIL_CAPACITY: usize = 256;
+
 #[derive(Clone)]
 pub struct AuditSink {
     inner: Arc<Inner>,
+    tail: Arc<Mutex<VecDeque<Value>>>,
 }
 
 enum Inner {
@@ -41,6 +49,7 @@ impl AuditSink {
     pub fn stderr() -> Self {
         Self {
             inner: Arc::new(Inner::Stderr),
+            tail: Arc::new(Mutex::new(VecDeque::with_capacity(TAIL_CAPACITY))),
         }
     }
 
@@ -60,7 +69,22 @@ impl AuditSink {
                 file: Mutex::new(Some(file)),
                 path,
             }),
+            tail: Arc::new(Mutex::new(VecDeque::with_capacity(TAIL_CAPACITY))),
         })
+    }
+
+    /// Snapshot the last `n` audit entries (newest last). `n` is
+    /// clamped to `TAIL_CAPACITY`. Backs the `rulake://audit/tail`
+    /// MCP resource. Cheap — clones the bounded ring once.
+    pub fn tail(&self, n: usize) -> Vec<Value> {
+        let cap = n.min(TAIL_CAPACITY);
+        let guard = match self.tail.lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner(),
+        };
+        let len = guard.len();
+        let start = len.saturating_sub(cap);
+        guard.iter().skip(start).cloned().collect()
     }
 
     pub fn path(&self) -> Option<&std::path::Path> {
@@ -81,6 +105,15 @@ impl AuditSink {
                 return;
             }
         };
+        // Tee into the in-memory tail ring before writing — the file/
+        // stderr write path can fail (disk full, lock poisoned) but we
+        // still want the resource to surface what we tried to log.
+        if let Ok(mut buf) = self.tail.lock() {
+            if buf.len() == TAIL_CAPACITY {
+                buf.pop_front();
+            }
+            buf.push_back(value.clone());
+        }
         let line = match serde_json::to_string(&value) {
             Ok(s) => s,
             Err(e) => {
@@ -251,5 +284,70 @@ mod tests {
         assert!(body.contains("\"tool\":\"rulake_query\""));
         assert!(body.contains("\"outcome\":\"ok\""));
         assert!(body.ends_with('\n'));
+    }
+
+    fn entry(tool: &'static str, ts: u64) -> AuditEntry {
+        AuditEntry {
+            ts: ts.to_string(),
+            transport: "http".into(),
+            principal: "anon:test".into(),
+            session: None,
+            request_id: None,
+            tool: tool.into(),
+            intent: None,
+            outcome: "ok".into(),
+            result_size: None,
+            trust_level: None,
+            duration_ms: 0.1,
+            witness_in: None,
+            witness_out: None,
+            code: None,
+            policy_decision: None,
+            decision: None,
+        }
+    }
+
+    #[test]
+    fn tail_returns_recent_entries_in_emit_order() {
+        let sink = AuditSink::stderr();
+        for i in 0..5 {
+            sink.emit(entry("rulake_query", i));
+        }
+        let last_3 = sink.tail(3);
+        assert_eq!(last_3.len(), 3);
+        // Newest last — entries with ts strings "2","3","4".
+        assert_eq!(last_3[0]["ts"], "2");
+        assert_eq!(last_3[2]["ts"], "4");
+        assert_eq!(last_3[2]["tool"], "rulake_query");
+    }
+
+    #[test]
+    fn tail_buffer_caps_at_capacity() {
+        let sink = AuditSink::stderr();
+        let cap = super::TAIL_CAPACITY as u64;
+        for i in 0..(cap + 50) {
+            sink.emit(entry("rulake_query", i));
+        }
+        let all = sink.tail(super::TAIL_CAPACITY * 2);
+        assert_eq!(all.len(), super::TAIL_CAPACITY);
+        // Oldest surviving = index 50; newest = the last emitted.
+        assert_eq!(all[0]["ts"], "50");
+        assert_eq!(all.last().unwrap()["ts"], (cap + 49).to_string());
+    }
+
+    #[test]
+    fn tail_records_even_when_file_write_path_is_used() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("audit.jsonl");
+        let sink = AuditSink::open_file(&path).unwrap();
+        sink.emit(entry("rulake_publish_bundle", 7));
+        sink.emit(entry("rulake_invalidate_cache", 9));
+        let snap = sink.tail(10);
+        assert_eq!(snap.len(), 2);
+        assert_eq!(snap[0]["tool"], "rulake_publish_bundle");
+        assert_eq!(snap[1]["tool"], "rulake_invalidate_cache");
+        // File path also got the lines.
+        let body = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(body.lines().count(), 2);
     }
 }

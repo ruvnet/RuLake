@@ -661,6 +661,18 @@ impl ServerHandler for RuLakeMcpServer {
                 r.mime_type = Some("application/json".into());
                 rmcp::model::Annotated::new(r, None)
             },
+            {
+                // v0.10: bounded ring buffer of recent audit lines.
+                // Closes ADR-006 server-gap §V #2.
+                let mut r = RawResource::new("rulake://audit/tail", "audit tail (jsonl)");
+                r.description = Some(
+                    "Last ≤256 audit lines (newest last) as a JSON array of the JSONL emit \
+                     records. Backs the ruLake Console's Audit screen live mode."
+                        .into(),
+                );
+                r.mime_type = Some("application/json".into());
+                rmcp::model::Annotated::new(r, None)
+            },
         ];
         // Per-(backend, collection) bundle resources for every cached
         // collection. Reads cheaply from `cache_witness_of`.
@@ -733,6 +745,18 @@ impl RuLakeMcpServer {
                     })
                     .collect();
                 serde_json::to_string(&serde_json::Value::Object(map)).map_err(|e| e.to_string())
+            }
+            "rulake://audit/tail" => {
+                // v0.10: snapshot the in-memory ring (capped at 256
+                // entries by the AuditSink). Returns the JSONL records
+                // as a JSON array so the client doesn't have to parse
+                // line-by-line.
+                let entries = self.audit.tail(256);
+                serde_json::to_string(&serde_json::json!({
+                    "entries": entries,
+                    "count":   entries.len(),
+                }))
+                .map_err(|e| e.to_string())
             }
             uri if uri.starts_with("rulake://bundle/") => {
                 // rulake://bundle/{backend}/{collection}
