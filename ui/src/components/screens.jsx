@@ -12,6 +12,7 @@ const NAV_GLYPHS = {
   bundle: (<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.5" stroke="currentColor"/><circle cx="7" cy="7" r="2" fill="currentColor"/></svg>),
   audit: (<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 3.5 H12 M2 7 H12 M2 10.5 H8" stroke="currentColor" strokeLinecap="round"/></svg>),
   connect: (<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 1.5 L4 7.5 H7 L5 12.5 L10 6.5 H7 Z" stroke="currentColor" strokeLinejoin="round"/></svg>),
+  appstore: (<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1.5" y="1.5" width="4.5" height="4.5" stroke="currentColor"/><rect x="8" y="1.5" width="4.5" height="4.5" stroke="currentColor"/><rect x="1.5" y="8" width="4.5" height="4.5" stroke="currentColor"/><rect x="8" y="8" width="4.5" height="4.5" stroke="currentColor"/></svg>),
 };
 
 function Sidebar({ route, setRoute, currentWitness, currentBundle, className = '' }) {
@@ -28,6 +29,7 @@ function Sidebar({ route, setRoute, currentWitness, currentBundle, className = '
     { id: 'bundle',     label: 'Bundle',     sub: 'witness · gen-7741',glyph: NAV_GLYPHS.bundle,     badge: 'WARM',                  badgeKind: 'warm' },
     { id: 'audit',      label: 'Audit',      sub: 'jsonl · tail',      glyph: NAV_GLYPHS.audit,      badge: String(auditTotal),      badgeKind: 'count' },
     { id: 'connect',    label: 'Connect',    sub: connRows.length > 0 ? `mcp · ${connRows.length} saved` : 'mcp · 2025-03-26', glyph: NAV_GLYPHS.connect, badge: 'JWT', badgeKind: 'auth' },
+    { id: 'appstore',   label: 'App store',  sub: 'substrates',        glyph: NAV_GLYPHS.appstore,   badge: '2 NEW',                badgeKind: 'count' },
   ];
 
   const resources = [
@@ -2013,4 +2015,123 @@ function ConnectScreen() {
   );
 }
 
-window.RuScreens = { Sidebar, Topbar, Statusbar, StatsScreen, PlaygroundScreen, BrowseScreen, BundleScreen, AuditScreen, ConnectScreen };
+// ─── APP STORE — substrate marketplace ─────────────────────────────
+//
+// Lists the substrates that compose with ruLake. Each entry carries
+// install commands, the ADR that governs it, status (Shipping /
+// Proposed / Roadmap), and what it adds to the agentic memory model.
+// First two entries are rvDNA v2 (ADR-007) and ruQu v2 (ADR-008),
+// both Proposed as of 2026-04-27.
+function AppStoreScreen() {
+  const SUBSTRATES = [
+    {
+      id: 'rvdna',
+      name: 'rvDNA v2',
+      tag: 'Genomic intelligence',
+      status: 'proposed',
+      adr: { num: 'ADR-007', path: 'docs/adrs/ADR-007-rvdna-as-rulake-substrate.md' },
+      pitch: 'Precomputed genomic file format ($\\;.rvdna$). Raw DNA + embeddings + attention + variant tensors + protein embeddings + epigenomic series, all in one mmap-able artefact. Witness-anchored — verify in your browser; share by CID over IPFS.',
+      adds: ['rvdna_find', 'rvdna_call_variants', 'rvdna_translate', 'rvdna_score', 'rvdna_lineage'],
+      install: {
+        rust: 'cargo add rvdna-backend',
+        npm:  'npm install @ruvector/rvdna',
+        wasm: 'rulake-wasm bundles the witness verifier',
+      },
+      tier: 'T0 hot · T1 warm · T2 cold',
+      research: 'docs/research/rvdna/',
+    },
+    {
+      id: 'ruqu',
+      name: 'ruQu v2',
+      tag: 'Quantum execution intelligence',
+      status: 'proposed',
+      adr: { num: 'ADR-008', path: 'docs/adrs/ADR-008-ruqu-as-rulake-substrate.md' },
+      pitch: 'Five quantum simulation backends (StateVector / Stabilizer / Clifford+T / TensorNetwork / Hardware) with cost-model planning, QEC scheduling, and tamper-evident execution witnesses. Cross-process replay via the lake; zero-recompute when the witness matches.',
+      adds: ['ruqu_simulate', 'ruqu_verify', 'ruqu_replay', 'ruqu_optimize', 'ruqu_qec_schedule'],
+      install: {
+        rust: 'cargo add ruqu-backend',
+        npm:  'npm install ruqu-wasm',
+        wasm: 'browser circuits with witness verify',
+      },
+      tier: '5 backends · OpenQASM 3.0 export',
+      research: 'docs/research/ruqu/',
+    },
+    {
+      id: 'gcs',
+      name: 'gcs-backend',
+      tag: 'Parquet on GCS',
+      status: 'shipping',
+      adr: { num: 'ADR-155', path: 'docs/adrs/ADR-155-rulake-datalake-layer.md' },
+      pitch: "Read vector columns straight from Parquet on Google Cloud Storage. Cache coherence rides GCS's per-object generation token.",
+      adds: ['gcs Parquet collections via BackendAdapter'],
+      install: { rust: 'cargo add ruvector-rulake-gcs', npm: '—', wasm: '—' },
+      tier: 'storage adapter',
+      research: 'gcs-backend/',
+    },
+    {
+      id: 'ipfs',
+      name: 'ipfs-backend',
+      tag: 'Witness-anchored bundle distribution',
+      status: 'shipping',
+      adr: { num: 'ADR-005', path: 'docs/adrs/ADR-005-ipfs-backend-and-deploy.md' },
+      pitch: 'Publish table.rulake.json sidecars by CIDv1 over kubo. Bundle-only mode (vector bodies stay in the body-store backend). Three modes: kubo / gateway-only / kubo + gateway-fallback.',
+      adds: ['IPFS-pinned bundles · CID lookup · gateway probe'],
+      install: { rust: 'cargo add ruvector-rulake-ipfs', npm: '—', wasm: 'fetch via the IPFS toggle in Storage settings' },
+      tier: 'distribution adapter',
+      research: 'ipfs-backend/',
+    },
+  ];
+
+  const tagFor = (status) => {
+    if (status === 'shipping') return <span className="tag tag-verified">SHIPPING</span>;
+    if (status === 'proposed') return <span className="tag tag-warm">PROPOSED</span>;
+    return <span className="tag tag-cold">ROADMAP</span>;
+  };
+
+  return (
+    <div style={{padding:'18px 24px', maxWidth: 1100}}>
+      <div className="sec-h" style={{padding:0, borderBottom:'none'}}>
+        <span>App store · ruLake substrates</span>
+        <HelpIcon topic="appstore" label="What is a substrate?" />
+        <span className="mono" style={{marginLeft:'auto', fontSize:10.5, color:'var(--fg-faint)'}}>{SUBSTRATES.length} listed · {SUBSTRATES.filter(s=>s.status==='shipping').length} shipping</span>
+      </div>
+      <HelpStrip kind="info" storageKey="appstore-intro">
+        Substrates are crates that plug into ruLake's <strong>witness-anchored cache</strong> via the <code>BackendAdapter</code> trait
+        (<code>src/backend.rs:113</code>) and optionally expose an MCP tool surface alongside <code>rulake-mcp</code>.
+        Every substrate's results carry the same SHAKE-256 witness as a native ruLake bundle — federation and audit work without per-substrate special-casing.
+      </HelpStrip>
+
+      <div style={{display:'grid', gap:14, marginTop:14}}>
+        {SUBSTRATES.map(s => (
+          <div key={s.id} className="connect-card" style={{padding:14}}>
+            <div style={{display:'flex', alignItems:'baseline', gap:10, marginBottom:6}}>
+              <span style={{fontSize:14, fontWeight:600}}>{s.name}</span>
+              <span className="mono dim" style={{fontSize:11}}>· {s.tag}</span>
+              <span style={{marginLeft:'auto'}}>{tagFor(s.status)}</span>
+            </div>
+            <div style={{fontSize:12.5, lineHeight:1.45, marginBottom:10, color:'var(--fg-soft)'}}>{s.pitch}</div>
+            <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:14, marginBottom:10}}>
+              <div>
+                <div className="mono" style={{fontSize:10, color:'var(--fg-faint)', marginBottom:4}}>ADDS</div>
+                <div className="mono" style={{fontSize:11.5}}>{s.adds.map((t,i) => <div key={i}>· {t}</div>)}</div>
+              </div>
+              <div>
+                <div className="mono" style={{fontSize:10, color:'var(--fg-faint)', marginBottom:4}}>INSTALL</div>
+                {s.install.rust && s.install.rust !== '—' && <div className="mono" style={{fontSize:11.5}}>$ {s.install.rust}</div>}
+                {s.install.npm  && s.install.npm  !== '—' && <div className="mono" style={{fontSize:11.5}}>$ {s.install.npm}</div>}
+                {s.install.wasm && s.install.wasm !== '—' && <div className="mono dim" style={{fontSize:11}}>{s.install.wasm}</div>}
+              </div>
+            </div>
+            <div style={{display:'flex', gap:14, fontSize:11, color:'var(--fg-faint)', borderTop:'1px solid var(--rule)', paddingTop:8}}>
+              <span className="mono">tier: {s.tier}</span>
+              <a className="mono" href={`https://github.com/ruvnet/RuLake/blob/main/${s.adr.path}`} target="_blank" rel="noopener" style={{marginLeft:'auto', color:'var(--accent-cyan)'}}>{s.adr.num} ↗</a>
+              <a className="mono" href={`https://github.com/ruvnet/RuLake/tree/main/${s.research}`} target="_blank" rel="noopener" style={{color:'var(--accent-cyan)'}}>research/ ↗</a>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+window.RuScreens = { Sidebar, Topbar, Statusbar, StatsScreen, PlaygroundScreen, BrowseScreen, BundleScreen, AuditScreen, ConnectScreen, AppStoreScreen };

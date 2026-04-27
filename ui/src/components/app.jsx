@@ -3,6 +3,7 @@ const { useState, useEffect, useMemo } = React;
 const {
   Sidebar, Topbar, Statusbar,
   StatsScreen, PlaygroundScreen, BrowseScreen, BundleScreen, AuditScreen, ConnectScreen,
+  AppStoreScreen,
 } = RuScreens;
 const { DebugConsole } = window.RuDebug;
 const { WelcomeModal } = window.RuWelcome;
@@ -209,6 +210,7 @@ function App() {
         {route === 'bundle'     && <BundleScreen bundle={bundleSelection} />}
         {route === 'audit'      && <AuditScreen envTab={envTab} />}
         {route === 'connect'    && <ConnectScreen />}
+        {route === 'appstore'   && <AppStoreScreen />}
       </main>
       <Statusbar stats={liveData} />
       <DebugConsole visible={tweaks.showConsole} onClose={() => setTweak('showConsole', false)} />
