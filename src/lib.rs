@@ -40,6 +40,9 @@
 //!   (follow-up crates; M2–M5 in `docs/research/ruLake/07-implementation-plan.md`).
 //! - RBAC / PII / lineage / audit — M4 in the plan.
 //! - Persistent cache — current cache is RAM-only.
+//!
+//! Experimental: see `kernel::VectorKernel` for the v3.0 accelerator-plane
+//! preview (per ADR-157).
 
 #![allow(clippy::needless_range_loop)]
 
@@ -48,6 +51,7 @@ pub mod bundle;
 pub mod cache;
 pub mod error;
 pub mod fs_backend;
+pub mod kernel;
 pub mod lake;
 
 pub use backend::{BackendAdapter, BackendId, CollectionId, LocalBackend, PulledBatch};
