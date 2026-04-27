@@ -821,6 +821,11 @@ Three scripts cover the wire from different angles. Each runs in seconds and exi
 
 Run all three after any change that touches `mcp-server/`, `mcp-rvdna/`, `ui/src/`, or the BackendAdapter trait — they take ~90 s combined and catch most cross-component regressions a single-crate `cargo test` would miss.
 
+```bash
+./scripts/smoke-all.sh           # runs all three in sequence with a unified pass/fail summary
+./scripts/smoke-all.sh --skip-cross   # skip the 18 s cross-mcp smoke
+```
+
 ---
 
 ## How it works
