@@ -1,0 +1,31 @@
+# rvdna-mcp — distroless image for the rvDNA MCP companion (ADR-007 §6).
+#
+# Sibling to Dockerfile.mcp; same multi-stage shape:
+# 1. `builder` — full Rust toolchain, builds rvdna-mcp in --release.
+# 2. `runtime` — distroless/cc with just the binary.
+#
+# Build:  docker build -f Dockerfile.mcp-rvdna -t rvdna-mcp .
+# Run:    docker run --rm -p 7441:7441 rvdna-mcp http \
+#             --bind 0.0.0.0:7441 --capabilities read,internal
+
+# syntax=docker/dockerfile:1.7
+
+FROM rust:1-bookworm AS builder
+WORKDIR /work
+
+COPY . .
+
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/work/mcp-rvdna/target \
+    cargo build --release --manifest-path mcp-rvdna/Cargo.toml --bin rvdna-mcp \
+    && cp mcp-rvdna/target/release/rvdna-mcp /usr/local/bin/rvdna-mcp
+
+# ── runtime stage ────────────────────────────────────────────────────
+FROM gcr.io/distroless/cc-debian12:nonroot
+COPY --from=builder /usr/local/bin/rvdna-mcp /usr/local/bin/rvdna-mcp
+
+EXPOSE 7441
+USER nonroot:nonroot
+
+ENTRYPOINT ["/usr/local/bin/rvdna-mcp"]
+CMD ["stdio"]
