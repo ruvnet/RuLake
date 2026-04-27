@@ -1084,6 +1084,57 @@ function IpfsFetchStrip() {
         <button className="btn" onClick={onFetch} disabled={busy || !cid}>
           {busy ? 'Fetching…' : 'Fetch + verify'}
         </button>
+        <button
+          className="btn"
+          onClick={async () => {
+            // Try-sample: fetch the local-pinned sample bundle from
+            // /sample-bundle.json. Same audit-row shape as the IPFS
+            // path; URL points at the SPA-hosted resource so the
+            // success-path verification has somewhere to land
+            // without requiring a kubo daemon or a public CID.
+            setBusy(true); setResult(null);
+            const t0 = performance.now();
+            try {
+              const url = new URL('sample-bundle.json', document.baseURI).toString();
+              const resp = await fetch(url);
+              const ms = Math.round(performance.now() - t0);
+              if (!resp.ok) throw new Error(`${resp.status} ${resp.statusText}`);
+              const text = await resp.text();
+              if (text.length > 64 * 1024) throw new Error(`bundle exceeds 64 KiB cap (${text.length}B)`);
+              const bundle = JSON.parse(text);
+              const v = window.RULakeWasm
+                ? await window.RULakeWasm.verifyBundle(bundle).catch(e => ({ error: e.message }))
+                : null;
+              if (v && !v.error) {
+                setResult({
+                  kind: v.ok ? 'ok' : 'mismatch',
+                  msg: v.ok ? 'witness MATCH' : 'witness MISMATCH',
+                  computed: v.computed, stored: v.stored, ms, url, dim: bundle.dim,
+                });
+                window.toast && window.toast[v.ok ? 'ok' : 'warn'](
+                  v.ok ? 'Sample bundle verified' : 'Sample witness mismatch',
+                  `${v.computed.slice(0,8)}…${v.computed.slice(-6)} · ${ms}ms`,
+                );
+                if (window.RuStore) await window.RuStore.appendAudit({
+                  ts: new Date().toISOString().slice(11,19),
+                  principal: 'jules@ruv', tool: 'rulake_ipfs_fetch',
+                  target: url, k: 0, ms,
+                  code: v.ok ? 'IPFS_BUNDLE_VERIFIED' : 'IPFS_WITNESS_MISMATCH',
+                  outcome: v.ok ? 'ok' : 'refused',
+                });
+              } else {
+                throw new Error((v && v.error) || 'verify unavailable');
+              }
+            } catch (e) {
+              const ms = Math.round(performance.now() - t0);
+              window.toast && window.toast.warn('Sample fetch failed', String(e.message || e));
+              setResult({ kind: 'err', msg: String(e.message || e), ms });
+            }
+            setBusy(false);
+          }}
+          disabled={busy}
+          title="Fetch the SPA-hosted sample bundle and re-verify its witness in your browser"
+        >Try sample</button>
       </div>
       {result && (
         <div className="mono" style={{

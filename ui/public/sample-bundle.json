@@ -1,0 +1,14 @@
+{
+  "data_ref": "rulake://demo/sample-bundle",
+  "dim": 128,
+  "format_version": 2,
+  "generation": {
+    "Num": 1
+  },
+  "lineage_id": "demo:console-iteration-9",
+  "memory_class": "demo",
+  "pii_policy": null,
+  "rerank_factor": 20,
+  "rotation_seed": 42,
+  "rvf_witness": "cbbf5e6852c3e944a0ce5def90f88f09c0f44f02361655f4e0083ee524e0b3db"
+}
