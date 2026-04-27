@@ -778,6 +778,37 @@ cargo test --release -- --ignored gcs_live
 
 </details>
 
+### Substrate adapters — IPFS, genomic, quantum
+
+Beyond GCS, ruLake plugs into anything that fits the [`BackendAdapter`](src/backend.rs) trait. The standalone-repo strategy ([ADR-001](docs/adrs/ADR-001-standalone-repo-strategy.md)) means every adapter is its own Cargo crate — pin it independently, ship it independently, and reuse it under any other ruLake deployment.
+
+| Crate | ADR | Status | What it adds |
+|---|---|---|---|
+| [`ipfs-backend/`](ipfs-backend/) | [ADR-005](docs/adrs/sdk/ADR-005-ipfs-backend-and-deploy.md) | **v0.1 shipping** | Witness-anchored bundle distribution by CIDv1 over kubo + gateway-fallback. Cache key = SHAKE-256 witness; CID is just the transport. R-IPFS-1 hard-refuses on `data_ref ≠ ipfs://{cid}` mismatch. |
+| [`rvdna-backend/`](rvdna-backend/) | [ADR-007](docs/adrs/ADR-007-rvdna-as-rulake-substrate.md) | **v0.0.1 scaffolded** | Hot-tier (T0) k-mer vectors from `.rvdna` v2 files. Witness derivation byte-isomorphic to a `RuLakeBundle`; `memory_class = "genomic"`. T1/T2 land in v0.1/v0.2. Bench: `pull_vectors` at **35.9 GiB/s**, cache cold→hot ratio **555×**. |
+| [`ruqu-backend/`](ruqu-backend/) | [ADR-008](docs/adrs/ADR-008-ruqu-as-rulake-substrate.md) | **v0.0.1 scaffolded** | StateVector quantum simulator (≤16 qubits, mini-IR: H/X/Y/Z/S/T/Rz/CX). Witness derivation byte-isomorphic; `memory_class = "quantum"`. Stabilizer / TensorNetwork land in v0.1; Hardware + QEC scheduler in v0.2. Bench: simulate at **2.15 Gelem/s**. |
+
+Each substrate gets a companion MCP server so agents can call into it over the same Streamable HTTP transport as `rulake-mcp`:
+
+| Crate | Tools | Status |
+|---|---|---|
+| [`mcp-rvdna/`](mcp-rvdna/) | `rvdna_lineage` (live; trust-anchor demo with `RVDNA_WITNESS_DRIFT` refusal) + 4 witnessed stubs | v0.0.1 |
+| [`mcp-ruqu/`](mcp-ruqu/) | `ruqu_simulate` / `ruqu_verify` / `ruqu_replay` (live) + `ruqu_optimize` / `ruqu_qec_schedule` (stubs) | v0.0.1 |
+
+All four substrate adapters and both MCP companion servers carry criterion benches at [`docs/research/benchmarks/`](docs/research/benchmarks/) and a focused security review at [`docs/research/security/`](docs/research/security/) (4 Med findings, all addressed).
+
+For deeper reading, every shipped ADR has a 2,500–3,700-word narrative companion in [`docs/gists/`](docs/gists/) — `rvdna-v2-deep.md`, `ruqu-v2-deep.md`, `ipfs-backend-deep.md`, `mcp-server-deep.md`, `console-deep.md`, plus the foundational ones (`standalone-repo-deep.md`, `python-sdk-deep.md`, `node-sdk-deep.md`, `datalake-layer-deep.md`, `memory-substrate-deep.md`).
+
+### Console — `ui/`
+
+A full management UI ([ADR-006](docs/adrs/ADR-006-rulake-console-vite-github-pages.md)) at [`ui/`](ui/), built with Vite + React, deployed to GitHub Pages, and validated end-to-end via `agent-browser` (see [`ui/scripts/smoke.sh`](ui/scripts/smoke.sh) — 7 routes / 5 audit codes / 0 console errors). Three modes:
+
+- **Demo** — animated mock data, no dependencies.
+- **WASM-local** — `rulake-wasm` running in your browser; verify bundles, compute witnesses, search via Web Worker. Zero server required.
+- **Live MCP** — point at any running `rulake-mcp` (or `mcp-rvdna` / `mcp-ruqu`) and the same UI drives the live server.
+
+The 7th route is an **App Store** that lists every shipped substrate with install commands for the Rust crate, MCP companion, and (where applicable) npm package.
+
 ---
 
 ## How it works
