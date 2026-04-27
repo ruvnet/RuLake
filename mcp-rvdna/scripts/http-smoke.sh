@@ -62,6 +62,32 @@ if ! kill -0 "$MCP_PID" 2>/dev/null; then
 fi
 ok "rvdna-mcp listening on ${BIND} (pid ${MCP_PID})"
 
+hdr "CORS preflight (iter 32 regression — Console at :4173 must be allowed)"
+# OPTIONS request mimicking a browser preflight from the Console.
+# Iter 32 fixed mcp-rvdna's missing CORS layer; this guards against
+# a regression that would otherwise only surface in the cross-mcp
+# browser smoke.
+PREFLIGHT=$(curl -isS -X OPTIONS "${URL}" \
+  -H 'Origin: http://localhost:4173' \
+  -H 'Access-Control-Request-Method: POST' \
+  -H 'Access-Control-Request-Headers: content-type, mcp-session-id')
+PRE_STATUS=$(echo "${PREFLIGHT}" | head -1 | awk '{print $2}')
+if [[ "${PRE_STATUS}" == "204" ]]; then
+  ok "preflight returned 204 No Content"
+else
+  err "preflight returned ${PRE_STATUS}, expected 204"
+fi
+for header in 'access-control-allow-origin: http://localhost:4173' \
+              'access-control-allow-methods:' \
+              'access-control-allow-headers:' \
+              'access-control-expose-headers: mcp-session-id'; do
+  if echo "${PREFLIGHT}" | grep -qi "^${header}"; then
+    ok "preflight carries: ${header%%:*}"
+  else
+    err "preflight missing header: ${header%%:*}"
+  fi
+done
+
 hdr "MCP handshake"
 INIT_RAW=$(curl -isS -X POST "${URL}" \
   -H 'Content-Type: application/json' \
