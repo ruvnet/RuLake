@@ -2069,6 +2069,7 @@ function AppStoreScreen() {
       install: {
         rust: 'cargo add ruvector-rulake-rvdna',
         mcp:  'cargo run -p ruvector-rulake-mcp-rvdna',
+        live: 'https://rvdna-mcp.ruv.io/',
         npm:  'npm install @ruvector/rvdna',
         wasm: 'rulake-wasm bundles the witness verifier',
       },
@@ -2087,6 +2088,7 @@ function AppStoreScreen() {
       install: {
         rust: 'cargo add ruvector-rulake-ruqu',
         mcp:  'cargo run -p ruvector-rulake-mcp-ruqu',
+        live: 'https://ruqu-mcp.ruv.io/',
         npm:  'npm install ruqu-wasm',
         wasm: 'browser circuits with witness verify',
       },
@@ -2160,6 +2162,7 @@ function AppStoreScreen() {
                 <div className="mono" style={{fontSize:10, color:'var(--fg-faint)', marginBottom:4}}>INSTALL</div>
                 {s.install.rust && s.install.rust !== '—' && <div className="mono" style={{fontSize:11.5}}>$ {s.install.rust}</div>}
                 {s.install.mcp  && s.install.mcp  !== '—' && <div className="mono" style={{fontSize:11.5, color:'var(--accent-cyan)'}}>$ {s.install.mcp}</div>}
+                {s.install.live && s.install.live !== '—' && <div className="mono" style={{fontSize:11.5, color:'var(--verifier-bright)'}}>● live · <a href={s.install.live} target="_blank" rel="noopener" style={{color:'inherit'}}>{s.install.live.replace(/^https?:\/\//, '').replace(/\/$/, '')}</a></div>}
                 {s.install.npm  && s.install.npm  !== '—' && <div className="mono" style={{fontSize:11.5}}>$ {s.install.npm}</div>}
                 {s.install.wasm && s.install.wasm !== '—' && <div className="mono dim" style={{fontSize:11}}>{s.install.wasm}</div>}
               </div>

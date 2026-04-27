@@ -9,7 +9,7 @@
 # Test:   node --test __test__/smoke.test.mjs
 [package]
 name = "rulake-node"
-version = "2.2.0"
+version = "2.3.0-alpha.1"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 authors = ["Ruvector Team"]
@@ -21,7 +21,7 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-rulake = { path = "..", version = "2.2.0" }
+rulake = { path = "..", version = "2.3.0-alpha.1" }
 napi = { version = "2.16", default-features = false, features = ["napi8", "async"] }
 napi-derive = "2.16"
 

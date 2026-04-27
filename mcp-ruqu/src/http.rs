@@ -83,7 +83,21 @@ pub async fn serve(
 
     let server_arc = Arc::new(server);
     let session_manager = Arc::new(LocalSessionManager::default());
-    let cfg = StreamableHttpServerConfig::default();
+    let mut cfg = StreamableHttpServerConfig::default();
+    // Reverse-proxy / managed-runtime support (Cloud Run et al.) —
+    // same pattern as mcp-server commit 4248b75 / mcp-rvdna sibling.
+    if !bind.ip().is_loopback() {
+        cfg.allowed_hosts.push(bind.to_string());
+        cfg.allowed_hosts.push(bind.ip().to_string());
+        if let Ok(extras) = std::env::var("RULAKE_ALLOWED_HOSTS") {
+            for h in extras.split(',') {
+                let h = h.trim();
+                if !h.is_empty() {
+                    cfg.allowed_hosts.push(h.to_string());
+                }
+            }
+        }
+    }
     let svc = StreamableHttpService::new(
         {
             let s = server_arc.clone();

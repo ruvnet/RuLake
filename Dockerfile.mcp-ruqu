@@ -1,0 +1,29 @@
+# ruqu-mcp — distroless image for the ruQu MCP companion (ADR-008 §6).
+#
+# Sibling to Dockerfile.mcp; same multi-stage shape.
+#
+# Build:  docker build -f Dockerfile.mcp-ruqu -t ruqu-mcp .
+# Run:    docker run --rm -p 7442:7442 ruqu-mcp http \
+#             --bind 0.0.0.0:7442 --capabilities read,publish
+
+# syntax=docker/dockerfile:1.7
+
+FROM rust:1-bookworm AS builder
+WORKDIR /work
+
+COPY . .
+
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/work/mcp-ruqu/target \
+    cargo build --release --manifest-path mcp-ruqu/Cargo.toml --bin ruqu-mcp \
+    && cp mcp-ruqu/target/release/ruqu-mcp /usr/local/bin/ruqu-mcp
+
+# ── runtime stage ────────────────────────────────────────────────────
+FROM gcr.io/distroless/cc-debian12:nonroot
+COPY --from=builder /usr/local/bin/ruqu-mcp /usr/local/bin/ruqu-mcp
+
+EXPOSE 7442
+USER nonroot:nonroot
+
+ENTRYPOINT ["/usr/local/bin/ruqu-mcp"]
+CMD ["stdio"]

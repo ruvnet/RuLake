@@ -9,7 +9,7 @@
 # Test:   cd .. && python -m pytest python/tests
 [package]
 name = "rulake-py"
-version = "2.2.0"
+version = "2.3.0-alpha.1"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 authors = ["Ruvector Team"]
@@ -27,7 +27,7 @@ crate-type = ["cdylib"]
 [dependencies]
 # The cache + router crate one directory up. This is the whole point —
 # every `pyo3` wrapper here is a thin shim over the public Rust surface.
-rulake = { path = "..", version = "2.2.0" }
+rulake = { path = "..", version = "2.3.0-alpha.1" }
 # PyO3 — abi3-py39 keeps one wheel working across CPython 3.9–3.13.
 # The `extension-module` feature is required when building a Python
 # extension (otherwise we'd link libpython at build time, breaking

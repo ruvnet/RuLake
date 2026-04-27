@@ -11,7 +11,7 @@ build-backend = "maturin"
 
 [project]
 name = "rulake"
-version = "2.2.0"
+version = "2.3.0-alpha.1"
 description = "Memory Lake for Agentic AI — fast, witness-anchored vector memory for LLM agents. Cache layer for RAG, semantic search, federated retrieval over S3/BigQuery/Parquet, MCP-compatible. Python bindings."
 readme = "README.md"
 requires-python = ">=3.9"
