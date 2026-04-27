@@ -1800,7 +1800,7 @@ function StorageSettingsCard() {
 
 function ConnectScreen() {
   const [mode, setMode] = useState('jwt');
-  const [endpoint, setEndpoint] = useState('https://rulake.ruv.net/mcp');
+  const [endpoint, setEndpoint] = useState('https://rulake-mcp.ruv.io/');
   const [token, setToken] = useState('eyJhbGciOiJSUzI1NiIsImtpZCI6IjJmYThi…');
   const [label, setLabel] = useState('');
   const [listOpen, setListOpen] = useState(false);
