@@ -63,34 +63,34 @@ function IntroSlideshow() {
     },
     {
       tag: 'the usual options',
-      head: 'Three current options. All hurt.',
-      body: <>You can run a <strong>vector database</strong> (slow to set up, your data has to move). Use a <strong>warehouse</strong> (every query bills the cluster). Or use a <strong>local library</strong> (every agent runs its own copy, nothing's shared, nothing's verifiable).</>,
+      head: 'Three shapes today. Each has a trade-off.',
+      body: <>A <strong>vector database</strong> is purpose-built but means standing up another service and replicating your data into it. A <strong>warehouse</strong> already holds your data but charges per query. A <strong>local library</strong> is fast but lives inside one process — there's no shared layer agents on different machines can both verify against.</>,
       art: (
         <svg viewBox="0 0 360 130" width="100%" height="130">
           <g className="intro-anim-stagger">
             <g transform="translate(20,30)">
               <rect width="100" height="70" fill="none" stroke="#7a8190" strokeWidth="0.8"/>
               <text x="50" y="20" textAnchor="middle" fill="#d6dae0" fontSize="11" fontFamily="Inter" fontWeight="500">Vector DB</text>
-              <text x="50" y="38" textAnchor="middle" fill="#7a8190" fontSize="8.5" fontFamily="JetBrains Mono">Pinecone</text>
-              <text x="50" y="50" textAnchor="middle" fill="#7a8190" fontSize="8.5" fontFamily="JetBrains Mono">Weaviate</text>
-              <text x="50" y="64" textAnchor="middle" fill="#e89548" fontSize="9" fontFamily="JetBrains Mono">+ new service</text>
+              <text x="50" y="38" textAnchor="middle" fill="#7a8190" fontSize="8.5" fontFamily="JetBrains Mono">purpose-built</text>
+              <text x="50" y="50" textAnchor="middle" fill="#7a8190" fontSize="8.5" fontFamily="JetBrains Mono">replicates data</text>
+              <text x="50" y="64" textAnchor="middle" fill="#7a8190" fontSize="9" fontFamily="JetBrains Mono">cost: a new service</text>
             </g>
             <g transform="translate(130,30)">
               <rect width="100" height="70" fill="none" stroke="#7a8190" strokeWidth="0.8"/>
               <text x="50" y="20" textAnchor="middle" fill="#d6dae0" fontSize="11" fontFamily="Inter" fontWeight="500">Warehouse</text>
-              <text x="50" y="38" textAnchor="middle" fill="#7a8190" fontSize="8.5" fontFamily="JetBrains Mono">BigQuery</text>
-              <text x="50" y="50" textAnchor="middle" fill="#7a8190" fontSize="8.5" fontFamily="JetBrains Mono">Snowflake</text>
-              <text x="50" y="64" textAnchor="middle" fill="#e89548" fontSize="9" fontFamily="JetBrains Mono">+ pay per query</text>
+              <text x="50" y="38" textAnchor="middle" fill="#7a8190" fontSize="8.5" fontFamily="JetBrains Mono">data already there</text>
+              <text x="50" y="50" textAnchor="middle" fill="#7a8190" fontSize="8.5" fontFamily="JetBrains Mono">queries hit cluster</text>
+              <text x="50" y="64" textAnchor="middle" fill="#7a8190" fontSize="9" fontFamily="JetBrains Mono">cost: $ per query</text>
             </g>
             <g transform="translate(240,30)">
               <rect width="100" height="70" fill="none" stroke="#7a8190" strokeWidth="0.8"/>
               <text x="50" y="20" textAnchor="middle" fill="#d6dae0" fontSize="11" fontFamily="Inter" fontWeight="500">Library</text>
-              <text x="50" y="38" textAnchor="middle" fill="#7a8190" fontSize="8.5" fontFamily="JetBrains Mono">FAISS</text>
-              <text x="50" y="50" textAnchor="middle" fill="#7a8190" fontSize="8.5" fontFamily="JetBrains Mono">RaBitQ</text>
-              <text x="50" y="64" textAnchor="middle" fill="#e89548" fontSize="9" fontFamily="JetBrains Mono">+ no sharing</text>
+              <text x="50" y="38" textAnchor="middle" fill="#7a8190" fontSize="8.5" fontFamily="JetBrains Mono">in-process · fast</text>
+              <text x="50" y="50" textAnchor="middle" fill="#7a8190" fontSize="8.5" fontFamily="JetBrains Mono">per-agent state</text>
+              <text x="50" y="64" textAnchor="middle" fill="#7a8190" fontSize="9" fontFamily="JetBrains Mono">cost: no shared view</text>
             </g>
           </g>
-          <text x="180" y="120" textAnchor="middle" fill="#7a8190" fontSize="9.5" fontFamily="JetBrains Mono">none of them are right for AI agents</text>
+          <text x="180" y="120" textAnchor="middle" fill="#7a8190" fontSize="9.5" fontFamily="JetBrains Mono">none of them give agents a shared, verifiable middle layer</text>
         </svg>
       ),
     },
