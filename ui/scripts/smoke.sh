@@ -2,11 +2,13 @@
 #
 # ruLake Console — end-to-end smoke test.
 #
-# Walks all six routes (Stats / Playground / Backends / Bundle / Audit
-# / Connect), fires every audit-producing action the WASM-local mode
-# supports, asserts zero browser console errors and that each expected
-# audit row lands in IndexedDB. Idempotent — clears IndexedDB between
-# runs.
+# Walks all seven routes (Stats / Playground / Backends / Bundle /
+# Audit / Connect / App store), fires every audit-producing action
+# the WASM-local mode supports, and on the App store route asserts
+# that the four substrate cards render with their status tags
+# (SHIPPING / SCAFFOLDED). Asserts zero browser console errors and
+# that each expected audit row lands in IndexedDB. Idempotent —
+# clears IndexedDB between runs.
 #
 # Usage:
 #   ./scripts/smoke.sh                # full run, exits 0 on green
@@ -246,6 +248,34 @@ if [[ "$RUN_LIVE" -eq 1 ]]; then
     await new Promise(r => setTimeout(r, 2500));
   })()" > /dev/null 2>&1
   ok "Browse.refresh fired against live mcp-server (rulake_list_collections wire)"
+fi
+
+hdr "App store"
+# App store is read-only — no audit-firing actions. We just navigate
+# to it and assert the substrate cards render correctly. A render
+# failure here would have surfaced as a browser console error in the
+# final check, but explicit cards/tags assertions catch silent regressions
+# (e.g. missing tag-amber CSS rule) that don't throw.
+APPSTORE_DOM=$(npx --yes agent-browser eval "
+(async () => {
+  const items = Array.from(document.querySelectorAll('.nav-item-rich'));
+  const tgt = items.find(el => /app\s*store/i.test(el.textContent || ''));
+  if (tgt) tgt.click();
+  await new Promise(r => setTimeout(r, 500));
+  const cards = document.querySelectorAll('.connect-card');
+  const tags  = Array.from(document.querySelectorAll('.tag')).map(t => t.textContent.trim());
+  return JSON.stringify({ cards: cards.length, tags });
+})()" 2>&1 | tr -d '"' | sed 's/\\//g')
+info "appstore: $APPSTORE_DOM"
+if echo "$APPSTORE_DOM" | grep -q 'cards:4'; then
+  ok "App store: 4 substrate cards render"
+else
+  err "App store: expected 4 cards, got: $APPSTORE_DOM"
+fi
+if echo "$APPSTORE_DOM" | grep -q SHIPPING && echo "$APPSTORE_DOM" | grep -q SCAFFOLDED; then
+  ok "App store: status tags include SHIPPING + SCAFFOLDED"
+else
+  err "App store: missing expected status tags in: $APPSTORE_DOM"
 fi
 
 hdr "audit ledger"
