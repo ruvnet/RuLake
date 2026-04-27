@@ -657,9 +657,7 @@ checksum = "dc897dd8d9e8bd1ed8cdad82b5966c3e0ecae09fb1907d58efaa013543185d0a"
 
 [[package]]
 name = "rulake"
-version = "2.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8bc9131ad9d5bd41b119ca796530ed2378cdd68a6fd7d3348ad9ac9aa4fff870"
+version = "2.3.0-alpha.1"
 dependencies = [
  "hex",
  "rand",
@@ -694,8 +692,6 @@ checksum = "b39cdef0fa800fc44525c84ccb54a029961a8215f9619753635a9c0d2538d46d"
 [[package]]
 name = "ruvector-rabitq"
 version = "2.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3411fa3eeed2ba93487fdbe62984f470b2e5cb85c3656e82e060c8d4e26199ea"
 dependencies = [
  "rand",
  "rand_distr",
