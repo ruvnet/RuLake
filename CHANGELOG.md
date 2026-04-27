@@ -342,7 +342,7 @@ User-directed: deploy a real hosted MCP for the demo so the Console
 shows `● LIVE` instead of `○ DEMO · no live MCP`.
 
 - **Cloud Run service `rulake-mcp-demo`** in `us-central1`, project
-  `ruv-dev`. Built from `Dockerfile.mcp` via Cloud Build, deployed
+  `ruv-dev`. Built from `deploy/Dockerfile.mcp` via Cloud Build, deployed
   with `--auth none --insecure-allow-no-auth --capabilities read,publish,admin`.
   Pinned `min=1 max=1` (process-local sessions need stickiness),
   `512Mi` RAM, `1` CPU.

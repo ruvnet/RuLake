@@ -36,21 +36,22 @@ test -f .gcloudignore && echo OK || echo "missing — see commit 73e2ef8"
 
 ## Step 2 — Cloud Build
 
-`gcloud run deploy --source . --dockerfile=Dockerfile.mcp` doesn't
+`gcloud run deploy --source . --dockerfile=deploy/Dockerfile.mcp` doesn't
 exist as a single step in current gcloud — the `--source` flag picks
-the default `Dockerfile` (which builds the demo binary, not
-`mcp-server`). Use a two-step Cloud Build instead:
+`./Dockerfile` if present (which we moved into `deploy/Dockerfile.demo`
+so `--source` no longer auto-picks it; explicit `-f` is required either
+way). Use a two-step Cloud Build instead:
 
 ```yaml
 # /tmp/cloudbuild-mcp.yaml
 steps:
   - name: gcr.io/cloud-builders/docker
     env:
-      - 'DOCKER_BUILDKIT=1'           # Dockerfile.mcp uses --mount=type=cache
+      - 'DOCKER_BUILDKIT=1'           # deploy/Dockerfile.mcp uses --mount=type=cache
     args:
       - 'build'
       - '-f'
-      - 'Dockerfile.mcp'
+      - 'deploy/Dockerfile.mcp'
       - '-t'
       - 'us-central1-docker.pkg.dev/YOUR-PROJECT/cloud-run-source-deploy/rulake-mcp-demo:latest'
       - '.'
@@ -69,7 +70,7 @@ gcloud builds submit . --project=YOUR-PROJECT --region=us-central1 \
 Build takes ~3 min on `E2_HIGHCPU_8`.
 
 > **Gotcha — BuildKit.** Cloud Build's `gcr.io/cloud-builders/docker`
-> doesn't enable BuildKit by default. The `Dockerfile.mcp` uses
+> doesn't enable BuildKit by default. The `deploy/Dockerfile.mcp` uses
 > `RUN --mount=type=cache,...` for cargo deps. Without
 > `DOCKER_BUILDKIT=1` in the env, the build fails with "the --mount
 > option requires BuildKit".

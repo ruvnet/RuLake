@@ -717,10 +717,10 @@ Wire to a remote agent over Streamable HTTP:
 }
 ```
 
-Build the **distroless Docker image** (`Dockerfile.mcp`):
+Build the **distroless Docker image** (`deploy/Dockerfile.mcp`):
 
 ```bash
-docker build -f Dockerfile.mcp -t rulake-mcp .
+docker build -f deploy/Dockerfile.mcp -t rulake-mcp .
 docker run --rm -p 7440:7440 rulake-mcp http --bind 0.0.0.0:7440 --auth none --insecure-allow-no-auth
 ```
 

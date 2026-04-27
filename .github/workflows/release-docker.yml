@@ -1,7 +1,7 @@
 # Release the rulake-mcp Docker image to GHCR.
 #
 # Triggered manually or on tag `mcp-v*`. Builds the distroless image
-# defined by Dockerfile.mcp and pushes:
+# defined by deploy/Dockerfile.mcp and pushes:
 #   ghcr.io/ruvnet/rulake-mcp:<tag>     (e.g. mcp-v0.3.0)
 #   ghcr.io/ruvnet/rulake-mcp:latest    (on tag push, not workflow_dispatch)
 #
@@ -55,7 +55,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: Dockerfile.mcp
+          file: deploy/Dockerfile.mcp
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
