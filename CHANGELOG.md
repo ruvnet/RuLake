@@ -22,6 +22,12 @@ storage-tier adapters (`gcs-backend`, `ipfs-backend`) — one genomic
 server for each. Every shipped ADR also got a 2,500–3,700-word deep gist
 in `docs/gists/`.
 
+Late in the batch (iters 32–34) cross-component testing surfaced two
+real bugs at the Console ↔ rvdna-mcp boundary that no in-isolation test
+would have caught: missing CORS on the new MCP server, and an SSE-frame
+selection bug in the Console's parser. Both fixed; both now permanently
+locked under smoke scripts that drive the full wire end-to-end.
+
 ### Added — substrate adapters
 
 - **`rvdna-backend/` v0.0.1** ([ADR-007](docs/adrs/ADR-007-rvdna-as-rulake-substrate.md))
@@ -170,6 +176,55 @@ their decision; the design contract IS the deliverable.
   + mcp-ruqu.
 - New **Console** section pointing at `ui/`, the 7-route App Store, and
   the `agent-browser` smoke contract.
+
+### Fixed — cross-component bugs (iter 32)
+
+Surfaced by the first end-to-end test driving the Console at :4173
+against rvdna-mcp at :17441:
+
+- **mcp-rvdna missing CORS layer** — Console got `Failed to fetch`
+  on the preflight `OPTIONS /mcp`. Fixed by porting `mcp-server`'s
+  CORS pattern (`mcp-server/src/http.rs:287+`) into
+  `mcp-rvdna/src/http.rs`: echo requesting Origin, expose
+  `mcp-session-id` + `mcp-protocol-version`, short-circuit OPTIONS
+  with 204. Tightening to an allow-list deferred to v0.0.2.
+- **Console SSE parser grabbed the keepalive `data:\n` line first** —
+  rmcp emits an empty `data:\n` keepalive frame BEFORE the JSON-bearing
+  one, and the old `find(startsWith)` was happy to pick the empty
+  string and JSON.parse it (silently caught, falling back to
+  `toolsCount = 0`). Every successful response read as "0 tools"
+  regardless of actual count. Fixed in `ui/src/components/screens.jsx`
+  by filtering empty `data:` payloads and JSON.parsing each candidate
+  until one yields a `result` field.
+
+### Added — smoke scripts (iters 29, 31, 33)
+
+Three scripts that lock the cross-component flows in CI:
+
+- **`mcp-rvdna/scripts/http-smoke.sh`** — builds rvdna-mcp, launches
+  on `127.0.0.1:17441`, walks the MCP handshake (initialize →
+  notifications/initialized), asserts all 5 expected tool names land
+  in `tools/list`, then calls `rvdna_lineage` with an unknown
+  (backend, collection) pair and asserts the `RVDNA_UNKNOWN_COLLECTION`
+  refusal carries through the SSE response.
+- **`ui/scripts/smoke-cross-mcp.sh`** — orchestrates vite preview
+  (port 4173) + rvdna-mcp (port 17441) + agent-browser, drives the
+  Console's Connect screen at the rvdna-mcp URL, asserts the banner
+  reads `initialize OK · Nms · 5 tools` and the `INIT_OK` audit row
+  lands in IndexedDB. The script that proves iter 32's two fixes
+  hold under automation.
+- **`ui/scripts/smoke.sh --live`** extended (iter 34) to assert the
+  Console reads exactly **8 tools** from the live mcp-server (the
+  full read+publish+admin capability set). The first run of this
+  assertion correctly caught a configuration gap — mcp-server was
+  being launched without `--capabilities` flags so it defaulted to
+  read-only (3 tools); fix updates the smoke launch line so
+  tools/list exposes all 8 #[tool] handlers.
+
+### Documentation
+
+- **`CHANGELOG.md`** — this file (iter 30, updated through iter 34).
+- **`README.md`** Substrate adapters / Console sections (iter 27).
 
 ---
 
