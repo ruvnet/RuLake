@@ -23,8 +23,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # The five sibling Cargo packages per ADR-001.
-        crate: [".", "mcp-server", "gcs-backend", "python", "node"]
+        # Every sibling Cargo package per ADR-001 (no root workspace).
+        # Storage adapters, substrate adapters, and MCP companion
+        # servers all build + test independently.
+        crate:
+          - "."
+          - "mcp-server"
+          - "mcp-rvdna"
+          - "mcp-ruqu"
+          - "gcs-backend"
+          - "ipfs-backend"
+          - "rvdna-backend"
+          - "ruqu-backend"
+          - "python"
+          - "node"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -82,3 +94,33 @@ jobs:
       - name: Run smoke tests
         working-directory: node
         run: node --test __test__/smoke.test.mjs
+
+  smoke:
+    # End-to-end smoke per the README's smoke contracts table:
+    # WASM-local Console, mcp-rvdna HTTP, and Console + mcp-rvdna
+    # cross-component. Catches regressions a single-crate cargo test
+    # would miss (e.g. iter 32's CORS + SSE-parser bugs).
+    name: Smoke — scripts/smoke-all.sh
+    runs-on: ubuntu-latest
+    needs: rust   # only run when every crate built green
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: browser-actions/setup-chrome@v1
+      - name: Pre-install agent-browser (warms npx cache)
+        run: npx --yes agent-browser install || true
+      - name: Build mcp-rvdna binary
+        working-directory: mcp-rvdna
+        run: cargo build --release --bin rvdna-mcp
+      - name: Install ui deps + build dist
+        working-directory: ui
+        run: |
+          npm ci || npm install
+          npm run build
+      - name: Run all three smokes via scripts/smoke-all.sh
+        run: ./scripts/smoke-all.sh
