@@ -1,0 +1,11 @@
+target/
+node_modules/
+*.log
+*.tgz
+
+# wasm-pack outputs — recreated by ./build.sh, published via .npmignore overrides.
+web/
+nodejs/
+pkg-bundler/
+pkg-web/
+pkg-nodejs/
