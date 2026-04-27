@@ -1,5 +1,7 @@
 # ruLake Console — Vite + React static SPA, deployed to GitHub Pages.
 # Per ADR-006 (docs/adrs/ADR-006-rulake-console-vite-github-pages.md).
+# Re-registered after the iter 50 merge to refresh GitHub's workflow
+# cache so workflow_dispatch becomes invokable on main.
 #
 # Triggers:
 #   - push to main with paths ui/** (rolling demo at the Pages URL)
