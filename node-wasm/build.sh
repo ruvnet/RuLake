@@ -19,13 +19,26 @@ unset RUSTFLAGS CARGO_BUILD_RUSTFLAGS
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
 echo "==> wasm-pack build --target web"
-wasm-pack build --release --target web --out-dir pkg-web --out-name rulake_wasm
+# Out-dir matches the package.json exports map ("./web/...") so Vite
+# and other resolvers find the entry without a separate copy step.
+# Pre-clean the dir because wasm-pack refuses to write into a non-
+# wasm-pack-managed directory.
+rm -rf web && wasm-pack build --release --target web --out-dir web --out-name rulake_wasm
 
 echo "==> wasm-pack build --target nodejs"
-wasm-pack build --release --target nodejs --out-dir pkg-nodejs --out-name rulake_wasm
+rm -rf nodejs && wasm-pack build --release --target nodejs --out-dir nodejs --out-name rulake_wasm
 
-echo "==> wasm-pack build --target bundler"
-wasm-pack build --release --target bundler --out-dir pkg-bundler --out-name rulake_wasm
+echo "==> wasm-pack build --target bundler (root files for fallback exports)"
+# The bundler target's output is what the package.json's `main` and
+# `module` fields point to (rulake_wasm.js at root). pkg-bundler is a
+# scratch dir; we copy the artifacts up to root after wasm-pack.
+rm -rf pkg-bundler && wasm-pack build --release --target bundler --out-dir pkg-bundler --out-name rulake_wasm
+cp pkg-bundler/rulake_wasm.js \
+   pkg-bundler/rulake_wasm.d.ts \
+   pkg-bundler/rulake_wasm_bg.js \
+   pkg-bundler/rulake_wasm_bg.wasm \
+   pkg-bundler/rulake_wasm_bg.wasm.d.ts \
+   .
 
 echo "==> sizes"
 for d in pkg-web pkg-nodejs pkg-bundler; do
