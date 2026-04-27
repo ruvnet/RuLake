@@ -45,7 +45,7 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Install + build node-wasm (rulake-wasm sibling, file: dep)
+      - name: "Install + build node-wasm (rulake-wasm sibling, file: dep)"
         run: |
           # ui/ depends on rulake-wasm via `file:../node-wasm`. wasm-pack
           # build emits the artifacts the package.json files[] field
