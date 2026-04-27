@@ -134,6 +134,20 @@ pub async fn serve_with_guards(
         // Permit the bound IP literal as a Host header.
         config.allowed_hosts.push(bind.to_string());
         config.allowed_hosts.push(bind.ip().to_string());
+        // Operators behind reverse proxies / managed runtimes (Cloud
+        // Run, Fly.io, Render, etc.) terminate TLS at the edge and
+        // forward the request with a Host header that's the user-
+        // facing domain, not the bind address. They can pass that
+        // domain in via RULAKE_ALLOWED_HOSTS (comma-separated). Empty
+        // entries are ignored. v0.11 will lift this to a CLI flag.
+        if let Ok(extras) = std::env::var("RULAKE_ALLOWED_HOSTS") {
+            for h in extras.split(',') {
+                let h = h.trim();
+                if !h.is_empty() {
+                    config.allowed_hosts.push(h.to_string());
+                }
+            }
+        }
     }
 
     let mcp_service: StreamableHttpService<RuLakeMcpServer, LocalSessionManager> =
