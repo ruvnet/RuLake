@@ -1007,6 +1007,151 @@ function FederationGraph() {
 }
 
 // ─── BUNDLE VIEWER ──────────────────────────────────────────────────
+// Browser-rendered strip on the Bundle screen: paste a CID, fetch
+// from the configured IPFS gateway, recompute the witness locally
+// with rulake-wasm. Closes the WASM-local + IPFS loop end-to-end:
+// untrusted network → cryptographic verify → audit row.
+function IpfsFetchStrip() {
+  const [cid, setCid] = React.useState('');
+  const [busy, setBusy] = React.useState(false);
+  const [result, setResult] = React.useState(null);
+
+  const onFetch = async () => {
+    setBusy(true);
+    setResult(null);
+    const fr = await fetchBundleFromIpfs(cid);
+    if (fr.error) {
+      setResult({ kind: 'err', msg: fr.error, ms: fr.ms || 0, url: fr.url });
+      window.toast && window.toast.warn('IPFS fetch failed', fr.error);
+      if (window.RuStore) {
+        await window.RuStore.appendAudit({
+          ts: new Date().toISOString().slice(11, 19),
+          principal: 'jules@ruv', tool: 'rulake_ipfs_fetch',
+          target: fr.url || cid, k: 0, ms: fr.ms || 0,
+          code: 'IPFS_FETCH_FAILED', outcome: 'refused',
+        });
+      }
+      setBusy(false);
+      return;
+    }
+    let verifyOk = false;
+    let computed = '';
+    let stored = fr.bundle.rvf_witness || '';
+    if (window.RULakeWasm && window.RULakeWasm.verifyBundle) {
+      const v = await window.RULakeWasm.verifyBundle(fr.bundle).catch((e) => ({ error: e.message }));
+      if (v && !v.error) {
+        verifyOk = !!v.ok;
+        computed = v.computed || '';
+        stored = v.stored || stored;
+      }
+    }
+    setResult({
+      kind: verifyOk ? 'ok' : 'mismatch',
+      msg: verifyOk ? 'witness MATCH' : 'witness MISMATCH',
+      computed, stored, ms: fr.ms, url: fr.url, dim: fr.bundle.dim,
+    });
+    window.toast && window.toast[verifyOk ? 'ok' : 'warn'](
+      verifyOk ? 'Bundle verified' : 'Bundle witness mismatch',
+      `${fr.url} · fetch ${fr.ms}ms · ${verifyOk ? computed.slice(0, 8) + '…' + computed.slice(-6) : 'recomputed ≠ stored'}`,
+    );
+    if (window.RuStore) {
+      await window.RuStore.appendAudit({
+        ts: new Date().toISOString().slice(11, 19),
+        principal: 'jules@ruv', tool: 'rulake_ipfs_fetch',
+        target: fr.url, k: 0, ms: fr.ms,
+        code: verifyOk ? 'IPFS_BUNDLE_VERIFIED' : 'IPFS_WITNESS_MISMATCH',
+        outcome: verifyOk ? 'ok' : 'refused',
+      });
+    }
+    setBusy(false);
+  };
+
+  return (
+    <div className="connect-card" style={{margin:'0 0 16px', padding:14}}>
+      <div style={{display:'flex', alignItems:'center', gap:10, marginBottom:8}}>
+        <span className="connect-card-h-glyph" style={{fontSize:13}}>◈</span>
+        <span className="mono" style={{fontSize:11, color:'var(--fg-faint)'}}>Fetch bundle from IPFS · paste a CID, recompute the witness in your browser</span>
+      </div>
+      <div style={{display:'flex', gap:8, alignItems:'center'}}>
+        <input
+          className="input"
+          type="text"
+          placeholder="bafkreig… (CIDv1, raw codec)"
+          value={cid}
+          onChange={(e) => setCid(e.target.value)}
+          style={{flex:1, fontFamily:'JetBrains Mono, monospace', fontSize:11}}
+        />
+        <button className="btn" onClick={onFetch} disabled={busy || !cid}>
+          {busy ? 'Fetching…' : 'Fetch + verify'}
+        </button>
+      </div>
+      {result && (
+        <div className="mono" style={{
+          marginTop:8, fontSize:11,
+          color: result.kind === 'ok' ? 'var(--verifier-bright)' :
+                 result.kind === 'mismatch' ? 'var(--accent-amber, #c87b2c)' :
+                 'var(--fg-faint)',
+        }}>
+          {result.kind === 'ok' ? '● ' : '○ '}
+          {result.msg}
+          {' · '}{result.ms}ms
+          {result.dim ? ` · dim=${result.dim}` : ''}
+          {result.computed && (
+            <span style={{display:'block', marginTop:2, color:'var(--fg-faint)'}}>
+              recomputed {result.computed.slice(0, 16)}…{result.computed.slice(-8)}
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// IPFS bundle fetch helper — paste a CID, fetch the JSON via the
+// configured gateway, recompute the witness via rulake-wasm.
+async function fetchBundleFromIpfs(cid) {
+  if (!cid || typeof cid !== 'string') {
+    return { error: 'CID is required' };
+  }
+  const trimmed = cid.trim().replace(/^ipfs:\/\//, '');
+  if (!/^[A-Za-z0-9]{20,80}$/.test(trimmed)) {
+    return { error: `not a CID-shaped string: ${trimmed.slice(0, 30)}` };
+  }
+  let gatewayUrl = 'https://w3s.link';
+  if (window.RuStore) {
+    const rows = await window.RuStore.list('kv').catch(() => []);
+    const settingsRow = rows.find((r) => r.label === 'storage-settings');
+    if (settingsRow?.settings?.ipfsGateway) {
+      gatewayUrl = settingsRow.settings.ipfsGateway;
+    }
+  }
+  const url = `${gatewayUrl.replace(/\/$/, '')}/ipfs/${trimmed}`;
+  const t0 = performance.now();
+  try {
+    const resp = await fetch(url, { method: 'GET', mode: 'cors' });
+    const ms = Math.round(performance.now() - t0);
+    if (!resp.ok) {
+      return { error: `${resp.status} ${resp.statusText}`, url, ms };
+    }
+    const text = await resp.text();
+    if (text.length > 64 * 1024) {
+      return { error: `bundle exceeds 64 KiB cap (${text.length}B)`, url, ms };
+    }
+    let bundle;
+    try {
+      bundle = JSON.parse(text);
+    } catch (e) {
+      return { error: `not JSON: ${e.message}`, url, ms, raw: text.slice(0, 80) };
+    }
+    if (!bundle.format_version || !bundle.rvf_witness) {
+      return { error: 'not a ruLake bundle (missing format_version or rvf_witness)', url, ms };
+    }
+    return { ok: true, url, ms, bundle };
+  } catch (e) {
+    return { error: String(e && e.message || e), url, ms: Math.round(performance.now() - t0) };
+  }
+}
+
 function BundleScreen({ bundle }) {
   const [verifying, setVerifying] = useState(false);
   const [verified, setVerified] = useState(true);
@@ -1100,6 +1245,9 @@ function BundleScreen({ bundle }) {
             <button className="btn btn-primary" onClick={recompute}>Recompute witness</button>
           </div>
         </div>
+
+        <IpfsFetchStrip />
+
 
         <HelpStrip kind="info" storageKey="bundle-intro">
           Two columns of the witness comparator: <strong>Publisher</strong> is what the lake says,
