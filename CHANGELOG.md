@@ -223,8 +223,64 @@ Three scripts that lock the cross-component flows in CI:
 
 ### Documentation
 
-- **`CHANGELOG.md`** — this file (iter 30, updated through iter 34).
+- **`CHANGELOG.md`** — this file (iter 30, updated through iter 45).
 - **`README.md`** Substrate adapters / Console sections (iter 27).
+- **`README.md`** End-to-end smoke contracts table (iter 37) — three
+  scripts with what each covers and asserts.
+- **`examples/README.md`** Substrate adapters section (iter 45) —
+  points readers at the in-tree e2e tests, benches, and smokes that
+  double as worked examples for the iter 18-22 substrate work.
+
+### Added — orchestration (iter 38, iter 40)
+
+- **`scripts/smoke-all.sh`** — single-command runner that walks the
+  three smoke scripts in sequence with isolated subprocesses + a
+  unified pass/fail summary. Auto-detects the `mcp-server` binary
+  and runs `smoke.sh --live` when it's built; falls back to
+  WASM-local-only otherwise. ~50 s wall time end-to-end on a warm
+  build.
+- **`ui/scripts/smoke-cross-mcp.sh`** Browse-refusal section
+  (iter 36) — asserts the Console handles unknown-tool MCP errors
+  cleanly (`LIST_COLLECTIONS_FAILED · refused` audit row + 0 console
+  errors) when `Browse.refresh` fires `rulake_list_collections`
+  against an MCP server that doesn't expose that tool.
+- **`mcp-rvdna/scripts/http-smoke.sh`** CORS preflight section
+  (iter 41) — direct curl `OPTIONS` request asserts 5 CORS response
+  headers, fast (50 ms) and chrome-free regression check for the
+  iter 32 fix.
+- **`ui/scripts/smoke.sh`** `--live` tool-count assertion (iter 34) —
+  Console must report exactly 8 tools from `mcp-server` with the
+  full `read,publish,admin` capability set; surfaced and fixed a
+  default-capability gap in the smoke launch line.
+
+### Added — CI (iter 39)
+
+- `.github/workflows/ci.yml` Rust matrix expanded **5 → 10 crates**:
+  added `mcp-rvdna`, `mcp-ruqu`, `ipfs-backend`, `rvdna-backend`,
+  `ruqu-backend`. Every standalone package per ADR-001 now builds +
+  tests on every PR, fail-fast off so one regression doesn't mask
+  another.
+- New `smoke` job (depends-on `rust`) sets up Node 22 + Chrome via
+  `browser-actions/setup-chrome`, builds `mcp-server` + `mcp-rvdna`
+  binaries, then runs `scripts/smoke-all.sh`. The iter 32 bug-class
+  (CORS, SSE-parser) and the iter 34 default-capability gap are
+  both regression-locked at the workflow level.
+
+### Fixed — iter 43-44 housekeeping
+
+- **`mcp-server`** — cleared 5 lingering compiler warnings (unused
+  imports `Capability` + `principal_for_client_cert`, dead-code
+  field `Inner::last_reset`, dead-init `let mut transport = None`,
+  unused-variable `let server = make_server();`). `cargo test
+  --release` on mcp-server now emits zero warnings across lib + bin
+  + 4 integration test binaries (40 + 8 + 20 tests pass).
+- **`ruqu-backend`** — Gate enum's struct-variant fields (`q`,
+  `theta`, `control`, `target`) all carry doc comments now;
+  `#![warn(missing_docs)]` no longer fires. mcp-ruqu (path-dep on
+  ruqu-backend) inherits the clean state.
+
+All 10 Rust crates now build with **zero compiler warnings** on
+`cargo build --release`.
 
 ---
 
