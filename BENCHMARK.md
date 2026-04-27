@@ -193,9 +193,9 @@ Each adds a small, bounded layer of overhead.
 | Surface | What it adds | Tax target (vs direct Rust) | Status |
 |---|---|---|---|
 | **Rust direct** (`cargo add rulake`) | nothing — in-process call | 1.00× (baseline) | measured ([above](#headline-localbackend-same-dataset-as-ruvector-rabitq)) |
-| **Python SDK** ([`python/`](python/), PyO3) | NumPy zero-copy borrow + GIL release | **≤ 1.10×** ([ADR-002 §Verification](docs/adrs/sdk/ADR-002-python-sdk.md)) — ~1 µs FFI per call | budget; bench gate ships in v0.4 |
-| **Node.js SDK** ([`node/`](node/), napi-rs) | one Float32Array memcpy across `await` (~3 µs at D=768) | **≤ 1.10×** ([ADR-003 §Verification](docs/adrs/sdk/ADR-003-nodejs-typescript-sdk.md)) | budget; bench gate ships in v0.4 |
-| **MCP server stdio** ([`mcp-server/`](mcp-server/), `rulake-mcp`) | JSON-RPC framing + serde + planner pass | **≤ 1.20×** ([ADR-004 §Verification](docs/adrs/sdk/ADR-004-rulake-mcp-server.md)) | budget; bench gate ships in v0.4 |
+| **Python SDK** ([`sdk/python/`](sdk/python/), PyO3) | NumPy zero-copy borrow + GIL release | **≤ 1.10×** ([ADR-002 §Verification](docs/adrs/sdk/ADR-002-python-sdk.md)) — ~1 µs FFI per call | budget; bench gate ships in v0.4 |
+| **Node.js SDK** ([`sdk/node/`](sdk/node/), napi-rs) | one Float32Array memcpy across `await` (~3 µs at D=768) | **≤ 1.10×** ([ADR-003 §Verification](docs/adrs/sdk/ADR-003-nodejs-typescript-sdk.md)) | budget; bench gate ships in v0.4 |
+| **MCP server stdio** ([`crates/mcp-server/`](crates/mcp-server/), `rulake-mcp`) | JSON-RPC framing + serde + planner pass | **≤ 1.20×** ([ADR-004 §Verification](docs/adrs/sdk/ADR-004-rulake-mcp-server.md)) | budget; bench gate ships in v0.4 |
 | **MCP server Streamable HTTP** | + TCP/HTTP framing + bearer-auth check | ~1.25× expected; not yet measured | unmeasured |
 
 **For agent builders:** the worst case (an agent calling
@@ -204,7 +204,7 @@ benchmarked workload — well inside the budget for an agent loop that
 spends most of its time waiting on an LLM round-trip.
 
 **For cloud-backend builders:** the GCS Parquet backend
-([`gcs-backend/`](gcs-backend/)) adds **one HEAD request per cache miss**
+([`crates/gcs-backend/`](crates/gcs-backend/)) adds **one HEAD request per cache miss**
 for `current_bundle()` (~30 ms typical from GCP networks) and
 **zero per cache hit** — every subsequent search inside the
 Consistency TTL window is a pure local scan. A "cold" Parquet pull on
@@ -215,9 +215,9 @@ ParquetBackend gate test does.
 
 ## Acceptance checks (M1)
 
-The smoke tests under `tests/federation_smoke.rs` gate M1 from
+The smoke tests under `crates/core/tests/federation_smoke.rs` gate M1 from
 `docs/research/ruLake/07-implementation-plan.md`, plus bundle tests
-in `src/bundle.rs` (including FS persistence):
+in `crates/core/src/bundle.rs` (including FS persistence):
 
 | # | Test | What it proves |
 |---|---|---|
@@ -240,7 +240,7 @@ cargo test --release   # core 43 + python 14 + node 10 + mcp-server 21 + gcs-bac
 - **Real-backend network latency.** `LocalBackend::pull_vectors` is an in-process
   HashMap read; the Fresh-mode tax reported above is the floor, not the ceiling.
   Real backends (Parquet on S3, BigQuery via Storage Read API) add 10–100 ms
-  per prime. The GCS backend ships in [`gcs-backend/`](gcs-backend/) today; a
+  per prime. The GCS backend ships in [`crates/gcs-backend/`](crates/gcs-backend/) today; a
   measured live bench against a real bucket lands with the M2 acceptance gate.
 - **Recall regressions vs direct RaBitQ.** The test suite confirms byte-exact
   ordering + scores at the same seed. Formal recall sweeps across n / D /
@@ -276,4 +276,4 @@ cd mcp-server  && cargo test --release                                # 21 pass
 cd gcs-backend && cargo test --release                                # 4 pass (offline)
 ```
 
-Dataset generator + seeds in `src/bin/rulake-demo.rs::clustered`.
+Dataset generator + seeds in `crates/core/src/bin/rulake-demo.rs::clustered`.

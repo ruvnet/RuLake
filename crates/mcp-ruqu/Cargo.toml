@@ -54,7 +54,7 @@ ruvector-rulake-ruqu = { path = "../ruqu-backend" }
 # ruLake itself — needed for `RuLake::search_one` (the cache short-
 # circuit `ruqu_replay` rides on) and for `RuLakeBundle` / witness
 # byte-equality semantics. Match the version mcp-server pins.
-rulake = { path = "..", version = "2.3.0-alpha.1" }
+rulake = { path = "../core", version = "2.3.0-alpha.1" }
 
 # Official Rust MCP SDK. Same feature set mcp-server / mcp-rvdna use,
 # now including `transport-streamable-http-server` for the v0.1 HTTP

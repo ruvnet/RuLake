@@ -98,15 +98,15 @@ The reasoning for this scoping:
     UI, not a RuVector control panel.
 -   The MCP server is the only place ruLake state escapes
     in-process today. The HTTP transport
-    (`mcp-server/src/http.rs`) is the wire any UI must speak; the
+    (`crates/mcp-server/src/http.rs`) is the wire any UI must speak; the
     resources (`rulake://stats`, `rulake://stats/by-backend`,
     `rulake://bundle/{backend}/{collection}` —
-    `mcp-server/src/server.rs:597-624`) are the only structured-read
+    `crates/mcp-server/src/server.rs:597-624`) are the only structured-read
     surface. A UI that bypasses MCP duplicates work the agentic
     path already paid for.
 -   Mutation surfaces (publish, refresh, save, warm, invalidate) all
     exist as MCP tools today
-    (`mcp-server/src/server.rs:331-438`). They are the obvious
+    (`crates/mcp-server/src/server.rs:331-438`). They are the obvious
     "manage" actions. RBAC mutation does not exist yet
     (`mcp.toml` is file-config), so it is out of MVP scope.
 
@@ -154,7 +154,7 @@ static SPA + a fetch transport, not a server-rendered admin app.
 **What they do today.** Write Rust / Python / Node / TypeScript code
 that calls `rulake_query` and reasons about the response. They may
 use `examples/nodejs/04-mcp-tool/` as a starting point. The
-`decision_trace` (`mcp-server/src/planner.rs:257-293`) is gold for
+`decision_trace` (`crates/mcp-server/src/planner.rs:257-293`) is gold for
 debugging routing and refusals, but parsing it from a JSON dump in
 the terminal is awkward.
 
@@ -194,7 +194,7 @@ checks, compare across releases. Heavy users of the
     "this dataset is the legitimate descendant of that one" is not
     rendered anywhere.
 -   No federation topology visualisation. `search_federated`
-    (`src/lake.rs`) takes `&[(&str, &str)]` and runs in parallel; the
+    (`crates/core/src/lake.rs`) takes `&[(&str, &str)]` and runs in parallel; the
     routing decision and per-route latencies appear in
     `decision.backends_used` but a topology diagram is not.
 
@@ -269,11 +269,11 @@ The UI's first screen. Picks an MCP endpoint URL and an auth mode.
 -   **Bearer.** Paste a token; the UI stores it in `sessionStorage`
     and threads it into `RuLakeHttp` constructor's `token` opt
     (`node/http.mjs:108`). The server-side bearer check is
-    `mcp-server/src/auth.rs::BearerAuth::verify`.
+    `crates/mcp-server/src/auth.rs::BearerAuth::verify`.
 -   **JWT.** Same shape as bearer (paste an `Authorization: Bearer
     <jwt>`). The server validates signature, `iss`, `aud` (RFC 8707),
     `exp`, and maps `scope` claims to `mcp:rulake:read|publish|admin`
-    (see `mcp-server/src/http.rs:314-333`). The UI does not need to
+    (see `crates/mcp-server/src/http.rs:314-333`). The UI does not need to
     understand the JWT — it just sends it.
 -   **mTLS.** **Impossible from a browser.** Browsers do not let
     JavaScript control which client certificate is presented during
@@ -284,7 +284,7 @@ The UI's first screen. Picks an MCP endpoint URL and an auth mode.
 -   **None.** Useful for `--auth none --bind 127.0.0.1` dev. The UI
     just omits the `Authorization` header.
 
-**Backed by:** `mcp-server/src/http.rs:39-60` (the `AuthMode` enum
+**Backed by:** `crates/mcp-server/src/http.rs:39-60` (the `AuthMode` enum
 and the `serve` entry point), `node/http.mjs:107-122`
 (`_headers()`).
 
@@ -298,7 +298,7 @@ only" instead of trying to support it.
 ### 3.2 Backend and collection browser
 
 Lists registered backends from `rulake_list_backends`
-(`mcp-server/src/server.rs:323`). For each backend, lists known
+(`crates/mcp-server/src/server.rs:323`). For each backend, lists known
 collections with their cached witness, dim, generation, and last
 prime. Each row links into the bundle viewer.
 
@@ -308,7 +308,7 @@ prime. Each row links into the bundle viewer.
 -   `rulake://stats/by-backend` returns per-backend roll-up.
 -   `rulake://bundle/{backend}/{collection}` — listed by
     `list_resources` for every cached collection
-    (`mcp-server/src/server.rs:614-624`) — returns
+    (`crates/mcp-server/src/server.rs:614-624`) — returns
     `{backend, collection, witness, witness_present, cache_entries}`.
 
 **Gap:**
@@ -322,16 +322,16 @@ prime. Each row links into the bundle viewer.
         trait already has `list_collections` per ADR-155; today
         nothing wires it through MCP. A new tool
         `rulake_list_collections{backend}` mapped to
-        `Capability::Read` is ~30 LOC in `mcp-server/src/server.rs`
-        and ~30 LOC in `mcp-server/src/planner.rs`.
+        `Capability::Read` is ~30 LOC in `crates/mcp-server/src/server.rs`
+        and ~30 LOC in `crates/mcp-server/src/planner.rs`.
     2.  Document the constraint and let the operator query
         each-collection-once at startup to populate the resource
         list. Cheap, brittle.
 -   Per-collection `dim` and `last_prime_ms` are in
-    `cache_stats_by_collection` (`src/lake.rs:126`) but not exposed
+    `cache_stats_by_collection` (`crates/core/src/lake.rs:126`) but not exposed
     over MCP. A `rulake://stats/by-collection` resource (parallel to
     `by-backend`) would close it. ~40 LOC in
-    `mcp-server/src/server.rs::read_resource_json`.
+    `crates/mcp-server/src/server.rs::read_resource_json`.
 
 **MVP:** Yes for the cached-only view. Defer cold-collection
 enumeration to v0.2.
@@ -340,7 +340,7 @@ enumeration to v0.2.
 
 A textarea for an embedding (or a "generate random" button), an `intent`
 picker (search / verify / explain / refresh — though v0.1 supports
-`search` only per `mcp-server/src/planner.rs:78-80`), a target
+`search` only per `crates/mcp-server/src/planner.rs:78-80`), a target
 selector (collection or routes), risk/freshness sliders, a
 "Send" button. Right pane shows the parsed `QueryResponse`:
 
@@ -368,7 +368,7 @@ const res = await c.query({
 // res.data, res.provenance, res.trust_level, res.decision
 ```
 
-**Backed by:** `rulake_query` (`mcp-server/src/server.rs:199`),
+**Backed by:** `rulake_query` (`crates/mcp-server/src/server.rs:199`),
 `RuLakeHttp.query` (`node/http.mjs:160`).
 
 **Gap:** None for `intent: "search"`. The other intents fire
@@ -398,7 +398,7 @@ gap below).
 **Backed by:**
 
 -   `rulake://bundle/{backend}/{collection}` resource
-    (`mcp-server/src/server.rs:614-624`).
+    (`crates/mcp-server/src/server.rs:614-624`).
 -   `verifyBundleJson` for client-side witness recompute
     (`node-wasm/src/lib.rs:158`).
 -   `compute_witness_js` for "what witness should this bundle carry?"
@@ -419,7 +419,7 @@ gap below).
         `rulake://bundle/{b}/{c}` returning the
         `RuLakeBundle`-shaped JSON; the data is one
         `lake.current_bundle(&key)` call away —
-        `src/lake.rs:169`).
+        `crates/core/src/lake.rs:169`).
     2.  Add a separate `rulake_get_bundle` tool returning the
         `RuLakeBundle`. Tool surface is more discoverable; resource
         surface is more cache-friendly. Either works. Pick 1 for
@@ -435,16 +435,16 @@ Live tile of:
 -   `hits`, `misses`, `primes`, `invalidations`, `shared_hits`,
     `warm_installs` from `rulake://stats`
 -   `hit_rate` and `avg_prime_ms` derived (already computed
-    server-side, see `mcp-server/src/server.rs:660-661`)
+    server-side, see `crates/mcp-server/src/server.rs:660-661`)
 -   per-backend rollup from `rulake://stats/by-backend`
-    (`mcp-server/src/server.rs:665-684`)
+    (`crates/mcp-server/src/server.rs:665-684`)
 -   sparkline of `last_prime_ms` over time (client-side ring buffer,
     poll every ~1s)
 
 **Backed by:** Both resources are already implemented and shipping.
 
 **Gap:** None for the rollups. Per-collection rollup is in the
-`RuLake` struct (`cache_stats_by_collection`, `src/lake.rs:126`) but
+`RuLake` struct (`cache_stats_by_collection`, `crates/core/src/lake.rs:126`) but
 not exposed over the wire — see §3.2 gap.
 
 **MVP:** Yes. This is the operator's daily view.
@@ -455,10 +455,10 @@ Tail of the JSONL audit stream. Filterable by `principal`, `tool`,
 `intent`, `outcome` (`ok`, `refused`, `degraded`, `error`), `code`,
 and `trust_level`. Drill-down on a single entry shows the
 `policy_decision` and `decision` blocks from
-`mcp-server/src/audit.rs::AuditEntry`.
+`crates/mcp-server/src/audit.rs::AuditEntry`.
 
 **Backed by:** Audit emission to a file via `--audit-file`
-(`mcp-server/src/audit.rs::open_file`). Each line is the
+(`crates/mcp-server/src/audit.rs::open_file`). Each line is the
 `AuditEntry` struct serialised to JSON.
 
 **Gap:** **Major.** The audit log is on-disk only. There is no
@@ -495,7 +495,7 @@ then download the resulting `index.rbpx` + sidecar. Or upload an
 existing snapshot and trigger `rulake_warm_from_dir`.
 
 **Backed by:** Both tools exist
-(`mcp-server/src/server.rs:386-424`). Both are admin-tier.
+(`crates/mcp-server/src/server.rs:386-424`). Both are admin-tier.
 
 **Gap:** **Major.** Both tools take a `dir: String` that is a
 **server-side path**. The server reads/writes there. There is no
@@ -525,9 +525,9 @@ Edit `[[allow]]` blocks in `mcp.toml`, preview the resulting
 testing.
 
 **Backed by:** `AllowList::from_blocks` consumes the
-`AllowBlock` shape (`mcp-server/src/allow.rs:38`). The
+`AllowBlock` shape (`crates/mcp-server/src/allow.rs:38`). The
 capability filter for `tools/list` is
-`mcp-server/src/server.rs:566-585`.
+`crates/mcp-server/src/server.rs:566-585`.
 
 **Gap:** **Major.** `mcp.toml` is read once at startup
 (`McpConfig::default` and the loader in `main.rs`); there is no
@@ -558,7 +558,7 @@ a rendering layer on top of the playground's response — not a
 separate screen.
 
 **Backed by:** `decision` block on every `QueryResponse`
-(`mcp-server/src/planner.rs:257-293`).
+(`crates/mcp-server/src/planner.rs:257-293`).
 
 **Gap:** None.
 
@@ -571,12 +571,12 @@ Drag backends into shards. Preview the adaptive rerank
 Render per-route latency bars.
 
 **Backed by:** `Target.routes` on `QueryRequest`
-(`mcp-server/src/planner.rs:84-88`) maps directly to
+(`crates/mcp-server/src/planner.rs:84-88`) maps directly to
 `RuLake::search_federated`'s `&[(&str, &str)]`. The visualisation
 is client-side.
 
 **Gap:** None for the call. The "preview adaptive rerank" math is
-client-side; the formula is in `src/lake.rs` (rerank-adaptive logic
+client-side; the formula is in `crates/core/src/lake.rs` (rerank-adaptive logic
 mentioned in ADR-155). The UI would re-implement that math in JS to
 preview before send.
 
@@ -782,7 +782,7 @@ Listed by where the work lives. Each gap is honest about what does
 not exist today; the README and prior ADRs have occasionally
 overstated and this note should not.
 
-### 5.1 In `mcp-server/`
+### 5.1 In `crates/mcp-server/`
 
 -   **(small)** `rulake_list_collections{backend}` MCP tool that
     proxies to `BackendAdapter::list_collections`. Capability:
@@ -791,15 +791,15 @@ overstated and this note should not.
 -   **(small)** Extend `rulake://bundle/{b}/{c}` to return the full
     `RuLakeBundle` JSON (currently returns
     `{witness, witness_present, cache_entries}` only —
-    `mcp-server/src/server.rs:685-705`). The full bundle is one
-    `lake.current_bundle(&key)` call away (`src/lake.rs:169`).
+    `crates/mcp-server/src/server.rs:685-705`). The full bundle is one
+    `lake.current_bundle(&key)` call away (`crates/core/src/lake.rs:169`).
     Makes the cached-bundle verifier path work end-to-end.
 -   **(small)** `rulake://stats/by-collection` resource parallel to
     `by-backend`. ~40 LOC in
-    `mcp-server/src/server.rs::read_resource_json`. Surfaces
+    `crates/mcp-server/src/server.rs::read_resource_json`. Surfaces
     per-(backend, collection) hit/miss/prime/dim/last_prime_ms. The
     in-memory data is already there
-    (`cache_stats_by_collection`, `src/lake.rs:126`).
+    (`cache_stats_by_collection`, `crates/core/src/lake.rs:126`).
 -   **(medium)** `rulake_audit_tail{since, limit}` admin-tier tool.
     Reads from `AuditSink::path()`'s file. ~60 LOC in
     `audit.rs` + tool wiring. Required to ship the audit viewer
@@ -812,7 +812,7 @@ overstated and this note should not.
     capability gating, content-length limits, and probably a
     chunked transfer for large `.rbpx` files. Required for the
     snapshot manager (deferred from MVP).
--   **(small, separate)** **CORS.** `mcp-server/src/http.rs` does
+-   **(small, separate)** **CORS.** `crates/mcp-server/src/http.rs` does
     not currently set CORS headers. Browser SPAs hosted on a
     different origin than the MCP server cannot talk to it without
     CORS. The fix is `tower-http`'s `CorsLayer`; the design
@@ -898,7 +898,7 @@ what `rvf-server` already does
 Recommendation: **Build for Mode A first.** It's simpler and works
 for both the dev-against-remote and curated-demo personas. Mode B
 can be added by wiring a `tower-http::services::ServeDir` into
-`mcp-server/src/http.rs` later — ~20 LOC, no UI changes needed.
+`crates/mcp-server/src/http.rs` later — ~20 LOC, no UI changes needed.
 
 ### 6.2 ASCII architecture
 
@@ -974,14 +974,14 @@ flow:
     access token containing `mcp:rulake:read` (or higher) scopes
     bound to `aud=https://rulake.example.com`.
 4.  UI threads the token into `RuLakeHttp` constructor's `token`.
-5.  Server validates the JWT per `mcp-server/src/auth.rs::JwtAuth`
+5.  Server validates the JWT per `crates/mcp-server/src/auth.rs::JwtAuth`
     (RFC 8707 audience check, signature verification via JWKS).
 6.  The token's `scope` claim drives the per-request
-    `CapabilitySet` (`mcp-server/src/policy.rs::REQUEST_CAPS`),
+    `CapabilitySet` (`crates/mcp-server/src/policy.rs::REQUEST_CAPS`),
     which intersects with the server-wide caps to gate
     `tools/call`.
 
-The session-binding in `mcp-server/src/sessions.rs` records
+The session-binding in `crates/mcp-server/src/sessions.rs` records
 (`session_id` → `principal`, `client_id`) on first sighting and
 rejects any subsequent request with a different tuple — this means
 a browser's `mcp-session-id` cookie cannot be replayed against a
@@ -1337,7 +1337,7 @@ Out-of-scope for the v0.1 UI, with reasoning:
     The CLI + scp + volume mount is fine for v0.1.
 -   **Federation builder.** Drag-and-drop topology builder is the
     most visually impressive screen and the deepest rabbit hole.
-    The math is in Rust today (`src/lake.rs`); re-implementing
+    The math is in Rust today (`crates/core/src/lake.rs`); re-implementing
     "preview k' = max(5, global_k / num_routes)" in JS introduces
     drift risk. Ship with a "just edit the routes JSON" textarea
     for v0.1.

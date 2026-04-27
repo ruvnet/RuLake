@@ -14,9 +14,9 @@ WORKDIR /work
 COPY . .
 
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/work/mcp-ruqu/target \
-    cargo build --release --manifest-path mcp-ruqu/Cargo.toml --bin ruqu-mcp \
-    && cp mcp-ruqu/target/release/ruqu-mcp /usr/local/bin/ruqu-mcp
+    --mount=type=cache,target=/work/crates/mcp-ruqu/target \
+    cargo build --release --manifest-path crates/mcp-ruqu/Cargo.toml --bin ruqu-mcp \
+    && cp crates/mcp-ruqu/target/release/ruqu-mcp /usr/local/bin/ruqu-mcp
 
 # ── runtime stage ────────────────────────────────────────────────────
 FROM gcr.io/distroless/cc-debian12:nonroot

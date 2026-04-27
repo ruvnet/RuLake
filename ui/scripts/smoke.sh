@@ -86,7 +86,7 @@ trap cleanup EXIT
 # if the binary isn't built we skip the live phase silently.
 MCP_PORT=9099
 MCP_URL="http://127.0.0.1:${MCP_PORT}/"
-MCP_BIN="$UI_DIR/../mcp-server/target/release/rulake-mcp"
+MCP_BIN="$UI_DIR/../crates/mcp-server/target/release/rulake-mcp"
 if [[ "$RUN_LIVE" -eq 1 ]]; then
   hdr "mcp-server (live)"
   if [[ ! -x "$MCP_BIN" ]]; then

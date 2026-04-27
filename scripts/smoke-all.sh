@@ -16,10 +16,10 @@
 #   2. ui/scripts/smoke-cross-mcp.sh       — Console + mcp-rvdna full
 #                                             wire (CORS, SSE parser,
 #                                             Browse refusal, INIT_OK).
-#   3. mcp-rvdna/scripts/http-smoke.sh     — rvdna-mcp HTTP transport
+#   3. crates/mcp-rvdna/scripts/http-smoke.sh — rvdna-mcp HTTP transport
 #                                             in isolation (handshake
 #                                             + 5 tools + refusal path).
-#   4. mcp-ruqu/scripts/http-smoke.sh      — ruqu-mcp HTTP transport
+#   4. crates/mcp-ruqu/scripts/http-smoke.sh  — ruqu-mcp HTTP transport
 #                                             in isolation (same iter 41
 #                                             CORS contract; 5 ruqu_*
 #                                             tools + RUQU_OPTIMIZE_STUB
@@ -49,7 +49,7 @@ done
 # mode (which adds INIT_OK + LIST_COLLECTIONS_OK audit codes and the
 # live tool-count assertion against mcp-server's 8 tools). If the
 # binary isn't built yet, fall back silently to WASM-local-only.
-MCP_BIN="${REPO_DIR}/mcp-server/target/release/rulake-mcp"
+MCP_BIN="${REPO_DIR}/crates/mcp-server/target/release/rulake-mcp"
 if [[ -x "${MCP_BIN}" ]]; then
   CONSOLE_SMOKE="${REPO_DIR}/ui/scripts/smoke.sh --live"
   CONSOLE_LABEL="Console WASM-local + live mcp-server"
@@ -61,8 +61,8 @@ fi
 # Smoke registry — pairs of (label, command). Add new smokes here.
 SMOKES=(
   "${CONSOLE_LABEL}|${CONSOLE_SMOKE}"
-  "rvdna-mcp HTTP|${REPO_DIR}/mcp-rvdna/scripts/http-smoke.sh"
-  "ruqu-mcp HTTP|${REPO_DIR}/mcp-ruqu/scripts/http-smoke.sh"
+  "rvdna-mcp HTTP|${REPO_DIR}/crates/mcp-rvdna/scripts/http-smoke.sh"
+  "ruqu-mcp HTTP|${REPO_DIR}/crates/mcp-ruqu/scripts/http-smoke.sh"
   "Production rulake-mcp.ruv.io|${REPO_DIR}/scripts/smoke-live.sh"
   "Production rvdna-mcp.ruv.io|URL=https://rvdna-mcp.ruv.io/ EXPECTED_TOOLS=5 ${REPO_DIR}/scripts/smoke-live.sh"
   "Production ruqu-mcp.ruv.io|URL=https://ruqu-mcp.ruv.io/ EXPECTED_TOOLS=5 ${REPO_DIR}/scripts/smoke-live.sh"

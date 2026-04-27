@@ -25,13 +25,13 @@ plus a hash-chained `WitnessLog` at
 witness-anchored vector cache that has shipped four backends (Local,
 Fs, GCS, IPFS), an MCP server with eight tools, and a console — all
 built around a SHAKE-256 bundle witness at
-`src/bundle.rs::compute_witness` that makes any cache entry content-
+`crates/core/src/bundle.rs::compute_witness` that makes any cache entry content-
 addressable across deployments.
 
 v2 closes a single missing seam: every ruQu execution emits a ruLake-
 compatible bundle JSON, the five simulation engines each register as a
-`BackendAdapter` (`src/backend.rs:110`), the cost-model planner becomes
-*cache-aware* (`src/lake.rs:127` `cache_stats_by_backend`), and a
+`BackendAdapter` (`crates/core/src/backend.rs:110`), the cost-model planner becomes
+*cache-aware* (`crates/core/src/lake.rs:127` `cache_stats_by_backend`), and a
 sibling `mcp-ruqu` server exposes the quantum verbs through the same
 capability-gated tool surface that ruLake's MCP server uses. The result
 is the system the v1 README implies but the v1 architecture cannot
@@ -47,12 +47,12 @@ of five acceptance gates in ADR-008.
 |----------------------------------------------|------:|------------------------------------------------------------------------------------|
 | `README.md` (this file)                      |  ~150 | Index, persona reading guides, compositional thesis, what's NOT in the corpus      |
 | `v2-spec.md`                                 | ~1900 | Canonical ruQu v2 spec — 5 backends as `BackendAdapter`, witness equivalence       |
-| `integration-with-rulake.md`                 | ~1000 | Code-level integration: `ruqu-backend/`, `mcp-ruqu/`, Console "Quantum" route hooks |
+| `integration-with-rulake.md`                 | ~1000 | Code-level integration: `crates/ruqu-backend/`, `crates/mcp-ruqu/`, Console "Quantum" route hooks |
 | `ADR-008-ruqu-as-rulake-substrate.md`        |  ~750 | The decision record that binds the spec and the integration plan together         |
 
 Read order is the order they appear above. Each file cites real paths
 into v1 (`vendor/ruvector/crates/ruqu-core/`) and ruLake (`src/`,
-`mcp-server/src/`, `docs/adrs/`). No invented APIs.
+`crates/mcp-server/src/`, `docs/adrs/`). No invented APIs.
 
 ## The compositional thesis (one paragraph)
 
@@ -62,9 +62,9 @@ already covers `circuit_hash`, `seed`, `backend`, `noise_config`,
 (`vendor/ruvector/crates/ruqu-core/src/witness.rs:88`) hash-chains
 those records into a tamper-evident audit trail using a 32-byte digest
 built from `DefaultHasher` four times. ruLake's `RuLakeBundle`
-(`src/bundle.rs:113`) holds `data_ref`, `dim`, `rotation_seed`,
+(`crates/core/src/bundle.rs:113`) holds `data_ref`, `dim`, `rotation_seed`,
 `rerank_factor`, `generation`, plus a `rvf_witness` SHAKE-256(32) over
-all of them (`src/bundle.rs:362` `compute_witness`). v2 makes these
+all of them (`crates/core/src/bundle.rs:362` `compute_witness`). v2 makes these
 the *same* witness: the ruQu execution-record fields fold into the
 bundle's `data_ref` (the URI `ruqu://<backend>/<circuit_hash>`) and
 `generation` (a struct-tag that pins backend id, noise model id,
@@ -72,10 +72,10 @@ decoder id, mitigation id, mixed-precision mode, SIMD path), with the
 SHAKE-256 digest replacing the v1 `DefaultHasher` chain. Two
 identical re-runs of the same circuit on the same backend produce
 byte-identical bundles, so ruLake's content-addressed cross-process
-dedup (`src/cache.rs::CacheKey`, the witness-keyed compressed entry
+dedup (`crates/core/src/cache.rs::CacheKey`, the witness-keyed compressed entry
 table) returns the cached result for free on the second call. No new
 code in user space; no fork of ruqu-core; the witness gets *stronger*
-(SHAKE vs SipHash); the federation surface (`src/lake.rs:521`
+(SHAKE vs SipHash); the federation surface (`crates/core/src/lake.rs:521`
 `search_federated`) becomes "ask all five quantum backends for prior
 runs of this circuit" by changing zero lines in the federation API.
 
@@ -90,7 +90,7 @@ You care about:
 1. **The witness equivalence theorem** in `v2-spec.md` §c. v1's
    `ReplayEngine::circuit_hash`
    (`vendor/ruvector/crates/ruqu-core/src/replay.rs:183`) and ruLake's
-   `compute_witness` (`src/bundle.rs:362`) become one digest with a
+   `compute_witness` (`crates/core/src/bundle.rs:362`) become one digest with a
    single domain separator. Same inputs → same hex string, on any
    workstation, in any process.
 2. **What goes into the witness** in `v2-spec.md` §i. Decoder choice
@@ -121,18 +121,18 @@ care about:
 1. **The MCP tool surface** in `v2-spec.md` §h. Five verbs
    (`ruqu_simulate`, `ruqu_verify`, `ruqu_replay`, `ruqu_optimize`,
    `ruqu_qec_schedule`) that mirror the shape of `rulake_query` at
-   `mcp-server/src/server.rs:189`. Capability-gated. JSON-schema'd.
+   `crates/mcp-server/src/server.rs:189`. Capability-gated. JSON-schema'd.
    Audit-logged with codes from a six-code refusal vocabulary in §h.
-2. **How v2 plugs into the existing MCP plane**: `mcp-ruqu/` is a
-   sibling crate of `mcp-server/`, not an extension. The two servers
-   share the `mcp-server/src/audit.rs::AuditEntry` schema with disjoint
+2. **How v2 plugs into the existing MCP plane**: `crates/mcp-ruqu/` is a
+   sibling crate of `crates/mcp-server/`, not an extension. The two servers
+   share the `crates/mcp-server/src/audit.rs::AuditEntry` schema with disjoint
    code prefixes (`RULAKE_*` vs `RUQU_*`). One log pipeline; two
    tool families. JWT scopes from the same provider — see
-   `mcp-server/src/auth.rs::scopes_to_caps` — gate both.
+   `crates/mcp-server/src/auth.rs::scopes_to_caps` — gate both.
 3. **Where to start in `v2-spec.md`**: §g pipeline (the five intent
    verbs), §h MCP tools, §o Migration from v1 (so existing
    `WitnessLog`s can be re-derived as v2 bundles).
-4. **Where to start in `integration-with-rulake.md`**: the `mcp-ruqu/`
+4. **Where to start in `integration-with-rulake.md`**: the `crates/mcp-ruqu/`
    section and the Console hooks section (the proposed Quantum route).
 5. **Where to start in `ADR-008`**: §Decisions 4 (MCP tool surface)
    and 6 (`--no-cache` discipline); §Verification gate G2
@@ -154,7 +154,7 @@ calibrations drift mid-run and your finance team will ask why a
 2. **The cache-aware planner** in `v2-spec.md` §e. The v1 cost-model
    planner (`vendor/ruvector/crates/ruqu-core/src/planner.rs:213`
    `plan_execution`) becomes v2's first lookup against
-   `lake.cache_stats_by_backend` (`src/lake.rs:127`) — re-runs cost
+   `lake.cache_stats_by_backend` (`crates/core/src/lake.rs:127`) — re-runs cost
    zero before they hit any simulator. Operator wins: cache pinning
    and per-backend hit-rate visibility through the existing
    `rulake://stats/by-backend` MCP resource.
@@ -163,7 +163,7 @@ calibrations drift mid-run and your finance team will ask why a
    `RUQU_CACHE_MISS_OVER_BUDGET`, `RUQU_BACKEND_UNAVAILABLE`,
    `RUQU_QEC_DECODER_TIMEOUT` — six refusal codes, mirroring the
    shape of ruLake's `WITNESS_MISMATCH_REFUSED` at
-   `mcp-server/src/server.rs:255`-area.
+   `crates/mcp-server/src/server.rs:255`-area.
 4. **Where to start in `v2-spec.md`**: §e cache-aware planner, §h
    MCP tools, §l Hardware backend + audit chain, §m benchmarking
    policy.
@@ -176,15 +176,15 @@ calibrations drift mid-run and your finance team will ask why a
 
 | Question | ruLake answer | ruQu v2 answer | Same?                |
 |----------|---------------|----------------|----------------------|
-| What anchors a cache entry? | SHAKE-256(32) over (data_ref, dim, rotation_seed, rerank_factor, generation) — `src/bundle.rs:362` | SHAKE-256(32) over the same fields, where `data_ref = ruqu://<backend>/<circuit_hash>` and `generation` packs (backend_id, noise, decoder, mitigation, precision, simd_path, runtime_class) | Yes — same digest, same domain prefix family |
-| Where do bundles live? | `table.rulake.json` sidecar; published via `rulake_publish_bundle` (`mcp-server/src/server.rs:365`) | `circuit.rulake.json` sidecar with the *same* `RuLakeBundle` struct; published via `ruqu_simulate`'s post-run hook | Yes — one struct, two emitters |
-| How does federation work? | `lake.search_federated` parallel fan-out across `(backend, collection)` pairs (`src/lake.rs:521`) | Same call, where backends are the five simulation engines and "collections" are sets of cached circuit-witnesses | Yes — one API, two interpretations of what a backend is |
+| What anchors a cache entry? | SHAKE-256(32) over (data_ref, dim, rotation_seed, rerank_factor, generation) — `crates/core/src/bundle.rs:362` | SHAKE-256(32) over the same fields, where `data_ref = ruqu://<backend>/<circuit_hash>` and `generation` packs (backend_id, noise, decoder, mitigation, precision, simd_path, runtime_class) | Yes — same digest, same domain prefix family |
+| Where do bundles live? | `table.rulake.json` sidecar; published via `rulake_publish_bundle` (`crates/mcp-server/src/server.rs:365`) | `circuit.rulake.json` sidecar with the *same* `RuLakeBundle` struct; published via `ruqu_simulate`'s post-run hook | Yes — one struct, two emitters |
+| How does federation work? | `lake.search_federated` parallel fan-out across `(backend, collection)` pairs (`crates/core/src/lake.rs:521`) | Same call, where backends are the five simulation engines and "collections" are sets of cached circuit-witnesses | Yes — one API, two interpretations of what a backend is |
 | What's the browser story? | Console at `ui/`, three modes (Demo, WASM-local, Live); `rulake-wasm@2.2.1` does `verifyBundleJson`, `computeWitness`, `searchBruteForceL2` | Same Console; new "Quantum" route uses `ruqu-wasm` (`vendor/ruvector/crates/ruqu-wasm/`) for in-tab simulation, then `rulake-wasm` for witness verification — zero new wasm code | Yes — composition of two existing wasm packages |
 | What does an operator stare at? | `rulake://stats`, `rulake://stats/by-backend`, `rulake://bundle/{b}/{c}`, `rulake://audit/tail` | Same four resources; `rulake://stats/by-backend` now shows StateVector / Stabilizer / Clifford+T / TensorNetwork / Hardware as backend ids | Yes — same MCP resources, broader content |
 
 ## What's NOT in this corpus
 
-- **A `cargo` build of `ruqu-backend/`.** ADR-008 lands first; the
+- **A `cargo` build of `crates/ruqu-backend/`.** ADR-008 lands first; the
   scaffold is the next commit AFTER ADR-008 acceptance. See
   `integration-with-rulake.md` §"What v0.1 ships vs v0.2 defers" for
   exactly what the first PR contains.
@@ -208,11 +208,11 @@ calibrations drift mid-run and your finance team will ask why a
 ## What ships next (after this corpus lands)
 
 1. ADR-008 review + acceptance.
-2. `ruqu-backend/` v0.0 scaffold — `Cargo.toml`, the five
+2. `crates/ruqu-backend/` v0.0 scaffold — `Cargo.toml`, the five
    `BackendAdapter` impls (one per ruqu-core backend), one passing
    round-trip test that primes a Bell-state circuit on the
    `StateVector` backend and re-reads it from cache via the witness.
-3. `mcp-ruqu/` v0.0 — `ruqu_simulate` only, witness-pinned,
+3. `crates/mcp-ruqu/` v0.0 — `ruqu_simulate` only, witness-pinned,
    capability-gated by a new `mcp:ruqu:simulate` JWT scope.
 4. Console: a 7th sidebar entry (`Quantum`) that surfaces the
    `rulake://bundle/{ruqu_backend}/{circuit_hash}` resource and runs a

@@ -7,7 +7,7 @@
 witness *out* of ruQu's own format (a hash-chained `Vec<WitnessEntry>`
 serialised by hand-rolled JSON at
 `vendor/ruvector/crates/ruqu-core/src/witness.rs:203`-area) and *into*
-a ruLake bundle (`src/bundle.rs::RuLakeBundle`, format_version 2). The
+a ruLake bundle (`crates/core/src/bundle.rs::RuLakeBundle`, format_version 2). The
 v1 `WitnessLog` does not disappear; it becomes a v2-internal append
 mode (a chain of bundle witnesses linked by `prev_witness` in a
 companion sidecar), preserved for the operators who run continuous-
@@ -103,7 +103,7 @@ Quoting (italics ours):
   ourselves" to "stream of `RuLakeBundle`s linked by `prev_witness`".**
   The `to_json` method at
   `vendor/ruvector/crates/ruqu-core/src/witness.rs:203` is replaced
-  by `RuLakeBundle::to_json` (`src/bundle.rs:203`-area). The
+  by `RuLakeBundle::to_json` (`crates/core/src/bundle.rs:203`-area). The
   hash-chain semantic is preserved; only the digest function (SHAKE
   vs SipHash) and the serialisation library (serde_json vs
   hand-rolled) change.
@@ -130,7 +130,7 @@ Quoting (italics ours):
 - **The hand-rolled JSON serialiser** at
   `vendor/ruvector/crates/ruqu-core/src/witness.rs:203`-area. v2
   uses `RuLakeBundle::to_json` which goes through `serde_json` and
-  benefits from the same length-cap hardening at `src/bundle.rs:218`.
+  benefits from the same length-cap hardening at `crates/core/src/bundle.rs:218`.
   v1's serialiser is preserved as `WitnessLog::to_json_v1_compat()`
   for tools that already parse the v1 shape; emitting v1-shaped
   JSON from v2 is supported through v0.4 and removed in v0.5.
@@ -154,7 +154,7 @@ Quoting (italics ours):
    v2 instance for the same circuit, on the same backend, with the
    same QEC and noise/mitigation settings, on the same SIMD path.
    "Byte-identical" means `RuLakeBundle::rvf_witness` matches and
-   `RuLakeBundle::verify_witness()` (`src/bundle.rs:191`) returns
+   `RuLakeBundle::verify_witness()` (`crates/core/src/bundle.rs:191`) returns
    `true`. This is the "two processes, second one is free"
    property.
 
@@ -167,9 +167,9 @@ Quoting (italics ours):
 
 3. **Federated cost-model planning.** The v1 planner picks the
    cheapest backend; v2 picks the *highest-cache-hit-rate* backend
-   first via `lake.cache_stats_by_backend` (`src/lake.rs:127`),
+   first via `lake.cache_stats_by_backend` (`crates/core/src/lake.rs:127`),
    falling back to the v1 cheapness criterion only on miss. The
-   federation layer (`lake.search_federated`, `src/lake.rs:521`)
+   federation layer (`lake.search_federated`, `crates/core/src/lake.rs:521`)
    becomes "ask all five backends, in parallel, for prior runs of
    this circuit" — a one-line API call against the existing
    federation primitive.
@@ -204,8 +204,8 @@ Quoting (italics ours):
 2. **v2 does not fork the simulation backends.** All five backends
    (StateVector, Stabilizer, Clifford+T, TensorNetwork, Hardware)
    stay in `ruqu-core`. v2 wraps them as `BackendAdapter`
-   implementations in a sibling crate `ruqu-backend/` (analogous to
-   `gcs-backend/` and `ipfs-backend/` in this repo). If a backend
+   implementations in a sibling crate `crates/ruqu-backend/` (analogous to
+   `crates/gcs-backend/` and `crates/ipfs-backend/` in this repo). If a backend
    needs to evolve, the change lands in `ruqu-core`; v2 inherits
    it via the trait impl.
 
@@ -220,8 +220,8 @@ Quoting (italics ours):
 **Claim.** ruQu's v1 cryptographic witness
 (`vendor/ruvector/crates/ruqu-core/src/replay.rs::ExecutionRecord` +
 `vendor/ruvector/crates/ruqu-core/src/witness.rs::WitnessEntry`) and
-ruLake's v2 bundle witness (`src/bundle.rs::RuLakeBundle::rvf_witness`,
-computed via `src/bundle.rs:362` `compute_witness`) can be unified
+ruLake's v2 bundle witness (`crates/core/src/bundle.rs::RuLakeBundle::rvf_witness`,
+computed via `crates/core/src/bundle.rs:362` `compute_witness`) can be unified
 without either side losing semantics.
 
 **Strategy.** We exhibit a bijection between the v1 `ExecutionRecord`
@@ -271,8 +271,8 @@ struct RuntimeContext {
 ```
 
 The bundle's `Generation::Opaque(serde_json::to_string(&ctx))` carries
-this packing into `compute_witness` (`src/bundle.rs:362`). The
-`Generation::hash_bytes()` variant tag at `src/bundle.rs:82` already
+this packing into `compute_witness` (`crates/core/src/bundle.rs:362`). The
+`Generation::hash_bytes()` variant tag at `crates/core/src/bundle.rs:82` already
 prefixes a `0x01` byte for `Opaque`, ensuring this packing cannot
 collide with a numeric `Generation::Num` from a non-ruQu backend.
 
@@ -317,7 +317,7 @@ exhibits the bijection over 1000 randomly-generated executions.
 
 ## d. 5 backends → 5 BackendAdapter impls
 
-The `BackendAdapter` trait at `src/backend.rs:110` is four required
+The `BackendAdapter` trait at `crates/core/src/backend.rs:110` is four required
 methods plus an optional `current_bundle` override and an optional
 `supports_pushdown`. Per the trait:
 
@@ -585,7 +585,7 @@ not match.
 
 ### A note on the ruqu-backend crate shape
 
-`ruqu-backend/` is a single Cargo crate that exports all five
+`crates/ruqu-backend/` is a single Cargo crate that exports all five
 adapters behind a feature flag set:
 
 ```toml
@@ -750,7 +750,7 @@ distribution from the `cache_status` field.
 ## g. Pipeline §2: run — five intent verbs
 
 Mirrors `rulake_query`'s search/verify/explain/refresh shape (see
-`mcp-server/src/server.rs:189`-area for the v1 ruLake intent enum).
+`crates/mcp-server/src/server.rs:189`-area for the v1 ruLake intent enum).
 
 ### `simulate` (run circuit, witness-pinned)
 
@@ -937,14 +937,14 @@ sizes × 5 iterations × ~100 ms average). Cached re-run: ~30 µs.
 
 ## h. MCP tools — quantum surface for agents
 
-A new sibling crate `mcp-ruqu/` (mirrors `mcp-server/`'s shape; see
-`mcp-server/src/server.rs:189` for the `#[tool_router]` /
+A new sibling crate `crates/mcp-ruqu/` (mirrors `crates/mcp-server/`'s shape; see
+`crates/mcp-server/src/server.rs:189` for the `#[tool_router]` /
 `#[tool(name = "...", description = "...")]` macro pattern) exposes
 the five intent verbs as five `#[tool]`s.
 
 ### Capability tiers
 
-Mirrors `mcp-server/src/auth.rs::Capability` (Read | Publish | Admin |
+Mirrors `crates/mcp-server/src/auth.rs::Capability` (Read | Publish | Admin |
 Internal). v2 adds three new capabilities specific to quantum
 execution:
 
@@ -962,7 +962,7 @@ execution:
 ### The five tools
 
 ```rust
-// In mcp-ruqu/src/server.rs, mirroring mcp-server/src/server.rs:189
+// In crates/mcp-ruqu/src/server.rs, mirroring crates/mcp-server/src/server.rs:189
 #[tool_router(router = tool_router)]
 impl RuQuMcpServer {
     #[tool(
@@ -1059,7 +1059,7 @@ impl RuQuMcpServer {
 ### Audit codes — six-code refusal vocabulary
 
 Mirrors ruLake's `WITNESS_MISMATCH_REFUSED` shape at
-`mcp-server/src/server.rs:255`-area. All codes use the `RUQU_*`
+`crates/mcp-server/src/server.rs:255`-area. All codes use the `RUQU_*`
 prefix to avoid namespace collision with `RULAKE_*`.
 
 | Code | Trigger | Recoverable? |
@@ -1071,7 +1071,7 @@ prefix to avoid namespace collision with `RULAKE_*`.
 | `RUQU_BACKEND_UNAVAILABLE` | The requested backend is not registered in this `mcp-ruqu` instance (e.g. `hardware:ionq:*` requested but no IonQ adapter compiled in). | Yes — caller picks a different backend or queries `ruqu_list_backends`. |
 | `RUQU_QEC_DECODER_TIMEOUT` | The QEC decoder (union-find or subpoly) exceeded its decode-time budget. The bundle is *not* written to cache; the partial syndrome is returned for diagnostic purposes. | Yes — caller can retry with a different decoder or a higher timeout. |
 
-Every refusal flows through the same `mcp-server/src/audit.rs`
+Every refusal flows through the same `crates/mcp-server/src/audit.rs`
 `AuditEntry` shape — `code: Some("RUQU_*".into())`, `outcome:
 "refused"`, `policy_decision: PolicyDecision { capability_required:
 "simulate" / "hardware" / "verify", capability_granted: <subject's
@@ -1210,7 +1210,7 @@ cost of speed; this is documented in `integration-with-rulake.md`
 
 ## j. Federation across backends and sites
 
-ruLake's federation primitive at `src/lake.rs:521`
+ruLake's federation primitive at `crates/core/src/lake.rs:521`
 `search_federated` is a parallel rayon fan-out across `(backend,
 collection)` pairs:
 
@@ -1389,7 +1389,7 @@ sub-mode.** Defence:
 - Audit and Stats are unchanged: the existing screens already
   surface `RUQU_*` audit codes and per-backend hit-rates without
   modification (the resources are typed by string, not by enum;
-  see `mcp-server/src/server.rs` resource definitions).
+  see `crates/mcp-server/src/server.rs` resource definitions).
 
 Architecturally: Quantum is a 7th sidebar entry with two screens —
 Composer (QASM editor + gate palette + run button) and Result
@@ -1470,7 +1470,7 @@ the witness. Two effects:
 ### The audit chain integration
 
 Every hardware dispatch emits an `AuditEntry`
-(`mcp-server/src/audit.rs::AuditEntry` shape) with:
+(`crates/mcp-server/src/audit.rs::AuditEntry` shape) with:
 
 ```rust
 AuditEntry {
@@ -1701,7 +1701,7 @@ verify, replay) against `mcp-ruqu`. In parallel, run a sequence of
 ten `rulake_*` calls against `mcp-server`. Assert that:
 
 - Both servers' audit logs share the exact same `AuditEntry` schema
-  (cite `mcp-server/src/audit.rs::AuditEntry`).
+  (cite `crates/mcp-server/src/audit.rs::AuditEntry`).
 - The `code` fields use disjoint prefixes (`RUQU_*` vs `RULAKE_*`).
 - A single audit pipeline (e.g. a `tail -F` reader merged across
   both files) produces a unified, time-ordered stream that a
@@ -1846,7 +1846,7 @@ of the original — manageable, but not free.
   (middle-age runs, RaBitQ-compressed), T2 (old runs, witness-only,
   result fetched on demand from the original dispatching node).
 - Operator-driven eviction: the lake's existing
-  `cache_stats_by_collection` (`src/lake.rs:136`) gives operators
+  `cache_stats_by_collection` (`crates/core/src/lake.rs:136`) gives operators
   per-collection visibility for manual eviction.
 - Federation-aware RaBitQ: the rotation seed could be *backend-
   specific*, so two backends' RaBitQ codes for the same amplitude

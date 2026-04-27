@@ -5,7 +5,7 @@ execution fabric fits in production AI/ML stacks: retrieval-augmented
 generation, embedding pipelines, vector feature stores, recommendation
 systems, training-data curation, model serving, and offline experiment
 infrastructure. Grounded in the actual M1 + M1.5 ruLake API
-(`/home/ruvultra/projects/RuLake/src/lib.rs`), the measured
+(`/home/ruvultra/projects/RuLake/crates/core/src/lib.rs`), the measured
 performance envelope from
 `/home/ruvultra/projects/RuLake/BENCHMARK.md`, and the architectural
 positioning recorded in `docs/adrs/ADR-155` through `ADR-158`.
@@ -93,7 +93,7 @@ S3 / GCS / Iceberg catalog / lakehouse
 The contract ruLake offers up to a framework is small and well-typed:
 
 ```rust
-// from src/lake.rs:445
+// from crates/core/src/lake.rs:445
 pub fn search_one(
     &self,
     backend: &str,
@@ -102,7 +102,7 @@ pub fn search_one(
     k: usize,
 ) -> Result<Vec<SearchResult>>
 
-// from src/lake.rs:491
+// from crates/core/src/lake.rs:491
 pub fn search_federated(
     &self,
     targets: &[(&str, &str)],
@@ -110,7 +110,7 @@ pub fn search_federated(
     k: usize,
 ) -> Result<Vec<SearchResult>>
 
-// from src/lake.rs:600
+// from crates/core/src/lake.rs:600
 pub fn search_batch(
     &self,
     backend: &str,
@@ -120,7 +120,7 @@ pub fn search_batch(
 ) -> Result<Vec<Vec<SearchResult>>>
 ```
 
-`SearchResult` (`src/lake.rs:27`) carries `(backend, collection, id,
+`SearchResult` (`crates/core/src/lake.rs:27`) carries `(backend, collection, id,
 score)`. The `backend` and `collection` fields are the load-bearing
 audit anchor: a framework receiving results knows which substrate
 slice produced each hit, and through `RuLake::cache_witness_of` it
@@ -161,7 +161,7 @@ ruLake do the load-bearing work:
 **Property A — Witness-anchored cache coherence.** Every cache entry
 is keyed by a SHAKE-256 digest over `(data_ref, dim, rotation_seed,
 rerank_factor, generation)`. This is computed in
-`src/bundle.rs:362-390` (`compute_witness`):
+`crates/core/src/bundle.rs:362-390` (`compute_witness`):
 
 ```rust
 fn compute_witness(
@@ -188,7 +188,7 @@ agent and its evaluator can share the embedding store with verifiable
 identity. For lakehouse RAG this means every reader sees the same
 index after a bundle rotation.
 
-**Property B — Three-mode consistency knob.** From `src/cache.rs:54`:
+**Property B — Three-mode consistency knob.** From `crates/core/src/cache.rs:54`:
 
 ```rust
 pub enum Consistency {
@@ -205,7 +205,7 @@ a counterfactual experiment wants `Frozen`. Same crate, same cache,
 different SLA per collection.
 
 **Property C — Federated execution with adaptive rerank.** From
-`src/lake.rs:491-560`, `search_federated` fans out across registered
+`crates/core/src/lake.rs:491-560`, `search_federated` fans out across registered
 backends in parallel via Rayon, divides the rerank budget per shard
 (`max(MIN_PER_SHARD_RERANK, global_rerank / K)`), and per-shard
 over-requests `k' = k + ⌈√(k·ln S)⌉` to close the data-skew gap that
@@ -271,7 +271,7 @@ post-incident review.
 
 ### 2.2 Witness-pinned chunks via the bundle protocol
 
-ruLake's `RuLakeBundle` (`src/bundle.rs:113`) is exactly the
+ruLake's `RuLakeBundle` (`crates/core/src/bundle.rs:113`) is exactly the
 provenance anchor RAG pipelines need. The fields are:
 
 ```rust
@@ -299,10 +299,10 @@ state), and the `generation` (a backend snapshot id, an Iceberg
 snapshot UUID, a Delta CDF version).
 
 Because the witness is computed deterministically and length-prefixed
-(`src/bundle.rs:362-390`), and because `verify_witness` recomputes it
-on every read (`src/lake.rs:200-228` — the `refresh_from_bundle_dir`
+(`crates/core/src/bundle.rs:362-390`), and because `verify_witness` recomputes it
+on every read (`crates/core/src/lake.rs:200-228` — the `refresh_from_bundle_dir`
 path), a tampered sidecar cannot silently poison the cache. Test
-`fs_read_rejects_tampered_sidecar` (in `src/bundle.rs`) gates this
+`fs_read_rejects_tampered_sidecar` (in `crates/core/src/bundle.rs`) gates this
 behavior.
 
 ### 2.3 Lineage_id wiring to OpenLineage
@@ -329,12 +329,12 @@ let b = RuLakeBundle::new(
 b.write_to_dir(bundle_dir)?;
 ```
 
-(`with_lineage_id` is at `src/bundle.rs:270-273`.)
+(`with_lineage_id` is at `crates/core/src/bundle.rs:270-273`.)
 
 When a retrieval returns `SearchResult { backend, collection, id,
 score }`, the calling RAG layer can look up the cache pointer's
 witness via `lake.cache_witness_of(&(backend.into(), collection.into()))`
-(`src/lake.rs:134`) and join it back to the OpenLineage event log to
+(`crates/core/src/lake.rs:134`) and join it back to the OpenLineage event log to
 produce a citation chain like:
 
 ```
@@ -351,7 +351,7 @@ ruLake puts the receipt in the substrate.
 
 ### 2.4 PII policy passthrough
 
-The `pii_policy: Option<String>` field (`src/bundle.rs:138`) is
+The `pii_policy: Option<String>` field (`crates/core/src/bundle.rs:138`) is
 opaque to ruLake. The crate documentation is explicit about this: it
 "doesn't interpret it in v1; it passes it through so governance
 layers can enforce." For RAG pipelines this is the integration point
@@ -442,8 +442,8 @@ witness-isolated caches, fair LRU sizing across tenants.**
 
 Each tenant's collection has a unique `data_ref` (e.g.
 `s3://tenant-{id}/embeddings/`), which produces a unique witness
-under `compute_witness` (`src/bundle.rs:362`). Cache entries are
-keyed by witness (`src/cache.rs:1-10`):
+under `compute_witness` (`crates/core/src/bundle.rs:362`). Cache entries are
+keyed by witness (`crates/core/src/cache.rs:1-10`):
 
 > Wraps `ruvector_rabitq::RabitqPlusIndex`. Cache entries are keyed
 > by the [`RuLakeBundle`] SHAKE-256 witness, NOT by `(backend_id,
@@ -460,9 +460,9 @@ witness.
 
 ### 3.3 Fair LRU sizing
 
-`RuLake::with_max_cache_entries(n)` (`src/lake.rs:78`) caps the cache
+`RuLake::with_max_cache_entries(n)` (`crates/core/src/lake.rs:78`) caps the cache
 at `n` distinct compressed entries with LRU eviction over unpinned
-entries (`src/cache.rs:548-565`). For a SaaS RAG provider, this is
+entries (`crates/core/src/cache.rs:548-565`). For a SaaS RAG provider, this is
 the knob that makes capacity planning tractable:
 
 ```rust
@@ -480,7 +480,7 @@ all tenants — there is no per-tenant cache-size knob to misconfigure.
 Some SaaS scenarios need cross-tenant federation: a workspace admin
 querying across all their team members' personal corpora, a
 benchmark-eval product running queries across opted-in customer
-slices. `search_federated` (`src/lake.rs:491`) handles this
+slices. `search_federated` (`crates/core/src/lake.rs:491`) handles this
 directly, with each tenant collection as a shard:
 
 ```rust
@@ -504,7 +504,7 @@ gap that hits Weaviate and Elasticsearch federated queries.
 
 ### 3.5 Per-tenant audit and observability
 
-`RuLake::cache_stats_by_collection` (`src/lake.rs:126`) returns a
+`RuLake::cache_stats_by_collection` (`crates/core/src/lake.rs:126`) returns a
 `HashMap<CacheKey, PerBackendStats>`. For the SaaS provider this
 gives per-tenant hit rate, prime count, invalidation count, and
 shared-hit count without any extra instrumentation:
@@ -582,7 +582,7 @@ rotation and serves at compressed-index speed.
 
 The cleanest fit between ruLake's bundle protocol and a lakehouse is
 to use the table snapshot id as the bundle's `Generation`. From
-`src/bundle.rs:54-61`:
+`crates/core/src/bundle.rs:54-61`:
 
 ```rust
 pub enum Generation {
@@ -603,7 +603,7 @@ sees the mismatch and triggers a re-prime.
 
 ### 4.3 BackendAdapter trait for an Iceberg catalog
 
-The `BackendAdapter` trait (`src/backend.rs:110`) has four required
+The `BackendAdapter` trait (`crates/core/src/backend.rs:110`) has four required
 methods plus an optional fifth:
 
 ```rust
@@ -711,7 +711,7 @@ impl BackendAdapter for IcebergBackend {
 
 The crucial design move is overriding `current_bundle` to read only
 the schema (for `dim`) without pulling vectors, mirroring what
-`FsBackend::current_bundle` does (`src/fs_backend.rs:321-355`). A
+`FsBackend::current_bundle` does (`crates/core/src/fs_backend.rs:321-355`). A
 naive default implementation would call `pull_vectors` to derive
 `dim`, which on a million-row Iceberg table would be catastrophic on
 the coherence-check hot path.
@@ -722,7 +722,7 @@ The flow on query becomes:
 
 1. Query arrives. Calling code invokes
    `lake.search_one("iceberg", "research_papers", &q, 10)`.
-2. `ensure_fresh` (`src/lake.rs:638`) asks the backend for its
+2. `ensure_fresh` (`crates/core/src/lake.rs:638`) asks the backend for its
    current bundle. `IcebergBackend::current_bundle` reads the
    table's current snapshot id without pulling vectors.
 3. Witness comparison:
@@ -730,7 +730,7 @@ The flow on query becomes:
    - **Mismatch but witness already in pool** — another collection
      pointer (or another `RuLake` process via the sidecar protocol)
      primed this snapshot's witness. Pointer moves, zero prime work.
-     This is the `shared_hits` counter (`src/cache.rs:88`).
+     This is the `shared_hits` counter (`crates/core/src/cache.rs:88`).
    - **Mismatch and witness new** — pull vectors, compress with
      RaBitQ, prime the cache, serve.
 4. Search runs against the RaBitQ-compressed cache: ~0.27 ms/query
@@ -801,7 +801,7 @@ crate (and its peers `DeltaBackend`, `ParquetBackend`,
 >   numbers land in M2.
 
 A Parquet/Iceberg/Delta adapter is shaped exactly like `FsBackend`
-(`src/fs_backend.rs`) — a 250-line reference impl plus its
+(`crates/core/src/fs_backend.rs`) — a 250-line reference impl plus its
 backend-specific decoder. The trait is correctly factored to make
 this a per-adapter crate concern.
 
@@ -852,7 +852,7 @@ the changed entries.
 ### 5.3 Frozen consistency for stable model+rev
 
 For a deployed embedding model at a fixed revision, `Frozen`
-consistency (`src/cache.rs:77`) is the right mode. The semantics
+consistency (`crates/core/src/cache.rs:77`) is the right mode. The semantics
 from the source:
 
 > Caller asserts the bundle at this `(backend, collection)` key is
@@ -866,7 +866,7 @@ round-trip to the backend again.
 
 ### 5.4 Cross-pipeline sharing
 
-The witness-addressed cache (per `src/cache.rs:1-10`) means two
+The witness-addressed cache (per `crates/core/src/cache.rs:1-10`) means two
 pipelines running with the same `(model_name, model_revision,
 source_doc_hash)` share one in-memory copy. For an organization
 running multiple RAG products against the same source corpus —
@@ -874,7 +874,7 @@ research, search, customer support, internal Q&A — the embedding
 cache is shared across all of them at the substrate level, no
 coordination required.
 
-The `shared_hits` counter (`src/cache.rs:88`) reports when this
+The `shared_hits` counter (`crates/core/src/cache.rs:88`) reports when this
 happened: the cache resolved a `(backend, collection)` pointer to a
 witness already cached under another pointer, and zero prime work
 was done. For an embedding pipeline, every `shared_hit` is a
@@ -882,7 +882,7 @@ recomputation avoided.
 
 ### 5.5 Save-and-warm-restart for inference replay
 
-`save_cache_to_dir` and `warm_from_dir` (`src/lake.rs:263, 378`) let
+`save_cache_to_dir` and `warm_from_dir` (`crates/core/src/lake.rs:263, 378`) let
 the embedding cache survive process restart without re-running
 inference:
 
@@ -908,8 +908,8 @@ codes) and `table.rulake.json` (the bundle sidecar with witness).
 The bundle's witness covers all the parameters that must match the
 original, so a tampered or mismatched snapshot fails loudly:
 
-> `warm_from_dir: index dim {} != bundle dim {}` (`src/lake.rs:407`)
-> `warm_from_dir: index rerank_factor {} != bundle rerank_factor {}` (`src/lake.rs:414`)
+> `warm_from_dir: index dim {} != bundle dim {}` (`crates/core/src/lake.rs:407`)
+> `warm_from_dir: index rerank_factor {} != bundle rerank_factor {}` (`crates/core/src/lake.rs:414`)
 
 ### 5.6 Inference-on-miss backend adapter
 
@@ -1071,7 +1071,7 @@ Under the ruLake topology:
 
 The substrate guarantee is mechanical, not aspirational. Test
 `rulake_matches_direct_rabitq_on_local_backend`
-(`tests/federation_smoke.rs`) gates the byte-exact match between
+(`crates/core/tests/federation_smoke.rs`) gates the byte-exact match between
 ruLake's federation path and direct RaBitQ at the same seed.
 
 ### 6.4 Comparison with Tecton / Feast / Hopsworks
@@ -1095,7 +1095,7 @@ witness.
 ### 6.5 Memory-class tag for feature taxonomy
 
 The `memory_class: Option<String>` field on the bundle
-(`src/bundle.rs:144-154`) is intentionally opaque to ruLake but
+(`crates/core/src/bundle.rs:144-154`) is intentionally opaque to ruLake but
 useful for higher-level taxonomy. A feature store layered on top
 might set:
 
@@ -1105,7 +1105,7 @@ might set:
   embeddings.
 - `memory_class: "session"` for short-lived behavioral vectors.
 
-The `cache_stats_by_collection` (`src/lake.rs:126`) view already
+The `cache_stats_by_collection` (`crates/core/src/lake.rs:126`) view already
 gives per-collection attribution, and a future extension might
 aggregate stats by `memory_class`. For now the tag is observed
 through the bundle when feature inventory tools introspect the
@@ -1160,7 +1160,7 @@ axes:
 - **Context shards** — geo-partitioned, language-partitioned, or
   audience-partitioned slices.
 
-`search_federated` (`src/lake.rs:491`) is the query-side merge:
+`search_federated` (`crates/core/src/lake.rs:491`) is the query-side merge:
 
 ```rust
 let hits = lake.search_federated(
@@ -1175,13 +1175,13 @@ let hits = lake.search_federated(
 ```
 
 The adaptive per-shard rerank (`max(5, global_rerank / K)` —
-`src/lake.rs:474, 511-519`) keeps the rerank budget roughly
+`crates/core/src/lake.rs:474, 511-519`) keeps the rerank budget roughly
 constant in K. With `rerank_factor=20` and K=3 shards, each shard
 runs `rerank_factor=6` and the global merge produces the top-100
 correctly, with measured recall@10 ≥ 85% on clustered data
 (BENCHMARK.md "concurrent clients × shard count").
 
-The per-shard over-request `k' = k + ⌈√(k·ln S)⌉` (`src/lake.rs:546-560`)
+The per-shard over-request `k' = k + ⌈√(k·ln S)⌉` (`crates/core/src/lake.rs:546-560`)
 is the recall safety margin: at k=100, S=3, each shard returns
 top-103 (`100 + ⌈√(100·1.099)⌉ = 111`) instead of top-100, so
 data-skew across shards (one shard happening to hold a
@@ -1250,7 +1250,7 @@ assert_eq!(h1, h2);  // gated by determinism
 ```
 
 Test `rulake_matches_direct_rabitq_on_local_backend`
-(`tests/federation_smoke.rs`) is the substrate-level guarantee that
+(`crates/core/tests/federation_smoke.rs`) is the substrate-level guarantee that
 makes the assertion above mechanical, not aspirational.
 
 ### 7.5 Streaming catalog updates with bundle rotation
@@ -1268,10 +1268,10 @@ arrive every minute. A typical pattern:
    within seconds, invalidate the stale cache, and re-prime on the
    next miss.
 
-The bundle protocol's atomic write semantics (`src/bundle.rs:291-332`,
+The bundle protocol's atomic write semantics (`crates/core/src/bundle.rs:291-332`,
 test `fs_write_is_atomic_under_crash_simulation`) mean a reader
 never sees a torn sidecar even if the publisher crashes mid-write.
-The witness check on read (`src/lake.rs:200-228`) means a
+The witness check on read (`crates/core/src/lake.rs:200-228`) means a
 maliciously-tampered sidecar is rejected before any cache state is
 mutated. The result is a streaming-update path that is operationally
 simple — no central coordination, no consensus protocol — and
@@ -1326,7 +1326,7 @@ let already_seen = lake.cache_witness_of(&key) == Some(bundle.rvf_witness.clone(
 
 For chunks that arrive from three different S3 prefixes but contain
 the same content, the witness collides intentionally and the cache
-holds one copy. The `cache_refcount_of(witness)` (`src/lake.rs:147`)
+holds one copy. The `cache_refcount_of(witness)` (`crates/core/src/lake.rs:147`)
 reports how many pipelines pointed at the same witness — a direct
 "how many duplicates of this chunk" counter.
 
@@ -1358,7 +1358,7 @@ let dupes: Vec<_> = near_dupes
     .collect();
 ```
 
-The federation path (`src/lake.rs:491-560`) parallelizes the search
+The federation path (`crates/core/src/lake.rs:491-560`) parallelizes the search
 across shards via Rayon and merges by score globally, with the
 adaptive rerank keeping the per-shard cost bounded.
 
@@ -1401,7 +1401,7 @@ assert_eq!(
 log::info!("training against published RefinedWeb v1.0 ({} chunks)", n);
 ```
 
-The `warm_from_dir` path (`src/lake.rs:378-441`) verifies the
+The `warm_from_dir` path (`crates/core/src/lake.rs:378-441`) verifies the
 witness internally and rejects mismatched snapshots, so the assert
 above is belt-and-braces — the loud-failure-on-mismatch is already
 in the substrate.
@@ -1411,11 +1411,11 @@ in the substrate.
 Vector-similarity-based dedup over a billion-chunk corpus needs a
 backend that can hold a billion-row vector index. `LocalBackend` and
 `FsBackend` aren't that backend (the `MAX_PULLED_VECTORS` cap is
-100 million per `src/backend.rs:60`, deliberately conservative).
+100 million per `crates/core/src/backend.rs:60`, deliberately conservative).
 The full topology depends on the M2+ Parquet/Iceberg backends plus
 sharding to keep per-shard size in the 10-100M range. The
 cap can be raised with explicit operator review (per the comment in
-`src/backend.rs`), but the architecture for billion-row dedup
+`crates/core/src/backend.rs`), but the architecture for billion-row dedup
 still needs to break the corpus into shards of manageable size.
 
 What ships today is the dedup primitive, the federation path, the
@@ -1476,7 +1476,7 @@ generation)` chain.
 To support this aspirationally:
 
 1. **The cache value shape** — today, `CacheEntry::index` is
-   `Arc<RabitqPlusIndex>` (`src/cache.rs:213`). For KV-cache
+   `Arc<RabitqPlusIndex>` (`crates/core/src/cache.rs:213`). For KV-cache
    serving, the value would be a tensor or a tensor reference. The
    trait would need generalization, and the existing RaBitQ-specific
    APIs would need to live behind a feature flag.
@@ -1493,7 +1493,7 @@ To support this aspirationally:
    schema is much richer than a vector bundle.
 
 4. **Mutation semantics** — vector caches in ruLake are immutable
-   per-witness (per `src/cache.rs:22`: "the index is immutable once
+   per-witness (per `crates/core/src/cache.rs:22`: "the index is immutable once
    built"). KV caches are append-only as more tokens are generated.
    A KV-cache adaptation would need either witness-per-prefix-length
    or a different consistency model.
@@ -1555,7 +1555,7 @@ experiment window, or accepting the bias.
 
 ### 10.2 Frozen consistency as the substrate primitive
 
-`Consistency::Frozen` (`src/cache.rs:77`) is exactly this primitive:
+`Consistency::Frozen` (`crates/core/src/cache.rs:77`) is exactly this primitive:
 
 ```rust
 let eval_lake = RuLake::new(20, 42).with_consistency(Consistency::Frozen);
@@ -1567,7 +1567,7 @@ eval_lake.warm_from_dir(&key, "/snapshots/eval-baseline-2026-04-25/")?;
 // process has Frozen mode.
 ```
 
-The `can_skip_check_interned` path (`src/cache.rs:862-885`) handles
+The `can_skip_check_interned` path (`crates/core/src/cache.rs:862-885`) handles
 Frozen mode explicitly:
 
 ```rust
@@ -1586,7 +1586,7 @@ snapshot.
 Multi-arm experiments (control + variant + variant) need every arm
 to see the same retrieval state. Each arm runs its own RuLake
 instance in Frozen mode against a snapshot directory; the witness
-verification on `warm_from_dir` (`src/lake.rs:378-441`) ensures
+verification on `warm_from_dir` (`crates/core/src/lake.rs:378-441`) ensures
 every arm warmed against the same bytes:
 
 ```rust
@@ -1768,20 +1768,20 @@ Two known sharp edges:
 
 Per the README "Status" section and verified against the source:
 
-- `RuLake` entry point with full method surface (`src/lake.rs`).
+- `RuLake` entry point with full method surface (`crates/core/src/lake.rs`).
 - `VectorCache` with witness-addressed entries, three consistency
-  modes, LRU bound (`src/cache.rs`).
+  modes, LRU bound (`crates/core/src/cache.rs`).
 - `RuLakeBundle` with SHAKE-256 witness, atomic FS write, tamper
-  detection (`src/bundle.rs`).
+  detection (`crates/core/src/bundle.rs`).
 - `BackendAdapter` trait with `LocalBackend` (in-memory) and
   `FsBackend` (`ruvec1` binary format on disk) implementations
-  (`src/backend.rs`, `src/fs_backend.rs`).
+  (`crates/core/src/backend.rs`, `crates/core/src/fs_backend.rs`).
 - Federated search with adaptive per-shard rerank and per-shard
-  over-request (`src/lake.rs:491-560`).
+  over-request (`crates/core/src/lake.rs:491-560`).
 - Persistence: `save_cache_to_dir` / `warm_from_dir` with byte-exact
-  restore (`src/lake.rs:263-441`).
+  restore (`crates/core/src/lake.rs:263-441`).
 - Sidecar protocol: `publish_bundle` / `refresh_from_bundle_dir`
-  (`src/lake.rs:167-228`).
+  (`crates/core/src/lake.rs:167-228`).
 - 43 tests passing (21 unit + 22 integration), zero `unsafe` in
   ruLake.
 
@@ -1951,7 +1951,7 @@ data-transfer cost and tighten the latency budget.
 The crucial design decision is *where* the kernel boundary sits —
 whether it is per-query (GPU only wins above some `min_batch`) or
 per-collection (GPU pre-built indexes that serve all queries). The
-`search_batch` API (`src/lake.rs:600`) is the plug-point that makes
+`search_batch` API (`crates/core/src/lake.rs:600`) is the plug-point that makes
 per-batch GPU dispatch tractable; per-query GPU dispatch is
 unlikely to win against the warm CPU cache.
 
@@ -2020,7 +2020,7 @@ Cortex), the optimal strategy might be:
 - **Cold/large queries** — push down to the backend's vector op.
 - **Hot/repeat queries** — serve from ruLake's cache.
 
-The `BackendAdapter::supports_pushdown` flag (`src/backend.rs:143`)
+The `BackendAdapter::supports_pushdown` flag (`crates/core/src/backend.rs:143`)
 exists as a forward-compatibility hook, but no current router logic
 uses it. Determining the crossover point — at what `n`, query
 volume, and cache hit rate the pushdown wins versus the cache-prime
@@ -2052,14 +2052,14 @@ above, the relevant pieces by file:
 
 | File                              | What's there                                              |
 |-----------------------------------|-----------------------------------------------------------|
-| `src/lib.rs`                      | Module structure and public re-exports.                   |
-| `src/lake.rs`                     | `RuLake` entry point, search APIs, sidecar primitives.    |
-| `src/cache.rs`                    | `VectorCache`, `Consistency`, `CacheStats`, witness keys. |
-| `src/bundle.rs`                   | `RuLakeBundle`, `Generation`, witness computation.        |
-| `src/backend.rs`                  | `BackendAdapter` trait, `LocalBackend`, `PulledBatch`.    |
-| `src/fs_backend.rs`               | `FsBackend` reference impl, ~250 lines, useful template.  |
-| `src/error.rs`                    | `RuLakeError` enum.                                       |
-| `tests/federation_smoke.rs`       | Substrate acceptance tests, federation gates.             |
+| `crates/core/src/lib.rs`                      | Module structure and public re-exports.                   |
+| `crates/core/src/lake.rs`                     | `RuLake` entry point, search APIs, sidecar primitives.    |
+| `crates/core/src/cache.rs`                    | `VectorCache`, `Consistency`, `CacheStats`, witness keys. |
+| `crates/core/src/bundle.rs`                   | `RuLakeBundle`, `Generation`, witness computation.        |
+| `crates/core/src/backend.rs`                  | `BackendAdapter` trait, `LocalBackend`, `PulledBatch`.    |
+| `crates/core/src/fs_backend.rs`               | `FsBackend` reference impl, ~250 lines, useful template.  |
+| `crates/core/src/error.rs`                    | `RuLakeError` enum.                                       |
+| `crates/core/tests/federation_smoke.rs`       | Substrate acceptance tests, federation gates.             |
 | `examples/sidecar_daemon.rs`      | Bundle publish/refresh daemon pattern.                    |
 | `examples/warm_restart.rs`        | save → ship → warm-restart cycle.                         |
 | `BENCHMARK.md`                    | Reproducible numbers for budgeting.                       |

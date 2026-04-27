@@ -21,8 +21,8 @@ detail — there's a vertical worth exploring.
 
 The discipline this note holds:
 
-1. **Cite real API.** All pseudocode uses signatures from `src/lake.rs`,
-   `src/cache.rs`, `src/backend.rs`, `src/bundle.rs`, `src/fs_backend.rs`.
+1. **Cite real API.** All pseudocode uses signatures from `crates/core/src/lake.rs`,
+   `crates/core/src/cache.rs`, `crates/core/src/backend.rs`, `crates/core/src/bundle.rs`, `crates/core/src/fs_backend.rs`.
    No invented symbols.
 2. **Honor the M1+M1.5 line.** Today, what ships is `LocalBackend`,
    `FsBackend`, and the full cache + coherence + bundle + persistence +
@@ -85,7 +85,7 @@ impl BackendAdapter for MyBackend {
 Plus an optional `current_bundle(collection)` for backends that have a
 preferred witness representation.
 
-Witness derivation lives in `src/bundle.rs::compute_witness` and is
+Witness derivation lives in `crates/core/src/bundle.rs::compute_witness` and is
 length-prefixed + domain-separated SHAKE-256(32) over
 `(data_ref, dim, seed, rerank, generation)` with a tag byte that
 distinguishes `Generation::Num(n)` from `Generation::Opaque(bytes)` —

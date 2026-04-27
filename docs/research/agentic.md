@@ -12,8 +12,8 @@ agentic systems.**
 research operators considering ruLake as the substrate beneath an
 agent brain or orchestration layer
 **Scope:** describe how the *measured* M1 + M1.5 surface of ruLake
-(`src/lake.rs`, `src/cache.rs`, `src/bundle.rs`, `src/backend.rs`,
-`src/fs_backend.rs`) maps to the recurring memory + retrieval needs
+(`crates/core/src/lake.rs`, `crates/core/src/cache.rs`, `crates/core/src/bundle.rs`, `crates/core/src/backend.rs`,
+`crates/core/src/fs_backend.rs`) maps to the recurring memory + retrieval needs
 of agent systems. Cite code; cite ADRs; mark every gap honestly.
 **Non-scope:** building the brain, defining cognitive semantics,
 proposing reward models, ranking fits relative to vector databases on
@@ -76,8 +76,8 @@ primitive for warm-restart, (e) federation across heterogeneous
 backends, (f) per-class consistency knobs (Fresh / Eventual / Frozen),
 (g) zero-network operation when serving from cache.
 
-ruLake provides all seven by design (`src/lake.rs:445-625` and
-`src/cache.rs:294-885`), at a measured 1.00–1.03× overhead over the
+ruLake provides all seven by design (`crates/core/src/lake.rs:445-625` and
+`crates/core/src/cache.rs:294-885`), at a measured 1.00–1.03× overhead over the
 underlying RaBitQ scan on the cache-hit path
 (`docs/review/performance.md` §1; cross-checked at §8). It does so
 deliberately as **substrate**, not as a brain — ADR-156 records that
@@ -143,7 +143,7 @@ Two consequences flow from that one design choice:
    cache deduplicates them into one compressed entry with `refcount =
    2` (`cache.rs:202-205`, `:378-383`; verified by
    `two_backends_share_cache_when_witness_matches` in
-   `tests/federation_smoke.rs:242` per
+   `crates/core/tests/federation_smoke.rs:242` per
    `docs/review/capabilities.md` §2/#11). For a swarm of N agents on a
    single host, this is N× memory reduction at zero coordination cost.
 2. **Forensic chain-of-custody is a one-line check.** A regulator or
@@ -268,7 +268,7 @@ The six guarantees ADR-156 derives from this — recall, verify, forget,
 compact (deferred), rehydrate, location-transparency — are the
 substrate acceptance test. Five of six are shipped and tested:
 `brain_substrate_acceptance_recall_verify_forget_rehydrate` in
-`tests/federation_smoke.rs:766` (cited in `docs/review/capabilities.md`
+`crates/core/tests/federation_smoke.rs:766` (cited in `docs/review/capabilities.md`
 §3 ADR-156). Compact is explicitly out of scope per ADR-156.
 
 ### 2.2 Mapping the six guarantees to a real agent loop
@@ -315,7 +315,7 @@ substrate.
 Below is a sketch of how a hypothetical brain layer (call it
 `AgentBrain`) consumes ruLake. The API calls are real — every
 `lake.search_one`, `lake.invalidate_cache`, etc. is exactly as defined
-in `src/lake.rs`. The "brain decisions" — when to consolidate, what's
+in `crates/core/src/lake.rs`. The "brain decisions" — when to consolidate, what's
 a contradiction, when to rehydrate — are pseudo-code stand-ins for
 whatever cognitive policy the consumer defines.
 

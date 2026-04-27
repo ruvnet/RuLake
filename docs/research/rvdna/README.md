@@ -37,12 +37,12 @@ acceptance gates in ADR-007.
 |----------------------------------|------:|--------------------------------------------------------------------------------|
 | `README.md` (this file)          |   ~150 | Index, persona reading guides, answers to the brief's two sharpening questions |
 | `v2-spec.md`                     | ~1,800 | Canonical rvDNA v2 file-format and behaviour spec (supersedes v1's ADR-013)    |
-| `integration-with-rulake.md`     | ~1,000 | Code-level integration: `rvdna-backend/`, `mcp-rvdna/`, Console hooks         |
+| `integration-with-rulake.md`     | ~1,000 | Code-level integration: `crates/rvdna-backend/`, `crates/mcp-rvdna/`, Console hooks         |
 | `ADR-007-rvdna-as-rulake-substrate.md` |  ~750 | The decision record that binds the spec and the integration plan together     |
 
 Read order is the order they appear above. Each file cites real paths
 into v1 (`vendor/ruvector/examples/dna/`) and ruLake (`src/`,
-`mcp-server/src/`, `docs/adrs/`). No invented APIs.
+`crates/mcp-server/src/`, `docs/adrs/`). No invented APIs.
 
 ## Reading guide by persona
 
@@ -58,7 +58,7 @@ does not. You care about:
 1. **Answer to brief Q1**: v2 ships a `--profile clinical` mode
    (`v2-spec.md` §k) that pins `pii_policy: "phi-strict"` on every
    bundle, mandates an OpenLineage `lineage_id`, refuses cross-tenant
-   federation unless JWT scopes match (`mcp-server/src/auth.rs:294`
+   federation unless JWT scopes match (`crates/mcp-server/src/auth.rs:294`
    `scopes_to_caps`), and forbids `Consistency::Eventual` in favour
    of `Consistency::Fresh` or `Consistency::Frozen`. The clinical
    profile is a configuration, not a fork — research and clinical
@@ -70,9 +70,9 @@ does not. You care about:
    - §k Privacy + clinical mode
    - §l Validation test (acceptance gates)
 3. **Where to start in integration-with-rulake.md**: the
-   `mcp-rvdna/` section — the JWT scope `mcp:rvdna:clinical` is what
+   `crates/mcp-rvdna/` section — the JWT scope `mcp:rvdna:clinical` is what
    gates clinical-tier tools; the audit row shape mirrors
-   `mcp-server/src/audit.rs` so existing log pipelines work unchanged.
+   `crates/mcp-server/src/audit.rs` so existing log pipelines work unchanged.
 4. **Where to start in ADR-007**: §Decision items 6 and 7 (clinical
    profile, federation refusal under tenant mismatch); §Verification
    gate G3 (clinical replay test).
@@ -85,7 +85,7 @@ data you've already loaded once. You care about:
 
 1. **Answer to brief Q1**: v2 ships a `--profile research` (default)
    that turns on `Consistency::Eventual { ttl_ms }` and unlocks
-   `search_federated` (`src/lake.rs:521`). You can blend cohorts,
+   `search_federated` (`crates/core/src/lake.rs:521`). You can blend cohorts,
    you can cross-trial query, the witness chain still proves
    reproducibility but freshness checks are amortised.
 2. **Answer to brief Q2 (static vs streaming)**: §j Streaming
@@ -102,7 +102,7 @@ data you've already loaded once. You care about:
    - §i Cross-sample federation
    - §j Streaming biomarkers
 4. **Where to start in integration-with-rulake.md**: the
-   `rvdna-backend/` section — the T0/T1/T2 tier wiring is what makes
+   `crates/rvdna-backend/` section — the T0/T1/T2 tier wiring is what makes
    "load 100 files, <10 ms query" actually run on a workstation.
 
 ### Persona 3: Platform engineer wiring rvDNA into agents
@@ -114,16 +114,16 @@ to Python tooling. You care about:
 1. The MCP tool surface (`v2-spec.md` §h): five verbs (`rvdna_find`,
    `rvdna_call_variants`, `rvdna_translate`, `rvdna_score`,
    `rvdna_lineage`) that mirror the shape of `rulake_query` in
-   `mcp-server/src/server.rs:189`. Capability-gated. JSON-schema'd.
+   `crates/mcp-server/src/server.rs:189`. Capability-gated. JSON-schema'd.
    Audit-logged with codes from a six-code refusal vocabulary.
-2. **How v2 plugs into the existing MCP plane**: `mcp-rvdna/` is a
-   sibling crate of `mcp-server/`, not an extension. The two servers
+2. **How v2 plugs into the existing MCP plane**: `crates/mcp-rvdna/` is a
+   sibling crate of `crates/mcp-server/`, not an extension. The two servers
    can share an audit pipeline because both emit
-   `mcp-server/src/audit.rs::AuditRow` with disjoint code prefixes
+   `crates/mcp-server/src/audit.rs::AuditRow` with disjoint code prefixes
    (`RULAKE_*` vs `RVDNA_*`).
 3. **Where to start in v2-spec.md**: §h MCP tools, §m Migration
    from v1 (so your agents can read existing v1 corpora).
-4. **Where to start in integration-with-rulake.md**: the `mcp-rvdna/`
+4. **Where to start in integration-with-rulake.md**: the `crates/mcp-rvdna/`
    section and the Console hooks section (so the `Genomic` 7th
    sidebar entry is something you can demo).
 5. **Where to start in ADR-007**: §Decision items 4 and 5 (MCP tool
@@ -144,13 +144,13 @@ Concretely:
   (one-shot encode, infinite reads). The streaming mode adds a
   monotonic-clock generation bump per epoch, which causes the bundle
   witness to rotate, which causes ruLake's coherence model
-  (`src/cache.rs::Consistency`) to handle freshness correctly without
+  (`crates/core/src/cache.rs::Consistency`) to handle freshness correctly without
   v2 needing to invent a new staleness model. Streaming is just
   static with a per-epoch witness rotation policy.
 
 ## What's NOT in this corpus
 
-- A `cargo` build of `rvdna-backend/`. ADR-007 lands first; the
+- A `cargo` build of `crates/rvdna-backend/`. ADR-007 lands first; the
   scaffold is the next commit AFTER ADR-007 acceptance.
 - A regulatory-class clinical claim. v2 ships clinical *posture*
   (PHI metadata, tenant scopes, audit). Clinical *interpretation*
@@ -159,15 +159,15 @@ Concretely:
 - A new vector-search engine. ruLake's RaBitQ-compressed cache and
   HNSW substrate handle that; v2 just registers `.rvdna` sections
   with them via the existing `BackendAdapter` trait at
-  `src/backend.rs:110`.
+  `crates/core/src/backend.rs:110`.
 
 ## What ships next (after this corpus lands)
 
 1. ADR-007 review + acceptance.
-2. `rvdna-backend/` v0.0 scaffold — `Cargo.toml`, the three
+2. `crates/rvdna-backend/` v0.0 scaffold — `Cargo.toml`, the three
    `BackendAdapter` impls (T0/T1/T2), one passing round-trip test
    against a v1 `.rvdna` file from `vendor/ruvector/examples/dna/`.
-3. `mcp-rvdna/` v0.0 — `rvdna_find` only, witness-pinned, capability-
+3. `crates/mcp-rvdna/` v0.0 — `rvdna_find` only, witness-pinned, capability-
    gated by a new `mcp:rvdna:read` JWT scope.
 4. Console: a 7th sidebar entry (`Genomic`) that surfaces the
    `rvdna://bundle/{file_id}` resource and runs a witness-verify

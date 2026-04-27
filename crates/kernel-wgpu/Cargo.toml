@@ -25,7 +25,7 @@ description = "Portable GPU VectorKernel impl for ruLake via wgpu (ADR-157)"
 readme = "README.md"
 
 [dependencies]
-rulake   = { path = "..", version = "2.3.0-alpha.1" }
+rulake   = { path = "../core", version = "2.3.0-alpha.1" }
 wgpu     = "22"
 pollster = "0.3"
 bytemuck = { version = "1", features = ["derive"] }

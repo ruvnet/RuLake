@@ -4,13 +4,13 @@ Verifiable vector memory dashboard for AI agents. Per
 [ADR-006](../docs/adrs/ADR-006-rulake-console-vite-github-pages.md).
 
 Deployed to **https://ruvnet.github.io/RuLake/** on every push to `main`
-that touches `ui/` or `node-wasm/` (CI: `.github/workflows/release-ui.yml`).
+that touches `ui/` or `sdk/node-wasm/` (CI: `.github/workflows/release-ui.yml`).
 
 ## Run locally
 
 ```bash
-cd node-wasm && ./build.sh   # one-time: build the wasm sibling
-cd ../ui
+cd ../sdk/node-wasm && ./build.sh   # one-time: build the wasm sibling
+cd ../../ui
 npm install
 npm run dev                  # http://127.0.0.1:5173/RuLake/
 ```

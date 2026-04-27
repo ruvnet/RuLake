@@ -153,7 +153,7 @@ For a one-command demo of all the cross-component wires:
 - **No wasm-bindgen binding to the full ruLake crate.** v2 — see
   [ADR-003 §A](../docs/adrs/sdk/ADR-003-nodejs-typescript-sdk.md)
   on why WASM-first loses AVX-512 popcnt and rayon parallel fan-out.
-  The pyo3 (`python/`) and napi-rs (`node/`) bindings now ship the full
+  The pyo3 (`sdk/python/`) and napi-rs (`sdk/node/`) bindings now ship the full
   surface — see those directories' READMEs to install / build / test.
   The bundle-protocol examples in this directory remain the lighter
   cross-language story for cases where a native binary is too heavy.

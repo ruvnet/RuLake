@@ -30,7 +30,7 @@ from the code**. The 20-method `RuLake` surface, the
 `save_cache_to_dir` / `warm_from_dir`, the three consistency modes,
 adaptive per-shard rerank, batch API, LRU, `LocalBackend` and
 `FsBackend` are all implemented and exercised by 37 tests in this
-crate (19 in `tests/federation_smoke.rs`, plus inline tests in
+crate (19 in `crates/core/tests/federation_smoke.rs`, plus inline tests in
 `bundle.rs`, `backend.rs`, `fs_backend.rs`). The README's headline
 "83 tests" is a workspace-wide count, not this crate alone — minor
 clarity issue. The README oversells a few things — the
@@ -95,7 +95,7 @@ For a v1 cache-first vector execution fabric, ruLake **delivers what
 the ADRs say it delivers and tests what it ships**. The M1 + M1.5
 + persistence story is mechanical, not aspirational — the
 `brain_substrate_acceptance_recall_verify_forget_rehydrate` test
-(`tests/federation_smoke.rs:766`) is the proof. The architecture
+(`crates/core/tests/federation_smoke.rs:766`) is the proof. The architecture
 choices that hold up under static review:
 
 1. **Witness-anchored content-addressed cache** — correctly

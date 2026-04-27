@@ -27,7 +27,7 @@ description = "AVX-512 VectorKernel impl for ruLake (ADR-157)"
 readme = "README.md"
 
 [dependencies]
-rulake = { path = "..", version = "2.3.0-alpha.1" }
+rulake = { path = "../core", version = "2.3.0-alpha.1" }
 
 [dev-dependencies]
 criterion = "0.5"

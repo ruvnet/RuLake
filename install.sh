@@ -45,14 +45,14 @@ if [[ "${RULAKE_SKIP_SUBMODULES:-0}" != "1" ]]; then
     fi
 fi
 
-# 3. Build
+# 3. Build (the root crate now lives at crates/core/ per the issue #12 reorg).
 bold "==> cargo build"
-cargo build
+cargo build --manifest-path crates/core/Cargo.toml
 
 # 4. Tests
 if [[ "${RULAKE_SKIP_TEST:-0}" != "1" ]]; then
     bold "==> cargo test --release"
-    cargo test --release
+    cargo test --release --manifest-path crates/core/Cargo.toml
 else
     warn "skipping tests (RULAKE_SKIP_TEST=1)"
 fi
@@ -60,12 +60,11 @@ fi
 # 5. Smoke demo
 if [[ "${RULAKE_SKIP_DEMO:-0}" != "1" ]]; then
     bold "==> cargo run --release --bin rulake-demo -- --fast"
-    cargo run --release --bin rulake-demo -- --fast
+    cargo run --release --manifest-path crates/core/Cargo.toml --bin rulake-demo -- --fast
 else
     warn "skipping smoke demo (RULAKE_SKIP_DEMO=1)"
 fi
 
 bold "==> install complete"
-echo "    Try:  cargo run --release --example sidecar_daemon"
-echo "    Or:   cargo run --release --example warm_restart"
-echo "    Or:   cargo run --release --bin rulake-demo            # full ~2 min benchmark"
+echo "    Try:  cargo run --release --manifest-path crates/core/Cargo.toml --bin rulake-demo   # full ~2 min benchmark"
+echo "    Or:   see examples/ (Rust + Node + Python + WASM + GPU samples) at the repo root"

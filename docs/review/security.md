@@ -65,11 +65,11 @@ is validated against a strict whitelist.
 #### M1 — `Mutex` poisoning on panic propagates as `unwrap()`
 
 **Locations:**
-`src/cache.rs:330, 343, 357, 380, 425, 514, 612, 629, 639, 645, 668, 679, 683, 689, 735, 806, 853, 870, 882`
+`crates/core/src/cache.rs:330, 343, 357, 380, 425, 514, 612, 629, 639, 645, 668, 679, 683, 689, 735, 806, 853, 870, 882`
 (every `self.inner.lock().unwrap()`).
-`src/lake.rs:92, 104, 678` (`self.backends.read().unwrap() / write().unwrap()`).
-`src/backend.rs:207, 226, 261, 269, 288, 313` (`self.inner.read().unwrap() / write().unwrap()`).
-`src/fs_backend.rs:92, 205, 236` (`self.index.write().unwrap() / read().unwrap()`).
+`crates/core/src/lake.rs:92, 104, 678` (`self.backends.read().unwrap() / write().unwrap()`).
+`crates/core/src/backend.rs:207, 226, 261, 269, 288, 313` (`self.inner.read().unwrap() / write().unwrap()`).
+`crates/core/src/fs_backend.rs:92, 205, 236` (`self.index.write().unwrap() / read().unwrap()`).
 
 **Issue.** `std::sync::Mutex::lock()` returns `Result<MutexGuard,
 PoisonError>` — `Err` if a previous lock-holder panicked. Every
@@ -116,7 +116,7 @@ exploitable from the network or a malicious bundle.
 
 #### M2 — Default `BackendAdapter::current_bundle` pulls every vector on every coherence check
 
-**Location:** `src/backend.rs:125-141`.
+**Location:** `crates/core/src/backend.rs:125-141`.
 
 **Issue.** The default-impl reads:
 
@@ -159,7 +159,7 @@ exploit, but the consequences are catastrophic to throughput.
 
 #### M3 — `FsBackend` is vulnerable to symlink / TOCTOU at the root directory itself
 
-**Location:** `src/fs_backend.rs:62-74` `FsBackend::new`,
+**Location:** `crates/core/src/fs_backend.rs:62-74` `FsBackend::new`,
 `fs_backend.rs:166-202` `write`, `fs_backend.rs:240-309` `pull_vectors`.
 
 **Issue.** `FsBackend::new` accepts any `root: impl AsRef<Path>` and
@@ -194,7 +194,7 @@ ruLake's data directory.
 
 #### M4 — `Generation::Opaque(String)` is unbounded inside `PulledBatch`
 
-**Location:** `src/bundle.rs:60`, used implicitly via
+**Location:** `crates/core/src/bundle.rs:60`, used implicitly via
 `backend.current_bundle()` returning a `RuLakeBundle` containing it.
 
 **Issue.** `from_json` caps `data_ref`, `pii_policy`, `lineage_id`,
@@ -221,7 +221,7 @@ right after the backend returns its bundle (`lake.rs:648`).
 
 #### M5 — `LocalBackend::append` does not bound vector length per-call
 
-**Location:** `src/backend.rs:225-249`.
+**Location:** `crates/core/src/backend.rs:225-249`.
 
 **Issue.** `LocalBackend::append(collection, id, vector)` accepts a
 single `Vec<f32>` and only checks dimension (`vector.len() == entry.dim`).
@@ -276,7 +276,7 @@ issue, not exploitable as code.
 
 #### L1 — `unwrap()` on infallible array slice → array conversions in `FsBackend`
 
-**Location:** `src/fs_backend.rs:259, 260, 296, 345`.
+**Location:** `crates/core/src/fs_backend.rs:259, 260, 296, 345`.
 
 ```rust
 let count_u64 = u64::from_le_bytes(header[8..16].try_into().unwrap());
@@ -303,7 +303,7 @@ intent is clear.
 
 #### L2 — `mtime` clock skew silently rounds to 0 on pre-epoch files
 
-**Location:** `src/fs_backend.rs:215-227`.
+**Location:** `crates/core/src/fs_backend.rs:215-227`.
 
 ```rust
 let secs = mtime
@@ -328,7 +328,7 @@ mtime.
 
 #### L3 — `serde_json::from_str` is invoked after a length cap, but with default recursion depth
 
-**Location:** `src/bundle.rs:225`.
+**Location:** `crates/core/src/bundle.rs:225`.
 
 **Issue.** `serde_json::from_str(s)` is called with the default
 serde config. Deeply nested JSON (within the 64 KiB cap) could still
@@ -344,7 +344,7 @@ default-cap recursion.
 
 #### L4 — Per-`Lake.with_max_cache_entries` mutation re-creates the cache, losing prior state
 
-**Location:** `src/lake.rs:78-87`.
+**Location:** `crates/core/src/lake.rs:78-87`.
 
 ```rust
 pub fn with_max_cache_entries(self, n: usize) -> Self {
@@ -371,7 +371,7 @@ warning when the cache is non-empty at call time.
 
 #### L5 — Witness is SHAKE-256 truncated to 32 bytes; collision space is 2^128 (not weak, but worth noting)
 
-**Location:** `src/bundle.rs:359-390`.
+**Location:** `crates/core/src/bundle.rs:359-390`.
 
 `compute_witness` uses `SHAKE-256` with output length 32 bytes (256
 bits). Collision resistance is `2^128`. For a content-addressed cache,
@@ -382,7 +382,7 @@ this is overwhelmingly safe — a deliberate collision would require
 
 #### L6 — Bundle file written without explicit permissions
 
-**Location:** `src/bundle.rs:311-319` and `src/lake.rs:296-318`.
+**Location:** `crates/core/src/bundle.rs:311-319` and `crates/core/src/lake.rs:296-318`.
 
 `File::create` uses platform defaults (typically `0644` on Unix), so
 any user on the same host can read the witness sidecar (which is
@@ -399,7 +399,7 @@ to set `0600`. Or restrict via parent directory perms.
 
 #### L7 — `LocalBackend.append`'s `generation = generation.wrapping_add(1)` can wrap
 
-**Location:** `src/backend.rs:220, 247`.
+**Location:** `crates/core/src/backend.rs:220, 247`.
 
 **Issue.** `wrapping_add(1)` on a `u64` won't crash, but if a backend
 ever wraps from `u64::MAX` back to 0, two distinct collection states
@@ -417,7 +417,7 @@ new writes when exhausted.
 
 #### I1 — `validate_pulled_batch` runs **after** the heavy parts of `pull_vectors` complete
 
-**Location:** `src/cache.rs:377` calls `validate_pulled_batch(&batch)`,
+**Location:** `crates/core/src/cache.rs:377` calls `validate_pulled_batch(&batch)`,
 but `batch` was already constructed by `backend.pull_vectors(...)`
 which means `LocalBackend` already cloned vectors
 (`backend.rs:280-282`) and `FsBackend` already read every byte from
@@ -445,7 +445,7 @@ deliberately.
 
 #### I3 — `FsBackend::write` overwrites the destination via `rename`
 
-**Location:** `src/fs_backend.rs:193-199`.
+**Location:** `crates/core/src/fs_backend.rs:193-199`.
 
 `fs::rename(tmp, path)` will replace an existing file at `path`. If
 two processes are writing the same `(collection, filename)` pair,
@@ -564,7 +564,7 @@ gated behind explicit opt-in.
 
 ## 4. Path-traversal defenses — `FsBackend::validate_filename`
 
-`src/fs_backend.rs:105-136`:
+`crates/core/src/fs_backend.rs:105-136`:
 
 ```rust
 fn validate_filename(f: &str) -> Result<()> {

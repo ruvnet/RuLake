@@ -2,7 +2,7 @@
 
 ## TL;DR
 
-The ruLake MCP server is a Rust-native binary (`rulake-mcp`, crate `ruvector-rulake-mcp` at `mcp-server/`) that exposes the in-process `RuLake` cache as a Model Context Protocol surface — eight tools at v0.9, scoped through a four-tier capability model (`read` / `publish` / `admin` / `internal`) that intersects server-wide CLI flags with per-token JWT scopes on every call. It speaks stdio (Claude Desktop / Cursor / Cline / Inspector — parent-process trust) and Streamable HTTP (the spec-current 2025-11-25 remote transport) from the same binary, runs every `RuLake::*` call on a bounded rayon worker pool with structured backpressure, and emits a JSONL audit row plus a 256-entry in-memory tail buffer for every tool invocation regardless of outcome. The server is the prototype consumer for ADR-155 §M4 governance and the load-bearing claim is that no tool returns data when the witness check fails.
+The ruLake MCP server is a Rust-native binary (`rulake-mcp`, crate `ruvector-rulake-mcp` at `crates/mcp-server/`) that exposes the in-process `RuLake` cache as a Model Context Protocol surface — eight tools at v0.9, scoped through a four-tier capability model (`read` / `publish` / `admin` / `internal`) that intersects server-wide CLI flags with per-token JWT scopes on every call. It speaks stdio (Claude Desktop / Cursor / Cline / Inspector — parent-process trust) and Streamable HTTP (the spec-current 2025-11-25 remote transport) from the same binary, runs every `RuLake::*` call on a bounded rayon worker pool with structured backpressure, and emits a JSONL audit row plus a 256-entry in-memory tail buffer for every tool invocation regardless of outcome. The server is the prototype consumer for ADR-155 §M4 governance and the load-bearing claim is that no tool returns data when the witness check fails.
 
 ## Introduction
 
@@ -18,11 +18,11 @@ The deeper reason the MCP server matters is structural: it is the first place ru
 
 ADR-004 makes nine numbered milestone decisions through versions v0.1 → v0.9. The load-bearing four are the library choice, the crate placement, the capability-gated tool surface, and the security posture (OAuth 2.1 + PRM + RFC 8707 Resource Indicators on the HTTP path).
 
-The first is **`rmcp` 1.x as the wire library**. ADR-004 §1 walks the field — `rmcp` is the official SDK, tracks the spec, ships `rmcp-macros` for `#[tool]` ergonomics — and rejects the alternatives. The crate dependencies live in `mcp-server/Cargo.toml:39`-area: `rmcp = { version = "1.5", default-features = false, features = ["server", "transport-io", "transport-streamable-http-server", "macros", "schemars"] }` plus the supporting stack (`hyper 1`, `tower 0.5`, `tokio 1.39`, `governor 0.7` for layered rate buckets, `flume 0.11` + `rayon 1.10` for the bounded worker pool, `jsonwebtoken 9` for RS256/ES256 JWT validation in v0.5, `tokio-rustls 0.26` for mTLS in v0.6).
+The first is **`rmcp` 1.x as the wire library**. ADR-004 §1 walks the field — `rmcp` is the official SDK, tracks the spec, ships `rmcp-macros` for `#[tool]` ergonomics — and rejects the alternatives. The crate dependencies live in `crates/mcp-server/Cargo.toml:39`-area: `rmcp = { version = "1.5", default-features = false, features = ["server", "transport-io", "transport-streamable-http-server", "macros", "schemars"] }` plus the supporting stack (`hyper 1`, `tower 0.5`, `tokio 1.39`, `governor 0.7` for layered rate buckets, `flume 0.11` + `rayon 1.10` for the bounded worker pool, `jsonwebtoken 9` for RS256/ES256 JWT validation in v0.5, `tokio-rustls 0.26` for mTLS in v0.6).
 
-The second is **crate placement as a sibling at `mcp-server/`**, not `bin/rulake-mcp` inside the main crate and not `crates/rulake-mcp/` as a workspace member. ADR-001 explicitly rejects a root workspace, and ADR-004 §2 rejects the bin-inside-main-crate option because it would force every `cargo add rulake` consumer to pull tokio + hyper + rustls + rmcp into their dep graph (~50 transitive deps; build doubles for serving-process tooling no library consumer needs). The sibling-crate pattern mirrors `python/` and `node/` and consumes the parent crate via `rulake = { path = "..", version = "2.2.0" }` (`mcp-server/Cargo.toml:33`) under the same submodule discipline ADR-001 commits to.
+The second is **crate placement as a sibling at `crates/mcp-server/`**, not `bin/rulake-mcp` inside the main crate and not `crates/rulake-mcp/` as a workspace member. ADR-001 explicitly rejects a root workspace, and ADR-004 §2 rejects the bin-inside-main-crate option because it would force every `cargo add rulake` consumer to pull tokio + hyper + rustls + rmcp into their dep graph (~50 transitive deps; build doubles for serving-process tooling no library consumer needs). The sibling-crate pattern mirrors `python/` and `node/` and consumes the parent crate via `rulake = { path = "..", version = "2.2.0" }` (`crates/mcp-server/Cargo.toml:33`) under the same submodule discipline ADR-001 commits to.
 
-The third is the **capability-gated tool surface**. The four-tier model is `read` / `publish` / `admin` / `internal` (ADR-004 §4b), with the load-bearing intersection rule: server-wide CLI flags from `--capabilities` × per-token JWT scopes are intersected at request time and that intersection gates both `tools/list` visibility and per-call `require_cap` enforcement. The eight tools that ship at v0.9 (per ADR-004 §Status table and `mcp-server/src/server.rs:613`-area `required_cap_for_tool`):
+The third is the **capability-gated tool surface**. The four-tier model is `read` / `publish` / `admin` / `internal` (ADR-004 §4b), with the load-bearing intersection rule: server-wide CLI flags from `--capabilities` × per-token JWT scopes are intersected at request time and that intersection gates both `tools/list` visibility and per-call `require_cap` enforcement. The eight tools that ship at v0.9 (per ADR-004 §Status table and `crates/mcp-server/src/server.rs:613`-area `required_cap_for_tool`):
 
 | tool | tier | wraps |
 |---|---|---|
@@ -35,14 +35,14 @@ The third is the **capability-gated tool surface**. The four-tier model is `read
 | `rulake_warm_from_dir` | admin | restore from disk (returns vector count) |
 | `rulake_invalidate_cache` | admin | drop pointer (substrate forget) |
 
-`tools/list` filters by the request's effective `CapabilitySet`. A read-only caller sees three tools (`rulake_query`, `rulake_list_backends`, `rulake_list_collections`); admin sees all eight. The `tool_handler` macro at `mcp-server/src/server.rs:712`-area emits the `ServerHandler` impl whose `list_tools` method (line 745) walks `tool_router.list_all()`, filters by `effective.has(required_cap_for_tool(&t.name))`, and returns the visible subset.
+`tools/list` filters by the request's effective `CapabilitySet`. A read-only caller sees three tools (`rulake_query`, `rulake_list_backends`, `rulake_list_collections`); admin sees all eight. The `tool_handler` macro at `crates/mcp-server/src/server.rs:712`-area emits the `ServerHandler` impl whose `list_tools` method (line 745) walks `tool_router.list_all()`, filters by `effective.has(required_cap_for_tool(&t.name))`, and returns the visible subset.
 
 The fourth is the **security posture**. stdio has no auth (parent-process trust); Streamable HTTP has mandatory auth (bearer / OAuth 2.1 / mTLS, in priority order). The OAuth scope→capability map is fixed in v1: `mcp:rulake:read` → `Capability::Read`; `mcp:rulake:publish` → `Capability::Publish` (also requires Read); `mcp:rulake:admin` → `Capability::Admin` (also requires Publish + Read). Replay protection is layered: the per-request `MCP-Request-Id` nonce window (last 10 k seen, evicts oldest, replays inside the window rejected with HTTP 409); session binding to `(principal, client_id, mTLS-cert-fingerprint)` so a stolen token + new client cannot inherit an open session. v0.5 added RS256/ES256 JWT support with JWKS hot rotation (commit `0c3801c`). v0.6 added mTLS plus the `rulake://bundle/{backend}/{collection}` resource (commit `d100073`). v0.8 added per-call `CapabilitySet` from JWT scopes and HTTP backpressure (commit `67fc821`). The full per-version table lives in ADR-004 §Status.
 
 | trade-off | what got picked | what got rejected | why |
 |---|---|---|---|
 | library | `rmcp` 1.x official SDK | hand-rolled JSON-RPC, third-party libs | spec at 4 revisions in 18 months; first-party tracks. |
-| crate placement | sibling at `mcp-server/` | `bin/` in main crate, workspace member | bin-in-main forces tokio/hyper/rustls into every library consumer; workspace forbidden by ADR-001. |
+| crate placement | sibling at `crates/mcp-server/` | `bin/` in main crate, workspace member | bin-in-main forces tokio/hyper/rustls into every library consumer; workspace forbidden by ADR-001. |
 | transports | stdio + Streamable HTTP, no SSE | HTTP+SSE legacy | SSE deprecated since 2025-03-26; CVE-2025-6515 attacked the two-endpoint shape. |
 | public tool | `rulake_query` (intent-shaped) | exposing 8 low-level kernel tools | "MCP is the decision layer, not a thin transport"; agent gets one tool, ops sees the kernel under `internal`. |
 | auth | OAuth 2.1 + PRM + RFC 8707, plus bearer (dev-only) and mTLS | OAuth 2.0, DCR (Dynamic Client Registration), no auth | spec mandates 2.1 patterns; DCR enlarges attack surface. |
@@ -64,7 +64,7 @@ The three MCP resources (URI-addressable read-only data, registered under the `r
 | `rulake://bundle/{backend}/{collection}` | `cache_witness_of` (cheap path) | live witness for the (backend, collection); never invokes the default `current_bundle` impl that would do a full pull |
 | `rulake://audit/tail` | `AuditSink::tail(256)` | last ≤256 audit lines as JSON array (v0.10, closes ADR-006 server-gap §V #2) |
 
-The bundle resource is load-bearing for browser callers — the Console's Audit and Bundles screens read it without needing audit-file paths or shell access. The cheap-path discipline (read the cache pointer, never trigger the default `current_bundle` impl that would pull from the backend) is enforced at `mcp-server/src/server.rs:888`-area.
+The bundle resource is load-bearing for browser callers — the Console's Audit and Bundles screens read it without needing audit-file paths or shell access. The cheap-path discipline (read the cache pointer, never trigger the default `current_bundle` impl that would pull from the backend) is enforced at `crates/mcp-server/src/server.rs:888`-area.
 
 A worked example. An agent uses Claude Desktop's MCP client to query a ruLake exposed over stdio:
 
@@ -81,25 +81,25 @@ A worked example. An agent uses Claude Desktop's MCP client to query a ruLake ex
 }
 ```
 
-The planner walks the request, consults `cache_stats_by_collection`, picks `search_federated` over `local + fs-prod`, runs the call on the bounded worker pool. The response carries the 10 hits in `data`, plus a decision block whose `reason_code: STALE_CACHE_REMOTE_VALID` and `reason: "cache stale on local backend; witness valid on fs-prod"` lets the calling agent log and adapt. The audit row at `mcp-server/src/audit.rs::AuditEntry` records the full shape — `ts`, `transport: "stdio"`, `principal: "stdio:local"`, `tool: "rulake_query"`, `intent: "search"`, `outcome: "ok"`, `result_size: 10`, `trust_level: "verified"`, `duration_ms: 1.7`, `policy_decision: { capability_required: "read", capability_granted: ["read"] }`, `decision: { ... }` — and tees a copy into the 256-entry tail ring (`mcp-server/src/audit.rs:111`-area) before writing to the file or stderr sink.
+The planner walks the request, consults `cache_stats_by_collection`, picks `search_federated` over `local + fs-prod`, runs the call on the bounded worker pool. The response carries the 10 hits in `data`, plus a decision block whose `reason_code: STALE_CACHE_REMOTE_VALID` and `reason: "cache stale on local backend; witness valid on fs-prod"` lets the calling agent log and adapt. The audit row at `crates/mcp-server/src/audit.rs::AuditEntry` records the full shape — `ts`, `transport: "stdio"`, `principal: "stdio:local"`, `tool: "rulake_query"`, `intent: "search"`, `outcome: "ok"`, `result_size: 10`, `trust_level: "verified"`, `duration_ms: 1.7`, `policy_decision: { capability_required: "read", capability_granted: ["read"] }`, `decision: { ... }` — and tees a copy into the 256-entry tail ring (`crates/mcp-server/src/audit.rs:111`-area) before writing to the file or stderr sink.
 
 ## Trust & correctness contract — JWT-scope → CapabilitySet gate
 
 The trust contract for ADR-004 is the JWT-scope-to-CapabilitySet gate. Every tool call passes through the same dual enforcement:
 
-`mcp-server/src/server.rs:602` (`require_cap`) is the per-call gate. It calls `crate::policy::effective_caps(caps)` (the server-wide × per-request task-local intersection) and `effective.require(required)`, returning `McpError::invalid_request` on refusal. The same `effective_caps` is consulted by `list_tools` at `mcp-server/src/server.rs:745`-area, so an agent whose JWT only grants `read` sees only read-tier tools even on a server started with `--capabilities admin`. An adversary who guesses tool names cannot bypass the visibility filter to call them — the per-call gate fails the request even if `tools/list` were spoofed.
+`crates/mcp-server/src/server.rs:602` (`require_cap`) is the per-call gate. It calls `crate::policy::effective_caps(caps)` (the server-wide × per-request task-local intersection) and `effective.require(required)`, returning `McpError::invalid_request` on refusal. The same `effective_caps` is consulted by `list_tools` at `crates/mcp-server/src/server.rs:745`-area, so an agent whose JWT only grants `read` sees only read-tier tools even on a server started with `--capabilities admin`. An adversary who guesses tool names cannot bypass the visibility filter to call them — the per-call gate fails the request even if `tools/list` were spoofed.
 
-The single source of truth for tool→capability mapping is `required_cap_for_tool` at `mcp-server/src/server.rs:613`. The default for any unknown tool is `Capability::Internal`, which is invisible until `--capabilities internal` is granted; ADR-004 §4b explicitly notes "Safer than defaulting to Read." The mapping is one place; both the visibility filter and the per-call gate consult it.
+The single source of truth for tool→capability mapping is `required_cap_for_tool` at `crates/mcp-server/src/server.rs:613`. The default for any unknown tool is `Capability::Internal`, which is invisible until `--capabilities internal` is granted; ADR-004 §4b explicitly notes "Safer than defaulting to Read." The mapping is one place; both the visibility filter and the per-call gate consult it.
 
-The audit-symmetry property (closed by commit `56b497b`, R-MCP-1 from `docs/research/security/shipping-substrates-v2.md`) is the second arm of the contract. Before the fix, `rulake_query` emitted a fully-shaped `AuditEntry` with `PolicyDecision` on every outcome (`ok` / `refused` / `degraded` / `error`) but the five mutation handlers (`rulake_publish_bundle`, `rulake_refresh_from_bundle_dir`, `rulake_save_cache_to_dir`, `rulake_warm_from_dir`, `rulake_invalidate_cache`) emitted nothing — operators had no audit evidence for cache-mutation activity. The fix at `mcp-server/src/server.rs:551`-area is a private `audit_mutation` helper that inspects a `Result<T, McpError>`, derives `outcome` (`ok` / `degraded` / `error` / `refused`) and `code` (`RULAKE_DEGRADED` / `RULAKE_INTERNAL` / `CAP_DENIED`) from the error message prefix, and emits a fully-shaped `AuditEntry`. Every mutation handler wraps its body in an async block and calls the helper exactly once before returning. The audit log is now symmetric across read and write paths.
+The audit-symmetry property (closed by commit `56b497b`, R-MCP-1 from `docs/research/security/shipping-substrates-v2.md`) is the second arm of the contract. Before the fix, `rulake_query` emitted a fully-shaped `AuditEntry` with `PolicyDecision` on every outcome (`ok` / `refused` / `degraded` / `error`) but the five mutation handlers (`rulake_publish_bundle`, `rulake_refresh_from_bundle_dir`, `rulake_save_cache_to_dir`, `rulake_warm_from_dir`, `rulake_invalidate_cache`) emitted nothing — operators had no audit evidence for cache-mutation activity. The fix at `crates/mcp-server/src/server.rs:551`-area is a private `audit_mutation` helper that inspects a `Result<T, McpError>`, derives `outcome` (`ok` / `degraded` / `error` / `refused`) and `code` (`RULAKE_DEGRADED` / `RULAKE_INTERNAL` / `CAP_DENIED`) from the error message prefix, and emits a fully-shaped `AuditEntry`. Every mutation handler wraps its body in an async block and calls the helper exactly once before returning. The audit log is now symmetric across read and write paths.
 
-The witness-fail-closed posture is non-negotiable. Every tool that touches an on-disk bundle (`rulake_publish_bundle`, `rulake_refresh_from_bundle_dir`, `rulake_warm_from_dir`, the `rulake://bundle/...` resource) propagates `RuLakeBundle::read_from_dir`'s witness verification (`src/bundle.rs:340`-area). A `witness_verified: false` response is never silently served — the tool returns `isError: true` with the expected and actual witnesses in the body. The 256-entry tail ring at `mcp-server/src/audit.rs:31` (`TAIL_CAPACITY`) tees every emit through `mcp-server/src/audit.rs:111`-area before writing to the file/stderr sink, so the resource snapshot reflects what was *attempted* even if the file write failed (lock poisoned, disk full).
+The witness-fail-closed posture is non-negotiable. Every tool that touches an on-disk bundle (`rulake_publish_bundle`, `rulake_refresh_from_bundle_dir`, `rulake_warm_from_dir`, the `rulake://bundle/...` resource) propagates `RuLakeBundle::read_from_dir`'s witness verification (`crates/core/src/bundle.rs:340`-area). A `witness_verified: false` response is never silently served — the tool returns `isError: true` with the expected and actual witnesses in the body. The 256-entry tail ring at `crates/mcp-server/src/audit.rs:31` (`TAIL_CAPACITY`) tees every emit through `crates/mcp-server/src/audit.rs:111`-area before writing to the file/stderr sink, so the resource snapshot reflects what was *attempted* even if the file write failed (lock poisoned, disk full).
 
-The bench gate (commit `8ce3689`, `mcp-server/benches/audit_sink.rs` and `mcp-server/benches/tools_list_filter.rs`) measures the contract's hot paths. Headline numbers from ruvultra (criterion v0.5): audit emit at the 256-entry ring boundary = 1.27 µs (push-only vs push-pop); tools/list capability filter at 1/2/3 server-wide caps = 400-570 ns; `CapabilitySet::from_csv` at 1/8/64 tokens stays bounded. The numbers exist so a regression ("the audit sink got 10× slower") is a CI-detectable degradation, not a tail-latency surprise.
+The bench gate (commit `8ce3689`, `crates/mcp-server/benches/audit_sink.rs` and `crates/mcp-server/benches/tools_list_filter.rs`) measures the contract's hot paths. Headline numbers from ruvultra (criterion v0.5): audit emit at the 256-entry ring boundary = 1.27 µs (push-only vs push-pop); tools/list capability filter at 1/2/3 server-wide caps = 400-570 ns; `CapabilitySet::from_csv` at 1/8/64 tokens stays bounded. The numbers exist so a regression ("the audit sink got 10× slower") is a CI-detectable degradation, not a tail-latency surprise.
 
 ## Reference implementation status
 
-The crate `ruvector-rulake-mcp` v0.9 lives at `mcp-server/`. The server has shipped through nine numbered milestones (`docs/adrs/sdk/ADR-004-rulake-mcp-server.md:14`-area):
+The crate `ruvector-rulake-mcp` v0.9 lives at `crates/mcp-server/`. The server has shipped through nine numbered milestones (`docs/adrs/sdk/ADR-004-rulake-mcp-server.md:14`-area):
 
 | version | commit | headline |
 |---|---|---|
@@ -115,11 +115,11 @@ The crate `ruvector-rulake-mcp` v0.9 lives at `mcp-server/`. The server has ship
 
 What ships at v0.9:
 
-- Eight MCP tools per the table above; `#[tool]` macros decorate the methods on `RuLakeMcpServer` at `mcp-server/src/server.rs:191`-area.
-- Three rollup resources (`rulake://stats`, `rulake://stats/by-backend`, `rulake://audit/tail` from v0.10 commit `e2c2402`) plus per-(backend, collection) `rulake://bundle/...` resources synthesised from `cache_stats_by_collection` (`mcp-server/src/server.rs:805`-area).
-- stdio transport (`mcp-server/src/server.rs:179`-area) plus Streamable HTTP (`mcp-server/src/http.rs`).
+- Eight MCP tools per the table above; `#[tool]` macros decorate the methods on `RuLakeMcpServer` at `crates/mcp-server/src/server.rs:191`-area.
+- Three rollup resources (`rulake://stats`, `rulake://stats/by-backend`, `rulake://audit/tail` from v0.10 commit `e2c2402`) plus per-(backend, collection) `rulake://bundle/...` resources synthesised from `cache_stats_by_collection` (`crates/mcp-server/src/server.rs:805`-area).
+- stdio transport (`crates/mcp-server/src/server.rs:179`-area) plus Streamable HTTP (`crates/mcp-server/src/http.rs`).
 - Auth modes: bearer (constant-time compare via `subtle`, dev-only on public bind), OAuth 2.1 / JWT with RS256/ES256 (`auth.rs`, `jwks.rs`), mTLS (`mtls.rs`). Replay protection in `replay.rs` and `sessions.rs`. Layered rate buckets via `governor` in `ratelimit.rs`. Bounded worker pool in `workers.rs` (`flume` channel of size `--max-inflight` over `rayon::ThreadPool` of size `cores * 2`).
-- JSONL audit sink with 256-entry tail ring (`mcp-server/src/audit.rs:31`). Audit-symmetry fix from commit `56b497b` (R-MCP-1) is in place — every mutation handler calls `audit_mutation` (`mcp-server/src/server.rs:551`).
+- JSONL audit sink with 256-entry tail ring (`crates/mcp-server/src/audit.rs:31`). Audit-symmetry fix from commit `56b497b` (R-MCP-1) is in place — every mutation handler calls `audit_mutation` (`crates/mcp-server/src/server.rs:551`).
 - Tests at v0.9: 37 unit + 8 e2e (HTTP) + 1 ignored (rmcp SSE-keepalive, commit `fdc2aee`) + 20 smoke + 1 doc-test = **65 passing, 1 ignored** per ADR-004 §Status.
 - Criterion benches added in commit `8ce3689`: `audit_sink.rs`, `tools_list_filter.rs`.
 
@@ -138,15 +138,15 @@ The acceptance gates (ADR-004 §Verification "Acceptance benchmarks") are three 
 
 The MCP server is the integration point for the rest of the ADR set.
 
-**The cache and federation primitives are the kernel.** `rulake_query` composes over `RuLake::search_one`, `search_federated`, `search_federated_with_rerank`, `search_batch` (`src/lake.rs:521`). The planner picks the cheapest plan inside the budget; the worker pool runs the call; the audit row records the decision. Every hit is annotated with `_provenance: { backend, collection, witness }` so the calling agent has the metadata to apply its own sandboxing on tool outputs.
+**The cache and federation primitives are the kernel.** `rulake_query` composes over `RuLake::search_one`, `search_federated`, `search_federated_with_rerank`, `search_batch` (`crates/core/src/lake.rs:521`). The planner picks the cheapest plan inside the budget; the worker pool runs the call; the audit row records the decision. Every hit is annotated with `_provenance: { backend, collection, witness }` so the calling agent has the metadata to apply its own sandboxing on tool outputs.
 
-**The bundle and witness contract is honoured.** Every tool touching an on-disk bundle propagates the witness-fail-closed posture from `src/bundle.rs:340`-area. The `rulake://bundle/{backend}/{collection}` resource reads through `cache_witness_of` (cheap path) and never triggers the default `current_bundle` impl. ADR-005's IPFS backend produces bundles whose witnesses the MCP server can verify without fetching the CIDs — the witness recipe is purely a function of bytes.
+**The bundle and witness contract is honoured.** Every tool touching an on-disk bundle propagates the witness-fail-closed posture from `crates/core/src/bundle.rs:340`-area. The `rulake://bundle/{backend}/{collection}` resource reads through `cache_witness_of` (cheap path) and never triggers the default `current_bundle` impl. ADR-005's IPFS backend produces bundles whose witnesses the MCP server can verify without fetching the CIDs — the witness recipe is purely a function of bytes.
 
 **The SDKs share the underlying `RuLake`.** A long-lived Node server (ADR-003) or Python process (ADR-002) can construct a `RuLake`, register backends, and let the in-tree MCP server expose those same backends to a Claude Desktop / Cursor / Cline client. Same `Arc<RuLake>`, two language entry-points, one cache.
 
-**The Console (ADR-006) consumes the audit-tail resource.** The 256-entry ring at `mcp-server/src/audit.rs:31` powers the Console's Audit screen in live mode (commit `e2c2402`). Browser callers reach it through the CORS layer added in v0.9 (commit `5b956a9`).
+**The Console (ADR-006) consumes the audit-tail resource.** The 256-entry ring at `crates/mcp-server/src/audit.rs:31` powers the Console's Audit screen in live mode (commit `e2c2402`). Browser callers reach it through the CORS layer added in v0.9 (commit `5b956a9`).
 
-**The substrate scaffolds ride the shared schema.** ADR-007's rvDNA and ADR-008's ruQu backends ship companion MCP servers (`mcp-rvdna/` from commit `a66d65f`, `mcp-ruqu/` from commit `6d60cf7`) sharing the audit-row schema through a shared `audit-only` Cargo feature. Disjoint code prefixes (`RULAKE_*`, `RVDNA_*`, `RUQU_*`) let one log stream serve all three.
+**The substrate scaffolds ride the shared schema.** ADR-007's rvDNA and ADR-008's ruQu backends ship companion MCP servers (`crates/mcp-rvdna/` from commit `a66d65f`, `crates/mcp-ruqu/` from commit `6d60cf7`) sharing the audit-row schema through a shared `audit-only` Cargo feature. Disjoint code prefixes (`RULAKE_*`, `RVDNA_*`, `RUQU_*`) let one log stream serve all three.
 
 The MCP server is the prototype consumer of the M4 governance primitives. The audit JSONL maps onto OpenLineage's `RUN` events without field rename so the M4 work is "swap the sink", not "redesign the event shape". Capability flags compose multiplicatively with OAuth scopes and token TTL to give the progressive trust model — read is permanent and broad, publish is short-TTL and per-collection-scoped, admin is short-TTL and audit-flagged.
 
@@ -157,30 +157,30 @@ DCR (Dynamic Client Registration, RFC 7591) is explicitly v1.5 with a per-IdP al
 ## References
 
 - ADR-004: `/home/ruvultra/projects/RuLake/docs/adrs/sdk/ADR-004-rulake-mcp-server.md`
-- Crate manifest: `/home/ruvultra/projects/RuLake/mcp-server/Cargo.toml`
-- Server impl: `/home/ruvultra/projects/RuLake/mcp-server/src/server.rs`
-  - `RuLakeMcpServer` struct and constructors: `mcp-server/src/server.rs:38`, `:62`
-  - `rulake_query` tool: `mcp-server/src/server.rs:191`
-  - `rulake_list_backends` and `rulake_list_collections` (v0.9): `mcp-server/src/server.rs:318`, `:329`
-  - mutation tools (publish/admin): `mcp-server/src/server.rs:365`-area
-  - `audit_mutation` helper (R-MCP-1 fix, commit `56b497b`): `mcp-server/src/server.rs:551`
-  - `require_cap` per-call gate: `mcp-server/src/server.rs:602`
-  - `required_cap_for_tool` single source of truth: `mcp-server/src/server.rs:613`
-  - `list_tools` capability filter: `mcp-server/src/server.rs:745`
-  - resource handlers (`rulake://stats`, `rulake://bundle/...`, `rulake://audit/tail`): `mcp-server/src/server.rs:838`-area
-- Audit sink: `/home/ruvultra/projects/RuLake/mcp-server/src/audit.rs`
-  - `AuditSink` and 256-entry tail ring (`TAIL_CAPACITY`): `mcp-server/src/audit.rs:31`, `:34`
-  - `emit` with tee-into-tail-before-write (write-failure tolerant): `mcp-server/src/audit.rs:100`
-  - `AuditEntry` schema (mirrors ADR-004 §7): `mcp-server/src/audit.rs:152`
-  - ISO-8601 timestamp without chrono dep: `mcp-server/src/audit.rs:200`
-- Other server modules: `mcp-server/src/auth.rs`, `jwks.rs` (v0.5), `mtls.rs` (v0.6), `policy.rs`, `planner.rs`, `workers.rs`, `ratelimit.rs`, `replay.rs`, `sessions.rs`, `allow.rs`, `http.rs`.
-- Tests: `mcp-server/tests/smoke.rs`, `http_e2e.rs`, `fixtures/`.
-- Criterion benches (commit `8ce3689`): `mcp-server/benches/audit_sink.rs`, `tools_list_filter.rs`.
-- Sibling-crate discipline (no workspace, sibling at `mcp-server/`): ADR-001.
+- Crate manifest: `/home/ruvultra/projects/RuLake/crates/mcp-server/Cargo.toml`
+- Server impl: `/home/ruvultra/projects/RuLake/crates/mcp-server/src/server.rs`
+  - `RuLakeMcpServer` struct and constructors: `crates/mcp-server/src/server.rs:38`, `:62`
+  - `rulake_query` tool: `crates/mcp-server/src/server.rs:191`
+  - `rulake_list_backends` and `rulake_list_collections` (v0.9): `crates/mcp-server/src/server.rs:318`, `:329`
+  - mutation tools (publish/admin): `crates/mcp-server/src/server.rs:365`-area
+  - `audit_mutation` helper (R-MCP-1 fix, commit `56b497b`): `crates/mcp-server/src/server.rs:551`
+  - `require_cap` per-call gate: `crates/mcp-server/src/server.rs:602`
+  - `required_cap_for_tool` single source of truth: `crates/mcp-server/src/server.rs:613`
+  - `list_tools` capability filter: `crates/mcp-server/src/server.rs:745`
+  - resource handlers (`rulake://stats`, `rulake://bundle/...`, `rulake://audit/tail`): `crates/mcp-server/src/server.rs:838`-area
+- Audit sink: `/home/ruvultra/projects/RuLake/crates/mcp-server/src/audit.rs`
+  - `AuditSink` and 256-entry tail ring (`TAIL_CAPACITY`): `crates/mcp-server/src/audit.rs:31`, `:34`
+  - `emit` with tee-into-tail-before-write (write-failure tolerant): `crates/mcp-server/src/audit.rs:100`
+  - `AuditEntry` schema (mirrors ADR-004 §7): `crates/mcp-server/src/audit.rs:152`
+  - ISO-8601 timestamp without chrono dep: `crates/mcp-server/src/audit.rs:200`
+- Other server modules: `crates/mcp-server/src/auth.rs`, `jwks.rs` (v0.5), `mtls.rs` (v0.6), `policy.rs`, `planner.rs`, `workers.rs`, `ratelimit.rs`, `replay.rs`, `sessions.rs`, `allow.rs`, `http.rs`.
+- Tests: `crates/mcp-server/tests/smoke.rs`, `http_e2e.rs`, `fixtures/`.
+- Criterion benches (commit `8ce3689`): `crates/mcp-server/benches/audit_sink.rs`, `tools_list_filter.rs`.
+- Sibling-crate discipline (no workspace, sibling at `crates/mcp-server/`): ADR-001.
 - Prior-art TS demo (kept as reference): `examples/nodejs/04-mcp-tool/src/server.ts`.
-- Public Rust surface the server wraps: `src/lib.rs:53`-area; `src/lake.rs:521` (federation); `src/bundle.rs:166` (`RuLakeBundle::new`), `src/bundle.rs:362` (`compute_witness`), `src/bundle.rs:340`-area (witness-fail-closed).
+- Public Rust surface the server wraps: `crates/core/src/lib.rs:53`-area; `crates/core/src/lake.rs:521` (federation); `crates/core/src/bundle.rs:166` (`RuLakeBundle::new`), `crates/core/src/bundle.rs:362` (`compute_witness`), `crates/core/src/bundle.rs:340`-area (witness-fail-closed).
 - Companion ADRs sharing audit / capability schema: ADR-002, ADR-003, ADR-005, ADR-006, ADR-155, ADR-156.
-- Companion MCP servers on the shared audit schema: `mcp-rvdna/` (commit `a66d65f`), `mcp-ruqu/` (commit `6d60cf7`).
+- Companion MCP servers on the shared audit schema: `crates/mcp-rvdna/` (commit `a66d65f`), `crates/mcp-ruqu/` (commit `6d60cf7`).
 - MCP spec revisions cited as opaque identifiers: `2025-11-25` (current target), `2025-06-18`, `2025-03-26`, `2024-11-05` (retired). Upstream SDK is `modelcontextprotocol/rust-sdk` (`rmcp`); spec lives at modelcontextprotocol.io. ADR-004 does not pin URLs.
 - 2025 MCP CVE timeline cited in ADR-004 §Context: CVE-2025-6514, CVE-2025-53107, CVE-2025-53818, CVE-2025-68143/68144/68145, CVE-2025-6515. Plus the Anthropic `git-mcp-server` description-injection write-up at *Infosecurity Magazine* (January 2026), Snyk Labs / Palo Alto Unit 42 deep dives. URLs are not pinned.
 - R-MCP-1 audit-symmetry fix: commit `56b497b`. Full review note at `docs/research/security/shipping-substrates-v2.md` (added in commit `8ce3689`).

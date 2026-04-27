@@ -117,7 +117,7 @@ Three things in there are non-obvious:
 Cloud Run's frontend forwards requests with `Host` set to the
 caller's user-facing hostname (e.g. `rulake-mcp.ruv.io`), not the
 bind address. rmcp's DNS-rebinding guard rejects unknown Host values
-with 403. Two fixes are bundled in `mcp-server/src/http.rs`:
+with 403. Two fixes are bundled in `crates/mcp-server/src/http.rs`:
 
 1. **Host allowlist** — set `RULAKE_ALLOWED_HOSTS` to a comma-
    separated list of every hostname operators will use. The repo

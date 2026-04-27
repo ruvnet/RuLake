@@ -23,7 +23,7 @@ repository = "https://github.com/ruvnet/RuLake"
 description = "GCS Parquet BackendAdapter for ruLake (ADR-155 §M2)"
 
 [dependencies]
-rulake = { path = "..", version = "2.3.0-alpha.1" }
+rulake = { path = "../core", version = "2.3.0-alpha.1" }
 
 # Unified storage abstraction. The `gcp` feature pulls in the GCS
 # transport (which honours gcloud Application Default Credentials).

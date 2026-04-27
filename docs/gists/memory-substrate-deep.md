@@ -22,7 +22,7 @@ What got picked. **ruLake stays as substrate.** The brain consumer (hypothetical
 
 **`Consistency::Frozen` (shipped 2026-04-22).** A new mode that lets the caller assert the bundle's witness is immutable for the cache's lifetime. Maps to "Frozen for audit" from the strategic review's three-mode knob. Explicit `refresh_from_bundle_dir` still works; only the *automatic* coherence check is suppressed. This is the smallest addition that opens the audit market — compliance-heavy customers who cannot tolerate automatic coherence drift on historical snapshots get a serving mode that says "I will not check; if you want me to, ask me explicitly."
 
-**Memory-class tag on the bundle (shipped at `src/bundle.rs:143`).** A `memory_class: Option<String>` field — caller-defined, opaque, surfaces through stats but never interpreted. Agent systems tag bundles with cognitive labels like `"episodic"` / `"semantic"` / `"procedural"` / `"identity"`; ruLake stores the string and returns it. The field is `serde(default, skip_serializing_if = "Option::is_none")` so old bundles without the tag deserialise unchanged, and crucially the tag is *not* part of the witness — changing the memory-class on the same vectors does not invalidate a cache entry. Two bundles with identical data but different classes share the cache. The doc comment at `src/bundle.rs:143`-`154` is the canonical record: "Opaque by design — brain systems own the semantics, substrate owns the persistence."
+**Memory-class tag on the bundle (shipped at `crates/core/src/bundle.rs:143`).** A `memory_class: Option<String>` field — caller-defined, opaque, surfaces through stats but never interpreted. Agent systems tag bundles with cognitive labels like `"episodic"` / `"semantic"` / `"procedural"` / `"identity"`; ruLake stores the string and returns it. The field is `serde(default, skip_serializing_if = "Option::is_none")` so old bundles without the tag deserialise unchanged, and crucially the tag is *not* part of the witness — changing the memory-class on the same vectors does not invalidate a cache entry. Two bundles with identical data but different classes share the cache. The doc comment at `crates/core/src/bundle.rs:143`-`154` is the canonical record: "Opaque by design — brain systems own the semantics, substrate owns the persistence."
 
 **Explicit separation of read / write / compact paths (doc, not code).** ruLake v1 is read-optimized and append-only; writes go through RVF ingest, not through ruLake. The ADR records that split as load-bearing — compaction belongs to RVM / Cognitum, not to ruLake. This is the load-bearing decision because it is what keeps ruLake from drifting into "brain system" scope; the substrate's job is to be a fast, honest cache, not to schedule compaction or merge episodic chains.
 
@@ -32,15 +32,15 @@ The load-bearing trade-offs. **Adds a third framing.** ADR-155 v2 said "intermed
 
 ## Capabilities
 
-**Recall.** `RuLake::search_one(backend, collection, query, k)` (`src/lake.rs:475`) and `RuLake::search_federated(targets, query, k)` (`src/lake.rs:521`) both return `SearchResult { backend, collection, id, score }`. The result carries the backend and collection so an agent can audit which substrate produced the hit; it does not carry the `data_ref` so the agent never has to know whether the vectors lived in GCS, in IPFS-pinned bundles, on local disk, or in a `LocalBackend` fixture.
+**Recall.** `RuLake::search_one(backend, collection, query, k)` (`crates/core/src/lake.rs:475`) and `RuLake::search_federated(targets, query, k)` (`crates/core/src/lake.rs:521`) both return `SearchResult { backend, collection, id, score }`. The result carries the backend and collection so an agent can audit which substrate produced the hit; it does not carry the `data_ref` so the agent never has to know whether the vectors lived in GCS, in IPFS-pinned bundles, on local disk, or in a `LocalBackend` fixture.
 
-**Verify.** `RuLakeBundle::verify_witness` (`src/bundle.rs:191`) recomputes the SHAKE-256 from the parsed fields and returns the equality. `RuLake::current_bundle(key)` (`src/lake.rs:179`) returns the bundle for any registered `(backend, collection)` so an agent can verify a result's provenance against the cache's current witness.
+**Verify.** `RuLakeBundle::verify_witness` (`crates/core/src/bundle.rs:191`) recomputes the SHAKE-256 from the parsed fields and returns the equality. `RuLake::current_bundle(key)` (`crates/core/src/lake.rs:179`) returns the bundle for any registered `(backend, collection)` so an agent can verify a result's provenance against the cache's current witness.
 
-**Forget.** `RuLake::invalidate_cache(key)` (`src/lake.rs:164`) drops the cache pointer for a `(backend, collection)` pair; if it was the last pointer at the witness, the underlying compressed entry is garbage-collected. Combined with `Consistency::Fresh`, the next search re-primes against the backend; combined with `Consistency::Frozen`, the next search refuses (because the cache is empty and the consistency mode says "do not auto-prime"). "Forget" in the substrate sense is the cache pointer drop; "forget" in the cryptographic-shred sense stays as the ADR-155 GDPR follow-up.
+**Forget.** `RuLake::invalidate_cache(key)` (`crates/core/src/lake.rs:164`) drops the cache pointer for a `(backend, collection)` pair; if it was the last pointer at the witness, the underlying compressed entry is garbage-collected. Combined with `Consistency::Fresh`, the next search re-primes against the backend; combined with `Consistency::Frozen`, the next search refuses (because the cache is empty and the consistency mode says "do not auto-prime"). "Forget" in the substrate sense is the cache pointer drop; "forget" in the cryptographic-shred sense stays as the ADR-155 GDPR follow-up.
 
 **Compact.** Out of scope. Belongs to RVM / Cognitum. The ADR is explicit about this: a substrate that compacts is owning a write/merge path that the brain layer needs for cognitive-coherence reasons, and pushing those reasons into the substrate would muddle the boundary. ruLake's ingest is RVF; ruLake's compaction is whatever RVM ships.
 
-**Rehydrate.** `RuLake::warm_from_dir(key, dir)` (`src/lake.rs:408`) reads `dir/index.rbpx` plus the companion `table.rulake.json`, witness-verifies the sidecar, dim/rerank-checks the index, and installs into the cache via `install_prebuilt_interned`. No backend round-trip, no RaBitQ recompression — the primed entry pops back into reality in O(file-read) time. Two operators warming the same bundle share one compressed entry.
+**Rehydrate.** `RuLake::warm_from_dir(key, dir)` (`crates/core/src/lake.rs:408`) reads `dir/index.rbpx` plus the companion `table.rulake.json`, witness-verifies the sidecar, dim/rerank-checks the index, and installs into the cache via `install_prebuilt_interned`. No backend round-trip, no RaBitQ recompression — the primed entry pops back into reality in O(file-read) time. Two operators warming the same bundle share one compressed entry.
 
 **Location-transparency.** `SearchResult` carries `backend` + `collection`; the agent never touches `data_ref`. The substrate's location-transparency claim is operationally enforced by the trait — `BackendAdapter::pull_vectors` is called by the cache, not by the caller, and the caller's interface is `(backend, collection, query, k) → results` regardless of whether the backend is local memory, an `FsBackend` over `ruvec1` files, a Parquet object on GCS, an IPFS-pinned bundle's referenced bytes, or a federation across all four.
 
@@ -50,33 +50,33 @@ The load-bearing trade-offs. **Adds a third framing.** ADR-155 v2 said "intermed
 
 The contract is the agent-replayability claim: two agents on two machines querying the same data get the same byte-for-byte answer, and either one can prove what they saw to the other. The substrate acceptance test from the strategic review is the operational form: "An agent can recall, verify, forget, compact, and rehydrate memory across hot, warm, and cold tiers without knowing where the memory physically lives."
 
-The substrate acceptance test runs as a runnable test (`brain_substrate_acceptance_recall_verify_forget_rehydrate` in `tests/federation_smoke.rs`, per the resolved open question in ADR-156 §"Open questions"). It drives the six-guarantee loop — recall → verify → forget → rehydrate → location-transparency, with compact explicitly deferred per the ADR — against a single `LocalBackend`. If this test stays green on every commit, the agent-facing memory substrate claim is mechanical, not aspirational.
+The substrate acceptance test runs as a runnable test (`brain_substrate_acceptance_recall_verify_forget_rehydrate` in `crates/core/tests/federation_smoke.rs`, per the resolved open question in ADR-156 §"Open questions"). It drives the six-guarantee loop — recall → verify → forget → rehydrate → location-transparency, with compact explicitly deferred per the ADR — against a single `LocalBackend`. If this test stays green on every commit, the agent-facing memory substrate claim is mechanical, not aspirational.
 
 The five primitives that satisfy the test, with citations.
 
 | Guarantee | Substrate primitive | Citation |
 |-----------|---------------------|----------|
-| Recall | `RuLake::search_one`, `search_federated` | `src/lake.rs:475`, `:521` |
-| Verify | `RuLakeBundle::verify_witness` | `src/bundle.rs:191` |
-| Forget | `invalidate_cache` + `Consistency::Fresh` re-prime | `src/lake.rs:164`; `Consistency` at `src/cache.rs` |
-| Rehydrate | `prime` on cache miss (transparent); `warm_from_dir` for explicit rehydration | `src/lake.rs:408` |
-| Location-transparency | `SearchResult` carries `backend` + `collection`; caller never touches `data_ref` | `src/lake.rs:26`-`32` |
+| Recall | `RuLake::search_one`, `search_federated` | `crates/core/src/lake.rs:475`, `:521` |
+| Verify | `RuLakeBundle::verify_witness` | `crates/core/src/bundle.rs:191` |
+| Forget | `invalidate_cache` + `Consistency::Fresh` re-prime | `crates/core/src/lake.rs:164`; `Consistency` at `crates/core/src/cache.rs` |
+| Rehydrate | `prime` on cache miss (transparent); `warm_from_dir` for explicit rehydration | `crates/core/src/lake.rs:408` |
+| Location-transparency | `SearchResult` carries `backend` + `collection`; caller never touches `data_ref` | `crates/core/src/lake.rs:26`-`32` |
 
-The replayability claim sits on the witness recipe (ADR-155's load-bearing property): `compute_witness` (`src/bundle.rs:362`) is SHAKE-256(32) over a domain-prefixed, length-prefixed, variant-tagged concatenation of `(data_ref, dim, rotation_seed, rerank_factor, generation)`. Two agents that agree on those five inputs derive the same witness independently and share the cache through `src/cache.rs::install_prebuilt_interned`. The agent-replayability claim therefore reduces to "do the two agents agree on the five inputs?", which is a property of the bundle, not of ruLake — and the bundle is a 300-byte sidecar that can be transported by IPFS (`ipfs-backend/`), by GCS (`gcs-backend/`), or by a tarball over scp, with the same trust property.
+The replayability claim sits on the witness recipe (ADR-155's load-bearing property): `compute_witness` (`crates/core/src/bundle.rs:362`) is SHAKE-256(32) over a domain-prefixed, length-prefixed, variant-tagged concatenation of `(data_ref, dim, rotation_seed, rerank_factor, generation)`. Two agents that agree on those five inputs derive the same witness independently and share the cache through `crates/core/src/cache.rs::install_prebuilt_interned`. The agent-replayability claim therefore reduces to "do the two agents agree on the five inputs?", which is a property of the bundle, not of ruLake — and the bundle is a 300-byte sidecar that can be transported by IPFS (`crates/ipfs-backend/`), by GCS (`crates/gcs-backend/`), or by a tarball over scp, with the same trust property.
 
-The `memory_class` tag at `src/bundle.rs:143`-`154` is deliberately *not* part of the witness. The doc comment is explicit: "Not part of the witness: changing the memory-class tag on the same vectors does not invalidate a cache entry. Two bundles with identical data but different classes share the cache." This is the load-bearing design: the brain layer can re-classify memories without invalidating the substrate, and the substrate can serve mixed-class federations without per-class cache shards.
+The `memory_class` tag at `crates/core/src/bundle.rs:143`-`154` is deliberately *not* part of the witness. The doc comment is explicit: "Not part of the witness: changing the memory-class tag on the same vectors does not invalidate a cache entry. Two bundles with identical data but different classes share the cache." This is the load-bearing design: the brain layer can re-classify memories without invalidating the substrate, and the substrate can serve mixed-class federations without per-class cache shards.
 
 ## Reference implementation status
 
 The ADR is positioning. The reference implementation status is mostly "what was already shipped under ADR-155 M1 and what nomenclature was added on top."
 
-What shipped from ADR-155 M1 (already in scope before ADR-156 opened): `BackendAdapter` trait, `LocalBackend`, `FsBackend`, `VectorCache` with witness-addressed sharing, `Consistency::Fresh` and `Consistency::Eventual { ttl_ms }`, `RuLake::search_one` and `search_federated`, `RuLakeBundle::new`/`verify_witness`/`from_json`, `RuLake::publish_bundle`/`refresh_from_bundle_dir`, `RuLake::save_cache_to_dir`/`warm_from_dir`, `CacheStats::hit_rate`/`avg_prime_ms`. All citable in `src/lake.rs:1`-`713`, `src/cache.rs`, `src/bundle.rs:1`-`615`, `src/backend.rs`.
+What shipped from ADR-155 M1 (already in scope before ADR-156 opened): `BackendAdapter` trait, `LocalBackend`, `FsBackend`, `VectorCache` with witness-addressed sharing, `Consistency::Fresh` and `Consistency::Eventual { ttl_ms }`, `RuLake::search_one` and `search_federated`, `RuLakeBundle::new`/`verify_witness`/`from_json`, `RuLake::publish_bundle`/`refresh_from_bundle_dir`, `RuLake::save_cache_to_dir`/`warm_from_dir`, `CacheStats::hit_rate`/`avg_prime_ms`. All citable in `crates/core/src/lake.rs:1`-`713`, `crates/core/src/cache.rs`, `crates/core/src/bundle.rs:1`-`615`, `crates/core/src/backend.rs`.
 
 What ADR-156 added on top, the small bits.
 
 - **`Consistency::Frozen`** shipped 2026-04-22, the "Frozen for audit" mode. Caller asserts the bundle's witness is immutable for the cache's lifetime; explicit `refresh_from_bundle_dir` still works, only the automatic coherence check is suppressed.
-- **`memory_class: Option<String>`** on the bundle, shipped at `src/bundle.rs:143`-`154`. Caller-defined, opaque, deserialises unchanged from old bundles via `serde(default, skip_serializing_if = "Option::is_none")`. Not part of the witness by design.
-- **The substrate acceptance test** as a runnable test at `tests/federation_smoke.rs::brain_substrate_acceptance_recall_verify_forget_rehydrate`, per the resolved open question. Drives recall → verify → forget → rehydrate → location-transparency against a `LocalBackend`.
+- **`memory_class: Option<String>`** on the bundle, shipped at `crates/core/src/bundle.rs:143`-`154`. Caller-defined, opaque, deserialises unchanged from old bundles via `serde(default, skip_serializing_if = "Option::is_none")`. Not part of the witness by design.
+- **The substrate acceptance test** as a runnable test at `crates/core/tests/federation_smoke.rs::brain_substrate_acceptance_recall_verify_forget_rehydrate`, per the resolved open question. Drives recall → verify → forget → rehydrate → location-transparency against a `LocalBackend`.
 - **The framing in user-facing surfaces.** The README's "Why agents in particular" section (lines 19-24) describes ruLake to agent developers in substrate terms — single MCP tool, witness-anchored same-answer-everywhere claim, refusal as a feature. The App Store screen at `ui/src/components/screens.jsx:2018`-`2141` lists substrates as the user-facing apex of the framing — each substrate a `BackendAdapter` impl, each substrate's results carrying the same SHAKE-256 witness as a native ruLake bundle. The deep gists at `docs/gists/` (this one and the rvDNA / ruQu / IPFS / Console / datalake-layer companions) are the canonical extended record.
 
 What is *not* in scope for ADR-156 and stays in ADR-155 / ADR-007 / ADR-008 / RVM / Cognitum. Compaction (RVM/Cognitum). Cryptographic forget (ADR-155 GDPR follow-up, v2). Memory classification semantics (brain-layer concern). Recall policy beyond vector similarity (brain-layer). Trust graphs, contradiction scoring, mincut boundaries (brain-layer). Per-memory-class stats (`CacheStats::by_class`) — flagged as scope-creep toward brain features; deferred until a consumer asks.
@@ -102,14 +102,14 @@ Where does `memory_class` live — on the bundle, on the cache entry, or both? C
 - ADR-156: `/home/ruvultra/projects/RuLake/docs/adrs/ADR-156-rulake-as-memory-substrate.md`
 - ADR-155 (the substrate the brain consumer sits on): `/home/ruvultra/projects/RuLake/docs/adrs/ADR-155-rulake-datalake-layer.md`
 - Substrate primitives:
-  - Recall: `/home/ruvultra/projects/RuLake/src/lake.rs:475` (`search_one`), `:521` (`search_federated`)
-  - Verify: `/home/ruvultra/projects/RuLake/src/bundle.rs:191` (`verify_witness`)
-  - Forget: `/home/ruvultra/projects/RuLake/src/lake.rs:164` (`invalidate_cache`)
-  - Rehydrate: `/home/ruvultra/projects/RuLake/src/lake.rs:408` (`warm_from_dir`)
-  - Location-transparency: `/home/ruvultra/projects/RuLake/src/lake.rs:26`-`32` (`SearchResult`)
-- Memory-class tag: `/home/ruvultra/projects/RuLake/src/bundle.rs:143`-`154`
-- Witness recipe: `/home/ruvultra/projects/RuLake/src/bundle.rs:362` (`compute_witness`); variant-tag fix at `:73`-`98`; format version at `:163`
-- Substrate acceptance test: `/home/ruvultra/projects/RuLake/tests/federation_smoke.rs::brain_substrate_acceptance_recall_verify_forget_rehydrate`
+  - Recall: `/home/ruvultra/projects/RuLake/crates/core/src/lake.rs:475` (`search_one`), `:521` (`search_federated`)
+  - Verify: `/home/ruvultra/projects/RuLake/crates/core/src/bundle.rs:191` (`verify_witness`)
+  - Forget: `/home/ruvultra/projects/RuLake/crates/core/src/lake.rs:164` (`invalidate_cache`)
+  - Rehydrate: `/home/ruvultra/projects/RuLake/crates/core/src/lake.rs:408` (`warm_from_dir`)
+  - Location-transparency: `/home/ruvultra/projects/RuLake/crates/core/src/lake.rs:26`-`32` (`SearchResult`)
+- Memory-class tag: `/home/ruvultra/projects/RuLake/crates/core/src/bundle.rs:143`-`154`
+- Witness recipe: `/home/ruvultra/projects/RuLake/crates/core/src/bundle.rs:362` (`compute_witness`); variant-tag fix at `:73`-`98`; format version at `:163`
+- Substrate acceptance test: `/home/ruvultra/projects/RuLake/crates/core/tests/federation_smoke.rs::brain_substrate_acceptance_recall_verify_forget_rehydrate`
 - User-facing framing surfaces:
   - README "Why agents in particular": `/home/ruvultra/projects/RuLake/README.md:19`-`24`
   - App Store screen: `/home/ruvultra/projects/RuLake/ui/src/components/screens.jsx:2018`-`2141`

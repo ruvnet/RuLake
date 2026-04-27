@@ -72,7 +72,7 @@ We need a Python SDK that:
    Python installs do not have a Rust toolchain; the first-time
    experience must be `pip install` and nothing else.
 
-The Rust API surface from `src/lib.rs` that v1 must expose:
+The Rust API surface from `crates/core/src/lib.rs` that v1 must expose:
 
 ```rust
 pub use backend::{BackendAdapter, BackendId, CollectionId, LocalBackend, PulledBatch};
