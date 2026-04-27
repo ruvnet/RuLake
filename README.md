@@ -801,7 +801,11 @@ For deeper reading, every shipped ADR has a 2,500–3,700-word narrative compani
 
 ### Console — `ui/`
 
-A full management UI ([ADR-006](docs/adrs/ADR-006-rulake-console-vite-github-pages.md)) at [`ui/`](ui/), built with Vite + React, deployed to GitHub Pages, and validated end-to-end via `agent-browser`. Three modes:
+A full management UI ([ADR-006](docs/adrs/ADR-006-rulake-console-vite-github-pages.md)) at [`ui/`](ui/), built with Vite + React, deployed to GitHub Pages, and validated end-to-end via `agent-browser`.
+
+**Live demo: [ruvnet.github.io/RuLake/](https://ruvnet.github.io/RuLake/)** — boots in DEMO mode, then auto-probes the hosted `mcp-server` at [`rulake-mcp.ruv.io`](https://rulake-mcp.ruv.io/) (Cloud Run, free-tier, 8 MCP tools). The pill in the top-right flips to `● LIVE` automatically when the probe succeeds.
+
+Three modes:
 
 - **Demo** — animated mock data, no dependencies.
 - **WASM-local** — `rulake-wasm` running in your browser; verify bundles, compute witnesses, search via Web Worker. Zero server required.

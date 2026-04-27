@@ -282,6 +282,126 @@ Three scripts that lock the cross-component flows in CI:
 All 10 Rust crates now build with **zero compiler warnings** on
 `cargo build --release`.
 
+### Added — v0.1 / v0.2 substrate wave (iters 49-50)
+
+User-directed expansion: implement every roadmapped sub-version per
+each substrate ADR's own scope.
+
+- **`rvdna-backend` v0.1** — T1 warm mmap tier (memmap2 + bytemuck
+  zero-copy decode). 9 tests pass; T1 within 5–13% of T0 in cold
+  benches (page cache absorbs mmap overhead). Commit `0d0154d`.
+- **`rvdna-backend` v0.2** — T2 cold lazy tier (`std::fs::File` +
+  `seek/read` + per-collection `LruCache<usize, Vec<f32>>` capped at
+  1024 vectors). 12 tests pass; T2-cold ~3.9× T1 (within the 5–10×
+  spec budget); T2-warm ~1.3× T1. Witness derivation reused from T0
+  / T1 — trust chain identical across all three tiers. Commit
+  `757ee42`.
+- **`ruqu-backend` v0.1** — Stabilizer backend (Aaronson-Gottesman
+  tableau, bit-packed `Vec<u64>`). 24+1 ignored tests pass; **~308×
+  faster than StateVector at n=14**, handles n=32 in 16 µs (where
+  StateVector would need 64 GiB). Refuses non-Clifford gates (T,
+  Rz) with clear error. Commit `2665c4d`.
+- **`ruqu-backend` v0.2** — TensorNetwork backend (MPS, `ndarray`
+  0.16, hand-rolled complex SVD via Jacobi eigendecomposition). 49+1
+  ignored tests pass; n=64 χ=8 in 16 µs for low-entanglement
+  circuits where StateVector cannot allocate. Commit `cf96321`.
+- **`ruqu-backend` v0.2** — Hardware-stub backend + QEC scheduler.
+  Hardware-stub uses StateVector + parameterized depolarizing noise;
+  witness backend_tag = `"hardware-stub"`. QEC scheduler implements
+  surface-code planner for d∈{3,5,7} with `QecError::DistanceTooLargeForFootprint`
+  refusal. 6 new tests + 6 in-module unit tests. Commit `c1cfe8c`.
+- **`mcp-ruqu` v0.1** — HTTP transport (lifts the `mcp-rvdna`
+  pattern; same iter-32 CORS layer; default port 7442). New
+  `mcp-ruqu/scripts/http-smoke.sh` registered into
+  `scripts/smoke-all.sh`. 15 tests + 4-check smoke. Commit `270f4d6`.
+
+### Added — ADR-157 VectorKernel trait + CpuNaiveKernel (iter 49)
+
+The root `rulake` crate gets the long-roadmapped `kernel::VectorKernel`
+trait + a reference CPU impl. All `#[doc(hidden)]` because ADR-157
+requires "scaffolding-only until first non-naive kernel ships and
+passes the conformance gate". Root crate version bumped
+**`2.2.0` → `2.3.0-alpha.1`** to signal pre-release.
+
+- `kernel::VectorKernel` trait (`l2_distance_one`, `rabitq_popcount`,
+  `id`, `capabilities`)
+- `KernelCapabilities` struct (`simd_width`, `popcount_native`, `gpu`)
+- `CpuNaiveKernel` reference impl (the conformance baseline future
+  SIMD/GPU kernels must match byte-equal on top-K)
+- `assert_kernel_conformant()` helper for the ADR-157 promotion gate
+- 49 tests pass; CpuNaive baseline = **2.92 ms median for L2 at
+  dim=384, n=16384** (the bar future kernels must beat ≥2× p95)
+- v2.2 public surface byte-identical: every prior `pub use` line
+  unchanged; only `src/lib.rs` and `Cargo.toml` touched in existing files
+
+Commit `125ded6`.
+
+### Added — live demo (iter 51-54)
+
+User-directed: deploy a real hosted MCP for the demo so the Console
+shows `● LIVE` instead of `○ DEMO · no live MCP`.
+
+- **Cloud Run service `rulake-mcp-demo`** in `us-central1`, project
+  `ruv-dev`. Built from `Dockerfile.mcp` via Cloud Build, deployed
+  with `--auth none --insecure-allow-no-auth --capabilities read,publish,admin`.
+  Pinned `min=1 max=1` (process-local sessions need stickiness),
+  `512Mi` RAM, `1` CPU.
+- **Cloudflare CNAME** `rulake-mcp.ruv.io` →
+  `ghs.googlehosted.com.` (proxied=false; Cloud Run domain mapping
+  + Let's Encrypt cert auto-provision).
+- **`mcp-server` env var `RULAKE_ALLOWED_HOSTS`** (commit `4248b75`)
+  — operators behind reverse proxies / managed runtimes pass the
+  user-facing hostname here so rmcp's DNS-rebinding guard accepts
+  the forwarded `Host` header. Also gates the iter-51 stable
+  principal hack: when set, mcp-server uses `anon:proxied` instead
+  of `anon:{peer}` so sessions survive Cloud Run's per-request
+  internal-IP rotation (commit `2427543`).
+- **Console default endpoint** (commit `a493f77`) flipped to
+  `https://rulake-mcp.ruv.io/`. New on-boot auto-probe (commit
+  `84d4bf5`) — if the endpoint answers, `RULakeActiveClient` gets
+  populated and the topbar pill flips to `● LIVE` automatically.
+  Silent failure leaves it at `○ DEMO`.
+- **Live demo URL**: [`https://ruvnet.github.io/RuLake/`](https://ruvnet.github.io/RuLake/) →
+  auto-probes `https://rulake-mcp.ruv.io/` → 8 mcp-server tools
+  served back through full SSE handshake.
+
+### Fixed — UI polish (iters 51-52)
+
+- **Slide background was transparent** — 4 `var(--ink-1)` typos in
+  `ui/src/styles/styles.css` (only `--ink`, `--ink-2/3/4` are
+  defined in the theme). All 4 fixed; verified `grep -c` returns 0.
+  Commits `c9bde11` (initial single-typo fix; iter 51 caught only
+  one), `84d4bf5` (sweep of remaining 3).
+- **Welcome slideshow had no prev/next nav** — added `‹` `›` arrows
+  to `IntroSlideshow`; clicking pauses auto-advance.
+- **Slide art overlap on slides 3 + 4** — `.intro-show-art` had no
+  explicit height, so during transitions the new SVG could bleed
+  into the copy region. Locked at `height: 138px overflow: hidden`;
+  bumped `.intro-show-frame` `min-height` 296 → 340 for breathing
+  room.
+- **Slide 3 content rewrite** (commit `6cf2099`) — dropped pejorative
+  `+` tags ("+ pay per query", "+ no sharing", "+ new service") and
+  competitor product names (Pinecone/Weaviate/BigQuery/Snowflake/
+  FAISS/RaBitQ — RaBitQ is a Ruvector-family kernel, not a
+  competitor). Replaced with neutral cost descriptions: "purpose-built
+  / replicates data / cost: a new service" etc. Footer reframed:
+  "none of them are right for AI agents" → "none of them give agents
+  a shared, verifiable middle layer".
+
+### Fixed — CI / build infra (iters 51, 52)
+
+- **`.gcloudignore` added** (commit `73e2ef8`) — without it,
+  `gcloud run deploy --source .` uploaded ~3 GB (cargo target,
+  vendor heavy subdirs, examples). Now ~28 MB.
+- **`mcp-server` Cargo path-dep version bumped** to `2.3.0-alpha.1`
+  (commit `99a9658`) so cargo accepts the post-ADR-157 root crate.
+- **`release-ui.yml` YAML parse error fixed** — unquoted `file:`
+  inside step name was being parsed as a nested mapping key (commit
+  `f305b04`).
+- **`node-wasm/build.sh` output dirs renamed** (commits `fb3ecf8`,
+  `fc2b4e8`) — `pkg-web` / `pkg-nodejs` → `web` / `nodejs` to match
+  what `node-wasm/package.json`'s exports map references.
+
 ---
 
 ## Reference
