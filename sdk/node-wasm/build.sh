@@ -62,3 +62,11 @@ if command -v wasm-opt >/dev/null 2>&1; then
 else
     echo "==> wasm-opt not installed — skipping (install binaryen for ~30% size win)"
 fi
+
+# wasm-pack writes a `.gitignore: **` into every --out-dir. npm honors
+# that nested ignore even when the root `.npmignore` re-includes the
+# directory, which silently strips web/ and nodejs/ from the published
+# tarball — the very paths the package.json `exports` map points at.
+# Removing them here keeps `npm publish` honest.
+echo "==> strip wasm-pack-generated .gitignore files (so npm publish includes web/+nodejs/)"
+rm -f web/.gitignore nodejs/.gitignore pkg-bundler/.gitignore

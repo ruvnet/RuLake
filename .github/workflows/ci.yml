@@ -69,11 +69,17 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install maturin + test deps
-        run: pip install maturin pytest numpy
       - name: Build + test
+        # `maturin develop` requires an active virtualenv (or CONDA_PREFIX,
+        # or a `.venv` it can find). The hosted runner's system Python
+        # has neither, so we create a `.venv` per job, install build +
+        # test deps into it, and let maturin install the wheel into it.
         working-directory: sdk/python
         run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install --upgrade pip
+          pip install maturin pytest numpy
           maturin develop --release
           pytest tests/ -v
 
@@ -92,7 +98,10 @@ jobs:
         working-directory: sdk/node
         run: |
           cargo build --release
-          cp target/release/libruvector_rulake_node.so rulake.linux-x64-gnu.node
+          # The crate is named `rulake-node` (sdk/node/Cargo.toml:1), so
+          # cargo emits `librulake_node.so` — not the older
+          # `libruvector_rulake_node.so` name from before the rename.
+          cp target/release/librulake_node.so rulake.linux-x64-gnu.node
       - name: Run smoke tests
         working-directory: sdk/node
         run: node --test __test__/smoke.test.mjs
@@ -122,6 +131,17 @@ jobs:
       - name: Build mcp-rvdna binary
         working-directory: crates/mcp-rvdna
         run: cargo build --release --bin rvdna-mcp
+      - name: "Install + build sdk/node-wasm (rulake-wasm sibling, file: dep)"
+        # ui depends on rulake-wasm via `file:../sdk/node-wasm`. Vite picks
+        # the package.json `exports.".".browser` entry which is `./web/...`,
+        # but `web/` and `nodejs/` are gitignored (wasm-pack outputs).
+        # Build them now or Vite hard-fails with
+        # `[commonjs--resolver] Failed to resolve entry for package "rulake-wasm"`.
+        # Mirror what release-ui.yml does.
+        run: |
+          rustup target add wasm32-unknown-unknown
+          cargo install --locked wasm-pack || true
+          (cd sdk/node-wasm && unset RUSTFLAGS CARGO_BUILD_RUSTFLAGS && ./build.sh)
       - name: Install ui deps + build dist
         working-directory: ui
         run: |

@@ -6,3 +6,15 @@ build.sh
 Cargo.toml
 Cargo.lock
 .gitignore
+pkg-bundler/
+pkg-web/
+pkg-nodejs/
+
+# wasm-pack writes web/.gitignore and nodejs/.gitignore with `**`,
+# which npm honors via gitignore semantics even when an .npmignore exists.
+# These two negations re-include the build outputs that the package.json
+# `files` field and the `exports` map both depend on.
+!web/
+!web/**
+!nodejs/
+!nodejs/**

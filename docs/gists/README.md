@@ -48,19 +48,23 @@ reader can land cold and follow along in the source.
 |---|---|---|---|
 | [ADR-156](../adrs/ADR-156-rulake-as-memory-substrate.md) | [memory-substrate-deep.md](memory-substrate-deep.md) | 3,174 | What makes ruLake a good memory layer for agentic systems; the witness-anchored cache as the trust anchor for cross-agent state. |
 
+### Accelerator-tier (where the inner loop runs)
+
+| ADR | Gist | Words | What it covers |
+|---|---|---|---|
+| [ADR-157](../adrs/ADR-157-optional-accelerator-plane.md) | [accelerator-plane-deep.md](accelerator-plane-deep.md) | 2,953 | The `VectorKernel` trait + dispatch policy; the two shipped kernels (AVX-512 host SIMD, wgpu portable GPU); determinism as a hard gate on witness-sealed paths. |
+
 ## ADRs without gists
 
-[ADR-157](../adrs/ADR-157-optional-accelerator-plane.md) (Optional
-Accelerator Plane / VectorKernel) and
 [ADR-158](../adrs/ADR-158-optional-rotation-and-qvcache-positioning.md)
-(Rotation Kind / QVCache positioning) are pure design contracts that
-explicitly note "no code changes accompany this ADR" as part of their
+(Rotation Kind / QVCache positioning) is a pure design contract that
+explicitly notes "no code changes accompany this ADR" as part of its
 decision. The ADR itself is the deliverable; a gist would just
-restate it. They'll get gists when they ship implementations.
+restate it. It will get one when it ships an implementation.
 
 ## Total
 
-**~31,000 words** across 10 gists, distilled from the ADRs + research
+**~34,000 words** across 11 gists, distilled from the ADRs + research
 notes + source code. Reading order if you're new to the project: start
 with [`standalone-repo-deep.md`](standalone-repo-deep.md) (what kind
 of project this is), then [`datalake-layer-deep.md`](datalake-layer-deep.md)
@@ -68,4 +72,5 @@ of project this is), then [`datalake-layer-deep.md`](datalake-layer-deep.md)
 agents call into it), then pick a substrate
 ([`rvdna-v2-deep.md`](rvdna-v2-deep.md) or
 [`ruqu-v2-deep.md`](ruqu-v2-deep.md)) for a deep dive on the
-trust-chain story.
+trust-chain story. For the runtime perf story, finish with
+[`accelerator-plane-deep.md`](accelerator-plane-deep.md).
