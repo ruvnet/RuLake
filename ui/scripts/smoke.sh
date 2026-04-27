@@ -96,7 +96,12 @@ if [[ "$RUN_LIVE" -eq 1 ]]; then
   else
     pkill -f "rulake-mcp http" 2>/dev/null || true
     sleep 0.4
-    "$MCP_BIN" http --auth none --bind "127.0.0.1:${MCP_PORT}" \
+    # --capabilities read,publish,admin → tools/list exposes all 8
+    # #[tool] handlers (3 read + 2 publish + 3 admin). Smoke asserts
+    # the Console reads exactly 8 to prove the SSE parser fix from
+    # iter 32 also picks up the right line for mcp-server's larger
+    # response payload.
+    "$MCP_BIN" http --auth none --capabilities read,publish,admin --bind "127.0.0.1:${MCP_PORT}" \
       > /tmp/rulake-smoke-mcp.log 2>&1 &
     MCP_PID=$!
     sleep 1.5
@@ -217,7 +222,7 @@ npx --yes agent-browser eval "
 ok "Connect.test fired (port 65535 — expected to fail with CONNECT_FAILED)"
 
 if [[ "$RUN_LIVE" -eq 1 ]]; then
-  npx --yes agent-browser eval "
+  LIVE_RESULT=$(npx --yes agent-browser eval "
   (async () => {
     const inputs = Array.from(document.querySelectorAll('input[type=text], input:not([type])'));
     const epIn = inputs.find(i => /127\.0\.0\.1/i.test(i.value));
@@ -229,9 +234,35 @@ if [[ "$RUN_LIVE" -eq 1 ]]; then
     await new Promise(r => setTimeout(r, 200));
     const test = Array.from(document.querySelectorAll('button')).find(b => /Test only/i.test(b.textContent));
     test && test.click();
-    await new Promise(r => setTimeout(r, 3000));
-  })()" > /dev/null 2>&1
+    await new Promise(r => setTimeout(r, 3500));
+    const banner = Array.from(document.querySelectorAll('div, span'))
+      .map(el => (el.textContent || '').trim())
+      .find(t => /(initialize OK|connect failed)/.test(t)) || '';
+    const m = banner.match(/initialize OK · (\\d+)ms · (\\d+) tools/);
+    return JSON.stringify({ ok: !!m, tools: m && m[2] });
+  })()" 2>&1 | tail -1 | sed 's/^"//; s/"$//; s/\\\"/"/g')
   ok "Connect.test fired against live mcp-server at ${MCP_URL}"
+
+  # iter 32: Console SSE parser was grabbing the empty `data:\n`
+  # keepalive line first, returning toolsCount=0 even when the wire
+  # was healthy. Iter 32 fix in screens.jsx skipped empty payloads.
+  # mcp-server with `--auth none` exposes its full default capability
+  # set (read+publish+admin) which surfaces all 8 #[tool] handlers
+  # via tools/list — so the Console MUST report ≥3 tools to prove the
+  # parser is reading the right SSE frame, and ≥8 to prove the full
+  # capability set is exposed (which the Console live indicator
+  # depends on).
+  if echo "${LIVE_RESULT}" | grep -q '"ok":true'; then
+    ok "Console banner reports initialize OK from mcp-server"
+  else
+    err "Console did not report initialize OK from live mcp-server"
+  fi
+  LIVE_TOOLS=$(echo "${LIVE_RESULT}" | sed -n 's/.*"tools":"\([0-9]*\)".*/\1/p')
+  if [[ "${LIVE_TOOLS}" -ge 8 ]]; then
+    ok "Console reports ${LIVE_TOOLS} tools from mcp-server (≥ 8 expected)"
+  else
+    err "Console reports ${LIVE_TOOLS:-<unset>} tools from mcp-server, expected ≥ 8"
+  fi
 
   # Browse.refresh — should see the active client and dispatch the
   # rulake_list_collections wire call. The local mcp-server registers
