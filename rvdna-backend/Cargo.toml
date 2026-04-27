@@ -33,7 +33,7 @@ description = "rvDNA v2 BackendAdapter for ruLake — genomic substrate, T0 hot-
 readme      = "README.md"
 
 [dependencies]
-rulake = "2.3.0-alpha.1"
+rulake = { path = "..", version = "2.3.0-alpha.1" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "2.0"
