@@ -40,9 +40,22 @@ for arg in "$@"; do
   esac
 done
 
+# Auto-detect mcp-server binary so the Console smoke runs in --live
+# mode (which adds INIT_OK + LIST_COLLECTIONS_OK audit codes and the
+# live tool-count assertion against mcp-server's 8 tools). If the
+# binary isn't built yet, fall back silently to WASM-local-only.
+MCP_BIN="${REPO_DIR}/mcp-server/target/release/rulake-mcp"
+if [[ -x "${MCP_BIN}" ]]; then
+  CONSOLE_SMOKE="${REPO_DIR}/ui/scripts/smoke.sh --live"
+  CONSOLE_LABEL="Console WASM-local + live mcp-server"
+else
+  CONSOLE_SMOKE="${REPO_DIR}/ui/scripts/smoke.sh"
+  CONSOLE_LABEL="Console WASM-local (no live; build mcp-server first for --live)"
+fi
+
 # Smoke registry — pairs of (label, command). Add new smokes here.
 SMOKES=(
-  "Console WASM-local|${REPO_DIR}/ui/scripts/smoke.sh"
+  "${CONSOLE_LABEL}|${CONSOLE_SMOKE}"
   "rvdna-mcp HTTP|${REPO_DIR}/mcp-rvdna/scripts/http-smoke.sh"
 )
 if [[ "${SKIP_CROSS}" -eq 0 ]]; then
@@ -58,7 +71,12 @@ for entry in "${SMOKES[@]}"; do
   printf '    %s\n\n' "${cmd}"
 
   START=$(date +%s)
-  "${cmd}"
+  # Word-split cmd so flags like `--live` reach the inner script as
+  # separate argv entries (not part of the path). The smoke-script
+  # paths are repo-internal and operator-controlled, so word-splitting
+  # is safe here.
+  # shellcheck disable=SC2086
+  bash -c "${cmd}"
   ec=$?
   ELAPSED=$(($(date +%s) - START))
 

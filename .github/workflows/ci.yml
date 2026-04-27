@@ -114,6 +114,9 @@ jobs:
       - uses: browser-actions/setup-chrome@v1
       - name: Pre-install agent-browser (warms npx cache)
         run: npx --yes agent-browser install || true
+      - name: Build mcp-server binary (enables smoke-all auto --live)
+        working-directory: mcp-server
+        run: cargo build --release --bin rulake-mcp
       - name: Build mcp-rvdna binary
         working-directory: mcp-rvdna
         run: cargo build --release --bin rvdna-mcp
