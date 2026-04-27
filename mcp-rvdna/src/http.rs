@@ -105,13 +105,51 @@ pub async fn serve(
             let h_svc = service_fn(move |req: Request<Incoming>| {
                 let svc_inner = svc_for_conn.clone();
                 async move {
+                    // CORS for browser callers (the ruLake Console / any
+                    // web app). Mirrors mcp-server/src/http.rs:287+ —
+                    // echo the requesting Origin (or `*` if absent),
+                    // expose the MCP-specific session/version headers,
+                    // and short-circuit OPTIONS preflight. Surfaced as
+                    // a real bug in iter 32 cross-component testing
+                    // (Console at :4173 → "Failed to fetch" against
+                    // rvdna-mcp at :17441). v0.0.2 will tighten to an
+                    // allow-list alongside the JWT/mTLS lift.
+                    let origin = req
+                        .headers()
+                        .get("origin")
+                        .and_then(|h| h.to_str().ok())
+                        .unwrap_or("*")
+                        .to_string();
+                    if req.method() == http::Method::OPTIONS {
+                        let pre = Response::builder()
+                            .status(http::StatusCode::NO_CONTENT)
+                            .header("access-control-allow-origin", &origin)
+                            .header("access-control-allow-methods", "GET, POST, OPTIONS, DELETE")
+                            .header(
+                                "access-control-allow-headers",
+                                "authorization, content-type, accept, mcp-session-id, mcp-request-id, mcp-protocol-version",
+                            )
+                            .header("access-control-expose-headers", "mcp-session-id, mcp-protocol-version")
+                            .header("access-control-max-age", "600")
+                            .body(http_body_util::Full::new(Bytes::new()).map_err(|e: Infallible| match e {}).boxed())
+                            .unwrap();
+                        return Ok::<_, Infallible>(pre);
+                    }
                     let resp = StreamableHttpService::handle(svc_inner.as_ref(), req).await;
-                    let resp = resp.map(|b| {
+                    let mut resp = resp.map(|b| {
                         BodyExt::map_err(b, |e| match e {})
                             .boxed()
                             .map_err(|e: Infallible| match e {})
                             .boxed()
                     });
+                    let h = resp.headers_mut();
+                    if let Ok(v) = http::HeaderValue::from_str(&origin) {
+                        h.insert("access-control-allow-origin", v);
+                    }
+                    h.insert(
+                        "access-control-expose-headers",
+                        http::HeaderValue::from_static("mcp-session-id, mcp-protocol-version"),
+                    );
                     Ok::<Response<BoxBody<Bytes, Infallible>>, Infallible>(resp)
                 }
             });

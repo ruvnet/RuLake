@@ -1853,8 +1853,20 @@ function ConnectScreen() {
       let toolsCount = 0, resourcesCount = 0;
       try {
         const txt = await toolsResp.text();
-        const data = txt.split('\n').find(l => l.startsWith('data: '));
-        const env = data ? JSON.parse(data.slice(6)) : JSON.parse(txt);
+        // SSE may emit one or more `data:` lines before the JSON one
+        // (keepalive empties, retry/id frames). Skip empty payloads
+        // and pick the first line whose body actually JSON-parses.
+        // Surfaced in iter 32: rvdna-mcp returns a `data:\n` keepalive
+        // before the result, and the old `find(startsWith)` happily
+        // picked the empty one → `0 tools` for any 5-tool server.
+        const candidates = txt.split('\n')
+          .filter(l => l.startsWith('data: ') && l.length > 6)
+          .map(l => l.slice(6));
+        let env = null;
+        for (const body of candidates) {
+          try { env = JSON.parse(body); if (env?.result) break; } catch { /* try next */ }
+        }
+        if (!env) env = JSON.parse(txt); // non-SSE fallback
         toolsCount = env?.result?.tools?.length ?? 0;
       } catch { /* ignore — SSE keepalive may have eaten the body */ }
 
