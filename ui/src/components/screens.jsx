@@ -2040,6 +2040,7 @@ function AppStoreScreen() {
       },
       tier: 'T0 hot (v0.0.1) · T1 warm (v0.1) · T2 cold (v0.2)',
       research: 'docs/research/rvdna/',
+      gist: 'docs/gists/rvdna-v2-deep.md',
     },
     {
       id: 'ruqu',
@@ -2057,6 +2058,7 @@ function AppStoreScreen() {
       },
       tier: 'StateVector (v0.0.1) · Stabilizer / TensorNetwork (v0.1) · Hardware (v0.2)',
       research: 'docs/research/ruqu/',
+      gist: 'docs/gists/ruqu-v2-deep.md',
     },
     {
       id: 'gcs',
@@ -2069,6 +2071,7 @@ function AppStoreScreen() {
       install: { rust: 'cargo add ruvector-rulake-gcs', npm: '—', wasm: '—' },
       tier: 'storage adapter',
       research: 'gcs-backend/',
+      gist: 'docs/gists/datalake-layer-deep.md',
     },
     {
       id: 'ipfs',
@@ -2081,6 +2084,7 @@ function AppStoreScreen() {
       install: { rust: 'cargo add ruvector-rulake-ipfs', npm: '—', wasm: 'fetch via the IPFS toggle in Storage settings' },
       tier: 'distribution adapter',
       research: 'ipfs-backend/',
+      gist: 'docs/gists/ipfs-backend-deep.md',
     },
   ];
 
@@ -2129,6 +2133,7 @@ function AppStoreScreen() {
             <div style={{display:'flex', gap:14, fontSize:11, color:'var(--fg-faint)', borderTop:'1px solid var(--rule)', paddingTop:8}}>
               <span className="mono">tier: {s.tier}</span>
               <a className="mono" href={`https://github.com/ruvnet/RuLake/blob/main/${s.adr.path}`} target="_blank" rel="noopener" style={{marginLeft:'auto', color:'var(--accent-cyan)'}}>{s.adr.num} ↗</a>
+              {s.gist && <a className="mono" href={`https://github.com/ruvnet/RuLake/blob/main/${s.gist}`} target="_blank" rel="noopener" style={{color:'var(--accent-cyan)'}}>gist ↗</a>}
               <a className="mono" href={`https://github.com/ruvnet/RuLake/tree/main/${s.research}`} target="_blank" rel="noopener" style={{color:'var(--accent-cyan)'}}>research/ ↗</a>
             </div>
           </div>
