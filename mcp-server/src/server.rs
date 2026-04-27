@@ -370,18 +370,33 @@ impl RuLakeMcpServer {
         &self,
         Parameters(args): Parameters<PublishBundleArgs>,
     ) -> Result<Json<PathResponse>, McpError> {
-        require_cap(&self.capabilities, Capability::Publish)?;
-        let lake = Arc::clone(&self.planner.lake);
-        let key = (args.backend, args.collection);
-        let dir = std::path::PathBuf::from(args.dir);
-        let res = self
-            .planner
-            .workers
-            .submit(move || lake.publish_bundle(&key, &dir).map(|p| p.to_string_lossy().to_string()))
-            .await
-            .map_err(|e| McpError::internal_error(format!("RULAKE_DEGRADED: {e}"), None))?
-            .map_err(|e| McpError::internal_error(format!("RULAKE_INTERNAL: {e}"), None))?;
-        Ok(Json(PathResponse { path: res }))
+        let start = std::time::Instant::now();
+        let backend = args.backend.clone();
+        let collection = args.collection.clone();
+        let r: Result<Json<PathResponse>, McpError> = async {
+            require_cap(&self.capabilities, Capability::Publish)?;
+            let lake = Arc::clone(&self.planner.lake);
+            let key = (args.backend, args.collection);
+            let dir = std::path::PathBuf::from(args.dir);
+            let res = self
+                .planner
+                .workers
+                .submit(move || lake.publish_bundle(&key, &dir).map(|p| p.to_string_lossy().to_string()))
+                .await
+                .map_err(|e| McpError::internal_error(format!("RULAKE_DEGRADED: {e}"), None))?
+                .map_err(|e| McpError::internal_error(format!("RULAKE_INTERNAL: {e}"), None))?;
+            Ok(Json(PathResponse { path: res }))
+        }
+        .await;
+        self.audit_mutation(
+            "rulake_publish_bundle",
+            Capability::Publish,
+            &backend,
+            &collection,
+            &r,
+            start.elapsed().as_secs_f64() * 1000.0,
+        );
+        r
     }
 
     #[tool(
@@ -392,23 +407,38 @@ impl RuLakeMcpServer {
         &self,
         Parameters(args): Parameters<RefreshArgs>,
     ) -> Result<Json<RefreshResponse>, McpError> {
-        require_cap(&self.capabilities, Capability::Publish)?;
-        let lake = Arc::clone(&self.planner.lake);
-        let key = (args.backend, args.collection);
-        let dir = std::path::PathBuf::from(args.dir);
-        let res = self
-            .planner
-            .workers
-            .submit(move || lake.refresh_from_bundle_dir(&key, &dir))
-            .await
-            .map_err(|e| McpError::internal_error(format!("RULAKE_DEGRADED: {e}"), None))?
-            .map_err(|e| McpError::internal_error(format!("RULAKE_INTERNAL: {e}"), None))?;
-        let status = match res {
-            rulake::RefreshResult::UpToDate => "up_to_date",
-            rulake::RefreshResult::Invalidated => "invalidated",
-            rulake::RefreshResult::BundleMissing => "bundle_missing",
-        };
-        Ok(Json(RefreshResponse { status: status.into() }))
+        let start = std::time::Instant::now();
+        let backend = args.backend.clone();
+        let collection = args.collection.clone();
+        let r: Result<Json<RefreshResponse>, McpError> = async {
+            require_cap(&self.capabilities, Capability::Publish)?;
+            let lake = Arc::clone(&self.planner.lake);
+            let key = (args.backend, args.collection);
+            let dir = std::path::PathBuf::from(args.dir);
+            let res = self
+                .planner
+                .workers
+                .submit(move || lake.refresh_from_bundle_dir(&key, &dir))
+                .await
+                .map_err(|e| McpError::internal_error(format!("RULAKE_DEGRADED: {e}"), None))?
+                .map_err(|e| McpError::internal_error(format!("RULAKE_INTERNAL: {e}"), None))?;
+            let status = match res {
+                rulake::RefreshResult::UpToDate => "up_to_date",
+                rulake::RefreshResult::Invalidated => "invalidated",
+                rulake::RefreshResult::BundleMissing => "bundle_missing",
+            };
+            Ok(Json(RefreshResponse { status: status.into() }))
+        }
+        .await;
+        self.audit_mutation(
+            "rulake_refresh_from_bundle_dir",
+            Capability::Publish,
+            &backend,
+            &collection,
+            &r,
+            start.elapsed().as_secs_f64() * 1000.0,
+        );
+        r
     }
 
     // ─── admin-tier tools ────────────────────────────────────────────
@@ -421,18 +451,33 @@ impl RuLakeMcpServer {
         &self,
         Parameters(args): Parameters<SaveCacheArgs>,
     ) -> Result<Json<PathResponse>, McpError> {
-        require_cap(&self.capabilities, Capability::Admin)?;
-        let lake = Arc::clone(&self.planner.lake);
-        let key = (args.backend, args.collection);
-        let dir = std::path::PathBuf::from(args.dir);
-        let res = self
-            .planner
-            .workers
-            .submit(move || lake.save_cache_to_dir(&key, &dir).map(|p| p.to_string_lossy().to_string()))
-            .await
-            .map_err(|e| McpError::internal_error(format!("RULAKE_DEGRADED: {e}"), None))?
-            .map_err(|e| McpError::internal_error(format!("RULAKE_INTERNAL: {e}"), None))?;
-        Ok(Json(PathResponse { path: res }))
+        let start = std::time::Instant::now();
+        let backend = args.backend.clone();
+        let collection = args.collection.clone();
+        let r: Result<Json<PathResponse>, McpError> = async {
+            require_cap(&self.capabilities, Capability::Admin)?;
+            let lake = Arc::clone(&self.planner.lake);
+            let key = (args.backend, args.collection);
+            let dir = std::path::PathBuf::from(args.dir);
+            let res = self
+                .planner
+                .workers
+                .submit(move || lake.save_cache_to_dir(&key, &dir).map(|p| p.to_string_lossy().to_string()))
+                .await
+                .map_err(|e| McpError::internal_error(format!("RULAKE_DEGRADED: {e}"), None))?
+                .map_err(|e| McpError::internal_error(format!("RULAKE_INTERNAL: {e}"), None))?;
+            Ok(Json(PathResponse { path: res }))
+        }
+        .await;
+        self.audit_mutation(
+            "rulake_save_cache_to_dir",
+            Capability::Admin,
+            &backend,
+            &collection,
+            &r,
+            start.elapsed().as_secs_f64() * 1000.0,
+        );
+        r
     }
 
     #[tool(
@@ -443,18 +488,33 @@ impl RuLakeMcpServer {
         &self,
         Parameters(args): Parameters<WarmArgs>,
     ) -> Result<Json<WarmResponse>, McpError> {
-        require_cap(&self.capabilities, Capability::Admin)?;
-        let lake = Arc::clone(&self.planner.lake);
-        let key = (args.backend, args.collection);
-        let dir = std::path::PathBuf::from(args.dir);
-        let res = self
-            .planner
-            .workers
-            .submit(move || lake.warm_from_dir(&key, &dir))
-            .await
-            .map_err(|e| McpError::internal_error(format!("RULAKE_DEGRADED: {e}"), None))?
-            .map_err(|e| McpError::internal_error(format!("RULAKE_INTERNAL: {e}"), None))?;
-        Ok(Json(WarmResponse { vectors: res as u32 }))
+        let start = std::time::Instant::now();
+        let backend = args.backend.clone();
+        let collection = args.collection.clone();
+        let r: Result<Json<WarmResponse>, McpError> = async {
+            require_cap(&self.capabilities, Capability::Admin)?;
+            let lake = Arc::clone(&self.planner.lake);
+            let key = (args.backend, args.collection);
+            let dir = std::path::PathBuf::from(args.dir);
+            let res = self
+                .planner
+                .workers
+                .submit(move || lake.warm_from_dir(&key, &dir))
+                .await
+                .map_err(|e| McpError::internal_error(format!("RULAKE_DEGRADED: {e}"), None))?
+                .map_err(|e| McpError::internal_error(format!("RULAKE_INTERNAL: {e}"), None))?;
+            Ok(Json(WarmResponse { vectors: res as u32 }))
+        }
+        .await;
+        self.audit_mutation(
+            "rulake_warm_from_dir",
+            Capability::Admin,
+            &backend,
+            &collection,
+            &r,
+            start.elapsed().as_secs_f64() * 1000.0,
+        );
+        r
     }
 
     #[tool(
@@ -465,10 +525,77 @@ impl RuLakeMcpServer {
         &self,
         Parameters(args): Parameters<InvalidateArgs>,
     ) -> Result<Json<EmptyResponse>, McpError> {
-        require_cap(&self.capabilities, Capability::Admin)?;
-        let key = (args.backend, args.collection);
-        self.planner.lake.invalidate_cache(&key);
-        Ok(Json(EmptyResponse {}))
+        let start = std::time::Instant::now();
+        let r: Result<Json<EmptyResponse>, McpError> = (|| {
+            require_cap(&self.capabilities, Capability::Admin)?;
+            let key = (args.backend.clone(), args.collection.clone());
+            self.planner.lake.invalidate_cache(&key);
+            Ok(Json(EmptyResponse {}))
+        })();
+        self.audit_mutation(
+            "rulake_invalidate_cache",
+            Capability::Admin,
+            &args.backend,
+            &args.collection,
+            &r,
+            start.elapsed().as_secs_f64() * 1000.0,
+        );
+        r
+    }
+
+    /// R-MCP-1: emit a fully-shaped audit entry for a mutation tool
+    /// so the audit log is symmetric across read (`rulake_query`) and
+    /// write (publish/admin) paths. Outcome/code are derived from the
+    /// `Result` so callers don't have to reshape state at the call
+    /// site — the helper inspects what actually happened.
+    fn audit_mutation<T>(
+        &self,
+        tool: &str,
+        required: Capability,
+        backend: &str,
+        collection: &str,
+        result: &Result<T, McpError>,
+        elapsed_ms: f64,
+    ) {
+        let (outcome, code) = match result {
+            Ok(_) => ("ok", None),
+            Err(e) => {
+                let msg = e.message.to_string();
+                if msg.starts_with("RULAKE_DEGRADED") {
+                    ("degraded", Some("RULAKE_DEGRADED".to_string()))
+                } else if msg.starts_with("RULAKE_INTERNAL") {
+                    ("error", Some("RULAKE_INTERNAL".to_string()))
+                } else {
+                    ("refused", Some("CAP_DENIED".to_string()))
+                }
+            }
+        };
+        self.audit.emit(AuditEntry {
+            ts: now_ts(),
+            transport: "stdio".into(),
+            principal: "stdio:local".into(),
+            session: None,
+            request_id: None,
+            tool: tool.into(),
+            intent: Some(format!("mutate:{backend}/{collection}")),
+            outcome: outcome.into(),
+            result_size: None,
+            trust_level: None,
+            duration_ms: elapsed_ms,
+            witness_in: None,
+            witness_out: None,
+            code,
+            policy_decision: Some(PolicyDecision {
+                capability_required: format!("{:?}", required).to_ascii_lowercase(),
+                capability_granted: self
+                    .capabilities
+                    .labels()
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
+            }),
+            decision: None,
+        });
     }
 }
 
