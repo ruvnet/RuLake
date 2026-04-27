@@ -63,6 +63,7 @@ SMOKES=(
   "${CONSOLE_LABEL}|${CONSOLE_SMOKE}"
   "rvdna-mcp HTTP|${REPO_DIR}/mcp-rvdna/scripts/http-smoke.sh"
   "ruqu-mcp HTTP|${REPO_DIR}/mcp-ruqu/scripts/http-smoke.sh"
+  "Production rulake-mcp.ruv.io|${REPO_DIR}/scripts/smoke-live.sh"
 )
 if [[ "${SKIP_CROSS}" -eq 0 ]]; then
   SMOKES+=("Console + mcp-rvdna cross-component|${REPO_DIR}/ui/scripts/smoke-cross-mcp.sh")
