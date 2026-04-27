@@ -21,8 +21,15 @@ pub enum Gate {
     S { q: u8 },
     /// T = diag(1, e^{iπ/4}) on `q`.
     T { q: u8 },
-    /// Z-axis rotation by `theta` radians on `q`. Witness uses the
-    /// IEEE-754 bit pattern so byte-isomorphic on every platform.
+    /// Z-axis rotation by `theta` radians on `q`.
+    ///
+    /// **v0.0 caveat (security finding R-3):** `theta` is NOT bound
+    /// into the witness chain in v0.0 — only `Circuit.id` flows into
+    /// `data_ref`. Two circuits with the same id but different `theta`
+    /// values therefore collide on the same witness. v0.0.2 will hash
+    /// gate parameters into a content-derived `data_ref` to close
+    /// this. For now: callers MUST set `Circuit.id` from a hash of
+    /// the program source if they care about replay determinism.
     Rz { q: u8, theta: f64 },
     /// CNOT with `control` and `target` distinct qubits.
     Cx { control: u8, target: u8 },
