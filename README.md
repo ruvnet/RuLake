@@ -801,13 +801,25 @@ For deeper reading, every shipped ADR has a 2,500–3,700-word narrative compani
 
 ### Console — `ui/`
 
-A full management UI ([ADR-006](docs/adrs/ADR-006-rulake-console-vite-github-pages.md)) at [`ui/`](ui/), built with Vite + React, deployed to GitHub Pages, and validated end-to-end via `agent-browser` (see [`ui/scripts/smoke.sh`](ui/scripts/smoke.sh) — 7 routes / 5 audit codes / 0 console errors). Three modes:
+A full management UI ([ADR-006](docs/adrs/ADR-006-rulake-console-vite-github-pages.md)) at [`ui/`](ui/), built with Vite + React, deployed to GitHub Pages, and validated end-to-end via `agent-browser`. Three modes:
 
 - **Demo** — animated mock data, no dependencies.
 - **WASM-local** — `rulake-wasm` running in your browser; verify bundles, compute witnesses, search via Web Worker. Zero server required.
-- **Live MCP** — point at any running `rulake-mcp` (or `mcp-rvdna` / `mcp-ruqu`) and the same UI drives the live server.
+- **Live MCP** — point at any running `rulake-mcp` (or `mcp-rvdna`) and the same UI drives the live server.
 
 The 7th route is an **App Store** that lists every shipped substrate with install commands for the Rust crate, MCP companion, and (where applicable) npm package.
+
+### End-to-end smoke contracts
+
+Three scripts cover the wire from different angles. Each runs in seconds and exits non-zero on the first failure — drop any one of them into CI to catch regressions:
+
+| Script | What it covers | Asserts |
+|---|---|---|
+| [`ui/scripts/smoke.sh`](ui/scripts/smoke.sh) | Console **WASM-local** mode (no server). With `--live`, also Console + `mcp-server`. | 7 routes navigated · 5 audit codes (`WITNESS_MATCH`, `IPFS_BUNDLE_VERIFIED`, `OK_VERIFIED`, `IPFS_OK`, `CONNECT_FAILED`) · App Store renders 4 cards with `SHIPPING`/`SCAFFOLDED` tags · `--live` adds `INIT_OK` + `LIST_COLLECTIONS_OK` and asserts 8 tools surfaced from `mcp-server` |
+| [`ui/scripts/smoke-cross-mcp.sh`](ui/scripts/smoke-cross-mcp.sh) | Console + `mcp-rvdna` full wire — the test that surfaced the iter 32 CORS + SSE-parser bugs. | MCP handshake completes · Console banner reads `initialize OK · Nms · 5 tools` · `INIT_OK` audit row lands · `Browse.refresh` against `mcp-rvdna` (which has no `rulake_list_collections`) refuses cleanly with `LIST_COLLECTIONS_FAILED` · 0 console errors |
+| [`mcp-rvdna/scripts/http-smoke.sh`](mcp-rvdna/scripts/http-smoke.sh) | `rvdna-mcp` HTTP transport in isolation (no browser). | Binary launches · MCP handshake completes · all 5 tools (`rvdna_find`, `rvdna_call_variants`, `rvdna_translate`, `rvdna_score`, `rvdna_lineage`) appear in `tools/list` · `rvdna_lineage` against an unknown `(backend, collection)` refuses with `RVDNA_UNKNOWN_COLLECTION` |
+
+Run all three after any change that touches `mcp-server/`, `mcp-rvdna/`, `ui/src/`, or the BackendAdapter trait — they take ~90 s combined and catch most cross-component regressions a single-crate `cargo test` would miss.
 
 ---
 
