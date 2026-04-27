@@ -813,6 +813,10 @@ A full management UI ([ADR-006](docs/adrs/ADR-006-rulake-console-vite-github-pag
 
 **Live demo: [ruvnet.github.io/RuLake/](https://ruvnet.github.io/RuLake/)** — boots in DEMO mode, then auto-probes the hosted `mcp-server` at [`rulake-mcp.ruv.io`](https://rulake-mcp.ruv.io/) (Cloud Run, free-tier, 8 MCP tools). The pill in the top-right flips to `● LIVE` automatically when the probe succeeds.
 
+<a href="https://ruvnet.github.io/RuLake/"><img src="assets/console-connect.png" alt="Connect screen — endpoint configuration pre-pointed at the live MCP, four auth modes (no auth / Bearer / JWT / mTLS), credentials kept in IndexedDB" width="100%" /></a>
+
+> The **Connect** route — pre-filled with `https://rulake-mcp.ruv.io/`. Pick an auth mode (No auth / Bearer / JWT / mTLS), click *Test only*, and the topbar pill flips to ● LIVE. Saved endpoints are kept in this browser's IndexedDB and never leave the device.
+
 Three modes:
 
 - **Demo** — animated mock data, no dependencies.
