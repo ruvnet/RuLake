@@ -10,17 +10,35 @@ use serde::{Deserialize, Serialize};
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Gate {
     /// Hadamard on `q`.
-    H { q: u8 },
+    H {
+        /// Qubit index (0-based).
+        q: u8,
+    },
     /// Pauli-X on `q`.
-    X { q: u8 },
+    X {
+        /// Qubit index (0-based).
+        q: u8,
+    },
     /// Pauli-Y on `q`.
-    Y { q: u8 },
+    Y {
+        /// Qubit index (0-based).
+        q: u8,
+    },
     /// Pauli-Z on `q`.
-    Z { q: u8 },
+    Z {
+        /// Qubit index (0-based).
+        q: u8,
+    },
     /// S = diag(1, i) on `q`.
-    S { q: u8 },
+    S {
+        /// Qubit index (0-based).
+        q: u8,
+    },
     /// T = diag(1, e^{iπ/4}) on `q`.
-    T { q: u8 },
+    T {
+        /// Qubit index (0-based).
+        q: u8,
+    },
     /// Z-axis rotation by `theta` radians on `q`.
     ///
     /// **v0.0 caveat (security finding R-3):** `theta` is NOT bound
@@ -30,9 +48,19 @@ pub enum Gate {
     /// gate parameters into a content-derived `data_ref` to close
     /// this. For now: callers MUST set `Circuit.id` from a hash of
     /// the program source if they care about replay determinism.
-    Rz { q: u8, theta: f64 },
+    Rz {
+        /// Qubit index (0-based).
+        q: u8,
+        /// Rotation angle in radians.
+        theta: f64,
+    },
     /// CNOT with `control` and `target` distinct qubits.
-    Cx { control: u8, target: u8 },
+    Cx {
+        /// Control qubit index (0-based).
+        control: u8,
+        /// Target qubit index (0-based).
+        target: u8,
+    },
 }
 
 /// A compiled circuit. v0.0 stores gates verbatim — no rewrites,
