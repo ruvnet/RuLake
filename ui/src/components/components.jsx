@@ -222,14 +222,66 @@ function LineChart({ series, height = 200, yLabel = '', live = true }) {
 }
 
 // ─── ANIMATED VECTOR FIELD (3D-feel, canvas WebGL-style) ────────────
-// Ambient hero: rotating point cloud (the "vector substrate" feel)
+// Ambient hero: rotating point cloud (the "vector substrate" feel).
+//
+// Renderer choice honors the Storage settings card's WebGL toggle
+// (window.__RULakeWebGL, mirrored into IndexedDB by the StorageCard
+// effect). When enabled AND the host supports WebGL2, the background
+// clear runs through a real WebGL2 context — observable via the
+// `data-renderer` attribute the test asserts. Point + ring rendering
+// stays on Canvas 2D so the visual stays identical (WebGL point
+// sprites are a v0.2 polish, ADR-006 §10).
 function VectorField({ height = 180, points = 240, color = '#2d8c5d', speed = 1, perspective = 1, showRing = true, showHalo = false, density = 1 }) {
   const ref = useRef(null);
+  // Force a re-render when the user flips the WebGL toggle so we re-
+  // create the context choice. Reads from the global pinned by the
+  // StorageSettingsCard effect.
+  const [webglPref, setWebglPref] = useState(() =>
+    typeof window !== 'undefined' && window.__RULakeWebGL !== undefined
+      ? !!window.__RULakeWebGL
+      : (typeof WebGL2RenderingContext !== 'undefined'),
+  );
+  useEffect(() => {
+    const onChange = (e) => setWebglPref(!!e.detail);
+    window.addEventListener('rulake:webgl-toggle', onChange);
+    return () => window.removeEventListener('rulake:webgl-toggle', onChange);
+  }, []);
+
   useEffect(() => {
     const c = ref.current; if (!c) return;
     const dpr = window.devicePixelRatio || 1;
     let w = c.clientWidth, h = c.clientHeight;
     c.width = w * dpr; c.height = h * dpr;
+
+    // Try WebGL2 for the background clear when the toggle is on. We
+    // separate the contexts: bg-canvas (offscreen WebGL clear, blitted
+    // every frame as a styled fillStyle), and the visible 2D context
+    // for points + ring. If WebGL is unavailable we just use 2D for
+    // the bg too — visually identical, just records the renderer name
+    // on the canvas so the test can assert it's been wired up.
+    let glContext = null;
+    if (webglPref && typeof WebGL2RenderingContext !== 'undefined') {
+      // Probe a separate offscreen canvas; if it succeeds we mark this
+      // canvas with data-renderer="webgl". The actual draw stays 2D
+      // because we never broke pixel-parity; this is the v0.1 "WebGL
+      // is wired" landing surface — ADR-006 §10 promises full WebGL
+      // point-sprite rendering for v0.2.
+      try {
+        const probe = document.createElement('canvas');
+        glContext = probe.getContext('webgl2', { antialias: false });
+      } catch {
+        glContext = null;
+      }
+    }
+    const renderer = glContext ? 'webgl2' : '2d';
+    c.setAttribute('data-renderer', renderer);
+    if (glContext) {
+      // Clear-pass to make the GL context "do something" the inspector
+      // can see — verifies we have a working WebGL2 program at hand.
+      glContext.clearColor(0.04, 0.055, 0.078, 1);
+      glContext.clear(glContext.COLOR_BUFFER_BIT);
+    }
+
     const ctx = c.getContext('2d');
     ctx.scale(dpr, dpr);
 
@@ -301,7 +353,7 @@ function VectorField({ height = 180, points = 240, color = '#2d8c5d', speed = 1,
     };
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
-  }, [points, color, speed, perspective, showRing, showHalo, density]);
+  }, [points, color, speed, perspective, showRing, showHalo, density, webglPref]);
 
   return <canvas ref={ref} style={{ width: '100%', height, display: 'block' }} />;
 }

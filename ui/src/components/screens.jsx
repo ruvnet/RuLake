@@ -1505,6 +1505,15 @@ function StorageSettingsCard() {
     }
   }, [settings.embedProvider, embedKeyInMemory]);
 
+  // Mirror the WebGL toggle into a window global + dispatch a custom
+  // event so the VectorField (and any other WebGL-aware renderer) can
+  // re-render against the new pref without prop-drilling through the
+  // app shell.
+  React.useEffect(() => {
+    window.__RULakeWebGL = !!settings.webglEnabled;
+    window.dispatchEvent(new CustomEvent('rulake:webgl-toggle', { detail: !!settings.webglEnabled }));
+  }, [settings.webglEnabled]);
+
   const update = (patch) => {
     setSettings(prev => {
       const next = { ...prev, ...patch };
