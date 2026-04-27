@@ -35,6 +35,8 @@ jobs:
           - "ipfs-backend"
           - "rvdna-backend"
           - "ruqu-backend"
+          - "kernel-avx512"   # ADR-157 SIMD reference impl (issue #3)
+          - "kernel-wgpu"     # ADR-157 portable GPU impl (issue #3)
           - "python"
           - "node"
     steps:

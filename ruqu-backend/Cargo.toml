@@ -44,7 +44,7 @@ description = "ruQu v2 BackendAdapter for ruLake — quantum execution substrate
 readme      = "README.md"
 
 [dependencies]
-rulake = "2.2"
+rulake = "2.3.0-alpha.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "2.0"

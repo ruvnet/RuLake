@@ -39,7 +39,7 @@ path = "src/main.rs"
 [dependencies]
 # The rulake crate carries `RuLakeBundle` + `BackendAdapter` — same
 # version mcp-server pins.
-rulake = "2.2"
+rulake = "2.3.0-alpha.1"
 # Path-dep on the sibling rvdna-backend crate; flip to crates.io when
 # rvdna-backend is published.
 ruvector-rulake-rvdna = { path = "../rvdna-backend" }
