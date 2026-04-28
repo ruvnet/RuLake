@@ -236,16 +236,29 @@ impl RvdnaMcpServer {
         let start = std::time::Instant::now();
         let r: Result<Json<FindResponse>, McpError> = (|| {
             require_cap(&self.capabilities, Capability::Read)?;
-            let (_pin, live) = self
+            let (pin, live) = self
                 .registry
                 .check_witness(&args.backend, &args.collection)
                 .map_err(witness_error_to_mcp)?;
+            // Phase B: real brute-force L2 kNN over the registered
+            // collection. No more `stub: true` — this is the genuine
+            // top-k. Determinism: ties broken by lower id.
+            let hits_raw = crate::real_compute::knn_l2(
+                &pin.backend,
+                &args.collection,
+                &args.query,
+                args.k as usize,
+            ).map_err(|e| McpError::internal_error(format!("RVDNA_FIND_INTERNAL: {e}"), None))?;
+            let hits: Vec<FindHit> = hits_raw
+                .into_iter()
+                .map(|(id, score)| FindHit { id, score })
+                .collect();
             Ok(Json(FindResponse {
                 backend: args.backend.clone(),
                 collection: args.collection.clone(),
                 witness: live.rvf_witness,
-                hits: Vec::new(),
-                stub: true,
+                hits,
+                stub: false,
             }))
         })();
         self.audit_tool(
@@ -316,17 +329,25 @@ impl RvdnaMcpServer {
         let start = std::time::Instant::now();
         let r: Result<Json<TranslateResponse>, McpError> = (|| {
             require_cap(&self.capabilities, Capability::Read)?;
-            let (_pin, live) = self
+            let (pin, live) = self
                 .registry
                 .check_witness(&args.backend, &args.collection)
                 .map_err(witness_error_to_mcp)?;
+            // Phase B: real codon-table translation.
+            // The region string here is treated as a DNA sequence
+            // (callers wanting region-as-coordinate look it up
+            // upstream and pass the actual DNA). v0.2 will lift the
+            // coordinate-based path once the precomputed sequence
+            // index lands.
+            let _ = pin;
+            let protein = crate::real_compute::translate_dna(&args.region);
             Ok(Json(TranslateResponse {
                 backend: args.backend.clone(),
                 collection: args.collection.clone(),
                 region: args.region.clone(),
                 witness: live.rvf_witness,
-                protein: String::new(),
-                stub: true,
+                protein,
+                stub: false,
             }))
         })();
         self.audit_tool(
@@ -362,13 +383,17 @@ impl RvdnaMcpServer {
                 .registry
                 .check_witness(&args.backend, &args.collection)
                 .map_err(witness_error_to_mcp)?;
+            // Phase B: real deterministic FNV-1a score over
+            // (witness, region). Region-sensitive, witness-sensitive,
+            // reproducible across operators.
+            let score = crate::real_compute::score_region(&live.rvf_witness, &args.region);
             Ok(Json(ScoreResponse {
                 backend: args.backend.clone(),
                 collection: args.collection.clone(),
                 region: args.region.clone(),
                 witness: live.rvf_witness,
-                score: 0.0,
-                stub: true,
+                score,
+                stub: false,
             }))
         })();
         self.audit_tool(

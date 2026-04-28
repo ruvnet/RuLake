@@ -37,6 +37,7 @@
 pub mod audit;
 pub mod http;
 pub mod policy;
+pub mod real_compute;
 pub mod registry;
 pub mod server;
 
