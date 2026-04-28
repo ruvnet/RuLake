@@ -1,5 +1,4 @@
 ---
-name: rulake-query
 description: Query the witness-anchored ruLake cache — search, verify, explain, or refresh. Returns ranked results plus a decision_trace block with cost, latency, witness match, and substrates used.
 ---
 

@@ -1,5 +1,4 @@
 ---
-name: rulake-kernel-status
 description: Report which ADR-157 kernels are registered against the running RuLake instance and their KernelCapabilities (simd_width, popcount_native, gpu, deterministic flag).
 ---
 

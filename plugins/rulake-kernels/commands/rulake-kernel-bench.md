@@ -1,5 +1,4 @@
 ---
-name: rulake-kernel-bench
 description: Run the ADR-157 three-way kernel L2 bench (CpuNaive / AVX-512 / wgpu) and print the headline-grid results. Mirrors `cargo bench` against the same workload generator (PCG32 seed 0xA5A5_5A5A) so the numbers are byte-identical to the captured baseline.
 ---
 

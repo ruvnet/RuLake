@@ -1,5 +1,4 @@
 ---
-name: rulake-bundle-info
 description: Pretty-print every field of a `table.rulake.json` bundle without recomputing the witness. Use for inspection / debugging.
 ---
 

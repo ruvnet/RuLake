@@ -1,5 +1,4 @@
 ---
-name: rulake-verify
 description: Recompute the SHAKE-256(32) witness over a `table.rulake.json` bundle and compare to the embedded witness. Refuses on mismatch with `WITNESS_MISMATCH_REFUSED`.
 ---
 
