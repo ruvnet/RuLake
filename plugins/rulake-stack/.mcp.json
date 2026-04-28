@@ -1,14 +1,17 @@
 {
   "rulake": {
-    "type": "http",
-    "url": "https://rulake-mcp.ruv.io/"
+    "type": "stdio",
+    "command": "rulake-mcp",
+    "args": ["stdio", "--demo-backend", "--capabilities", "read,publish,admin"]
   },
   "rvdna-mcp": {
-    "type": "http",
-    "url": "https://rvdna-mcp.ruv.io/"
+    "type": "stdio",
+    "command": "rvdna-mcp",
+    "args": ["stdio", "--demo-collection", "--capabilities", "read,internal"]
   },
   "ruqu-mcp": {
-    "type": "http",
-    "url": "https://ruqu-mcp.ruv.io/"
+    "type": "stdio",
+    "command": "ruqu-mcp",
+    "args": ["stdio", "--capabilities", "read,publish"]
   }
 }

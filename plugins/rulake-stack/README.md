@@ -27,18 +27,37 @@ Kernels (`rulake-kernels`) and the `/loop`-aware workers (`rulake-loop-vector`) 
 
 You should get back the result + a `decision_trace` block showing cache hit, substrates used, kernel chosen, witness match, cost, and latency. If that loop is under 60 seconds wall-clock, the killer path works.
 
-## Default MCP wires
+## Default MCP wires (local stdio)
 
-Three HTTP wires, all pointing at the public demo:
+Three local stdio wires — Claude Code spawns the binaries on demand:
 
-- `rulake` → `https://rulake-mcp.ruv.io/`
-- `rvdna-mcp` → `https://rvdna-mcp.ruv.io/`
-- `ruqu-mcp` → `https://ruqu-mcp.ruv.io/`
+```jsonc
+{
+  "rulake":    { "type": "stdio", "command": "rulake-mcp",
+                 "args": ["stdio", "--demo-backend", "--capabilities", "read,publish,admin"] },
+  "rvdna-mcp": { "type": "stdio", "command": "rvdna-mcp",
+                 "args": ["stdio", "--demo-collection", "--capabilities", "read,internal"] },
+  "ruqu-mcp":  { "type": "stdio", "command": "ruqu-mcp",
+                 "args": ["stdio", "--capabilities", "read,publish"] }
+}
+```
 
-The demo wires are read-only, with no auth (`--auth none --insecure-allow-no-auth` per `docs/deploy/cloud-run.md`). For production with real data:
+**Local has full caps** (`admin,publish,read` on rulake), **~1ms latency** (no network round-trip), and **doesn't depend on Cloud Run being up**. Trade-off: the binaries need to be on `PATH`.
 
-1. Deploy your own MCP per [`docs/deploy/cloud-run.md`](https://github.com/ruvnet/RuLake/blob/main/docs/deploy/cloud-run.md)
-2. Override the URL in your local Claude Code config
+### One-time install (binaries on PATH)
+
+```bash
+# from a clone of ruvnet/RuLake
+cargo install --path crates/mcp-server     # rulake-mcp
+cargo install --path crates/mcp-rvdna      # rvdna-mcp
+cargo install --path crates/mcp-ruqu       # ruqu-mcp
+```
+
+These land in `~/.cargo/bin/` which is typically on `PATH`. Verify with `which rulake-mcp`.
+
+### Using the hosted demo instead
+
+If you don't want to build the binaries, override the wires in `~/.claude.json` to point at the hosted Cloud Run instances (`https://rulake-mcp.ruv.io/`, `https://rvdna-mcp.ruv.io/`, `https://ruqu-mcp.ruv.io/`). Hosted has higher latency (network round-trip) and ships with `--auth none --insecure-allow-no-auth`.
 
 ## Trust posture
 

@@ -1,6 +1,7 @@
 {
   "rvdna-mcp": {
-    "type": "http",
-    "url": "https://rvdna-mcp.ruv.io/"
+    "type": "stdio",
+    "command": "rvdna-mcp",
+    "args": ["stdio", "--demo-collection", "--capabilities", "read,internal"]
   }
 }
