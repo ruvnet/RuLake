@@ -1,0 +1,11 @@
+{
+  "name": "rulake-rvdna",
+  "description": "rvDNA — genomic substrate for ruLake. Adds the rvdna-mcp wire (5 tools: find, call_variants, translate, score, lineage) plus 5 slash commands. v0.0.1 ships witnessed stubs; the RaBitQ inner loop, variant index, and codon table land in v0.1.",
+  "version": "0.0.1",
+  "author": {
+    "name": "rUv",
+    "email": "hello@cognitum.one"
+  },
+  "homepage": "https://ruvnet.github.io/RuLake/",
+  "license": "MIT OR Apache-2.0"
+}

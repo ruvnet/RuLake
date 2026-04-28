@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "rulake-marketplace",
-  "description": "ruLake — witness-anchored vector federation for agentic AI. Six installable Claude Code plugins (one killer-path + five composable) per ADR-009.",
+  "description": "ruLake — witness-anchored vector federation for agentic AI. Seven installable Claude Code plugins (one killer-path + six composable) per ADR-009.",
   "owner": {
     "name": "rUv",
     "email": "hello@cognitum.one"
@@ -24,11 +24,19 @@
       "homepage": "https://ruvnet.github.io/RuLake/"
     },
     {
-      "name": "rulake-substrates",
-      "description": "Four backend adapters (rvdna, ruqu, gcs, ipfs) plus the two companion MCP servers (rvdna-mcp, ruqu-mcp). Adds 10 tools across the substrate surface.",
+      "name": "rulake-rvdna",
+      "description": "rvDNA — genomic substrate for ruLake. Adds the rvdna-mcp wire (5 tools: find, call_variants, translate, score, lineage) plus 5 slash commands. v0.0.1 ships witnessed stubs; the RaBitQ inner loop, variant index, and codon table land in v0.1.",
       "author": { "name": "rUv", "email": "hello@cognitum.one" },
       "category": "data",
-      "source": "./plugins/rulake-substrates",
+      "source": "./plugins/rulake-rvdna",
+      "homepage": "https://ruvnet.github.io/RuLake/"
+    },
+    {
+      "name": "rulake-ruqu",
+      "description": "ruQu — quantum simulation substrate for ruLake. Adds the ruqu-mcp wire (5 tools: simulate, verify, replay, optimize, qec_schedule) plus 5 slash commands. Picks the right backend (StateVector / Stabilizer / TensorNetwork / Hardware-stub) per circuit.",
+      "author": { "name": "rUv", "email": "hello@cognitum.one" },
+      "category": "data",
+      "source": "./plugins/rulake-ruqu",
       "homepage": "https://ruvnet.github.io/RuLake/"
     },
     {

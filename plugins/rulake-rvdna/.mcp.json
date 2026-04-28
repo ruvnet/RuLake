@@ -2,9 +2,5 @@
   "rvdna-mcp": {
     "type": "http",
     "url": "https://rvdna-mcp.ruv.io/"
-  },
-  "ruqu-mcp": {
-    "type": "http",
-    "url": "https://ruqu-mcp.ruv.io/"
   }
 }
