@@ -32,11 +32,15 @@ The quantum-simulation substrate plugin for ruLake. Standalone — install when 
 
 `ruqu_replay` runs the same circuit on a different backend and verifies the witnesses match — Stabilizer-fast vs StateVector-exact agreement is the load-bearing Clifford-correctness gate.
 
-## v0.0.1 status
+## Status (all 5 tools live with real upstream lib)
 
-- `ruqu_simulate`, `ruqu_verify`, `ruqu_replay`: live end-to-end
-- `ruqu_optimize`: stub — full circuit-optimization passes land in v0.1
-- `ruqu_qec_schedule`: stub — surface-code planner lands in v0.2
+| Tool | Engine |
+|---|---|
+| `ruqu_simulate` | `ruqu_core::Simulator::run` — production SIMD-accelerated state-vector simulator (~26k LOC) |
+| `ruqu_verify` | real witness re-derive |
+| `ruqu_replay` | same engine as `simulate`, witness-equality check |
+| `ruqu_optimize` | `ruqu_core::optimizer::fuse_gates` + `circuit_analyzer::{is_clifford, count_non_clifford}` |
+| `ruqu_qec_schedule` | `ruqu_algorithms::surface_code::run_surface_code` — distance-3 rotated surface code, 9 data qubits + 8 ancillas, X/Z stabilizer measurement, lookup decoder |
 
 n_qubits ≤ 16 in v0.0; circuit `id` MUST be content-derived (≤ 256 bytes).
 
