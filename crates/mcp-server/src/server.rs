@@ -30,7 +30,7 @@ use rulake::{LocalBackend, RuLake, BackendAdapter, FsBackend};
 use crate::allow::AllowList;
 use crate::audit::{AuditEntry, AuditSink, PolicyDecision, now_ts};
 use crate::config::{BackendConfig, McpConfig};
-use crate::planner::{PlanError, Planner, QueryRequest, QueryResponse};
+use crate::planner::{DecisionTrace, PlanError, Planner, QueryRequest, TracedQueryResponse};
 use crate::policy::{Capability, CapabilitySet};
 use crate::workers::WorkerPool;
 
@@ -199,9 +199,12 @@ impl RuLakeMcpServer {
     pub async fn rulake_query(
         &self,
         Parameters(req): Parameters<QueryRequest>,
-    ) -> Result<Json<QueryResponse>, McpError> {
+    ) -> Result<Json<TracedQueryResponse>, McpError> {
         let start = std::time::Instant::now();
         let intent = format!("{:?}", req.intent).to_ascii_lowercase();
+        // Capture the freshness budget before req is moved into the planner
+        // so the ADR-009 decision_trace block can surface it.
+        let freshness_budget_ms = req.budget.max_latency_ms;
         let result = self.planner.handle(req).await;
         let elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
         let cap_grant = self.capabilities.labels().iter().map(|s| s.to_string()).collect();
@@ -235,7 +238,13 @@ impl RuLakeMcpServer {
                     }),
                     decision: serde_json::to_value(&resp.decision).ok(),
                 });
-                Ok(Json(resp))
+                let trace = DecisionTrace::derive(
+                    &resp.provenance,
+                    &resp.decision,
+                    freshness_budget_ms,
+                    elapsed_ms,
+                );
+                Ok(Json(TracedQueryResponse { inner: resp, decision_trace: trace }))
             }
             Err(PlanError::Refused(resp)) => {
                 self.audit.emit(AuditEntry {
@@ -259,7 +268,13 @@ impl RuLakeMcpServer {
                     }),
                     decision: serde_json::to_value(&resp.decision).ok(),
                 });
-                Ok(Json(resp))
+                let trace = DecisionTrace::derive(
+                    &resp.provenance,
+                    &resp.decision,
+                    freshness_budget_ms,
+                    elapsed_ms,
+                );
+                Ok(Json(TracedQueryResponse { inner: resp, decision_trace: trace }))
             }
             Err(PlanError::Degraded { inflight, cap }) => {
                 self.audit.emit(AuditEntry {

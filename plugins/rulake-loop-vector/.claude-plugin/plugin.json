@@ -3,8 +3,8 @@
   "description": "/loop-aware vector workers — incremental indexing from a backend, refresh-from-bundle on schedule, witness-mismatch refuse-and-replan. The agentic-flow + ruflo /loop-pattern integration for ruLake.",
   "version": "0.1.0",
   "author": {
-    "name": "ruvnet",
-    "email": "ruv@ruv.net"
+    "name": "rUv",
+    "email": "hello@cognitum.one"
   },
   "homepage": "https://ruvnet.github.io/RuLake/",
   "license": "MIT OR Apache-2.0"

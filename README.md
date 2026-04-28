@@ -51,12 +51,21 @@ ruLake is built to run wherever the agent runs — including small places.
 - **Why it matters** — agent memory at the edge means the personal AI doesn't round-trip your private context to a far-away cluster. Latency is local; cost is zero per query; the witness story keeps it verifiable.
 
 ```bash
-# Four install paths. Pick the one that fits where your agent runs.
+# Five install paths. Pick the one that fits where your agent runs.
 cargo add rulake                      # Rust
 pip   install rulake                  # Python
 npm   install rulake                  # Node.js / TypeScript (native binary)
 npm   install rulake-wasm             # Browsers, Cloudflare Workers, Deno, Bun
 ```
+
+```text
+# Claude Code, Cursor, Cline — install the Claude Code marketplace (ADR-009)
+/plugin marketplace add ruvnet/RuLake
+/plugin install rulake-stack@rulake-marketplace
+/rulake-query "what does ADR-157 commit to?"
+```
+
+The killer-path plugin (`rulake-stack`) bundles core + substrates + witness with sensible defaults; the live demo MCP at `https://rulake-mcp.ruv.io/` is wired by default so you get a working `/rulake-query` in under 60 seconds. See [ADR-009](docs/adrs/sdk/ADR-009-rulake-plugin-marketplace.md) for the full plugin catalog (six plugins) + trust posture.
 
 Open source. ❤️ Free forever.
 

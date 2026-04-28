@@ -292,7 +292,7 @@ pub struct DegradedAdvice {
     pub hints: Vec<String>,
 }
 
-#[derive(Debug, Serialize, JsonSchema)]
+#[derive(Debug, Serialize, JsonSchema, Clone)]
 pub struct Refusal {
     pub route: [String; 2],
     pub code: String,
@@ -316,6 +316,153 @@ pub enum ReasonCode {
     /// v0.1 placeholder — covers cases the v0.1 planner doesn't yet
     /// classify finely. Promoted to a specific variant in v0.2.
     Other,
+}
+
+// ─── ADR-009 decision_trace block (Phase 2) ───────────────────────────
+//
+// The decision_trace block is the contract from ADR-009 that lets a
+// calling agent negotiate cost vs trust vs latency without reaching
+// around the abstraction. It's derived from the existing Provenance +
+// Decision + timing data so no QueryResponse construction site needs
+// to change — the wrapping happens at the rmcp tool emission layer in
+// server.rs.
+//
+// v0.1 ships the SHAPE; cost is a relative-units placeholder until
+// per-substrate pricing lands (v2.4+), and the kernel/cache.hit_ratio_session
+// fields are conservative defaults that surface even when the planner
+// doesn't have fine-grained signal yet.
+
+/// The named flow that produced this response. v0.1 ships
+/// `deterministic-retrieval-path-v0.1` (no mincut prune yet); the
+/// upgrade to `deterministic-retrieval-path-v0.2` ships when
+/// `crates/core/src/select.rs` lands.
+pub const DETERMINISTIC_RETRIEVAL_PATH_V0_1: &str = "deterministic-retrieval-path-v0.1";
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct DecisionTrace {
+    /// Named path identifier — see ADR-009 §"deterministic retrieval path".
+    pub chosen_path: String,
+    pub intent: String,
+    pub freshness: FreshnessTrace,
+    pub cache: CacheTrace,
+    pub substrates_used: Vec<String>,
+    pub kernel: KernelTrace,
+    pub witness: WitnessTrace,
+    pub cost: CostTrace,
+    pub latency: LatencyTrace,
+    pub refusals: Vec<Refusal>,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct FreshnessTrace {
+    pub budget_ms: u64,
+    pub actual_ms: f64,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct CacheTrace {
+    /// True when `reason_code` indicates a cache hit (CacheHitFresh / CacheHitEventual).
+    pub hit: bool,
+    /// Session-level cumulative hit ratio. v0.1 reports `null` (planner
+    /// doesn't track session state yet); v0.2 wires the cache stats.
+    pub hit_ratio_session: Option<f32>,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct KernelTrace {
+    /// "cpu-naive" / "avx512" / "wgpu" / etc. v0.1 reports the default
+    /// since no kernel registry is exposed yet.
+    pub id: String,
+    pub deterministic: bool,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct WitnessTrace {
+    /// True if the witness recompute matched what the substrate supplied.
+    /// `provenance.witness_verified` is the ground truth.
+    pub r#match: bool,
+}
+
+/// Economic-routing telemetry — relative units, not USD.
+///
+/// `compute_kernel + backend_fetch + cache_hit_discount` are the cost
+/// signals the dispatch policy uses to pick a kernel / substrate. v0.1
+/// ships placeholder values that move with the actual planner state;
+/// v2.4 wires per-substrate pricing.
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct CostTrace {
+    pub compute_kernel: f32,
+    pub backend_fetch: f32,
+    pub cache_hit_discount: f32,
+    pub currency: String,
+    pub comment: String,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct LatencyTrace {
+    pub total_ms: f64,
+    /// v0.1 reports `null` for the per-step breakdown; v2.4 wires
+    /// per-step instrumentation through the deterministic retrieval path.
+    pub cache_ms: Option<f64>,
+    pub fanout_ms: Option<f64>,
+    pub witness_ms: Option<f64>,
+}
+
+impl DecisionTrace {
+    /// Derive the trace from the existing QueryResponse fields plus
+    /// the request's freshness budget and the wall-clock elapsed time
+    /// captured at the rmcp tool emission layer.
+    pub fn derive(
+        provenance: &Provenance,
+        decision: &Decision,
+        freshness_budget_ms: u64,
+        elapsed_ms: f64,
+    ) -> Self {
+        let cache_hit = matches!(
+            decision.reason_code,
+            ReasonCode::CacheHitFresh | ReasonCode::CacheHitEventual
+        );
+        let backends_count = decision.backends_used.len() as f32;
+        Self {
+            chosen_path: DETERMINISTIC_RETRIEVAL_PATH_V0_1.to_string(),
+            intent: decision.intent.clone(),
+            freshness: FreshnessTrace {
+                budget_ms: freshness_budget_ms,
+                actual_ms: decision.budget_used_ms,
+            },
+            cache: CacheTrace { hit: cache_hit, hit_ratio_session: None },
+            substrates_used: decision.backends_used.clone(),
+            kernel: KernelTrace {
+                id: "cpu-naive".to_string(),
+                deterministic: true,
+            },
+            witness: WitnessTrace { r#match: provenance.witness_verified },
+            cost: CostTrace {
+                compute_kernel: 0.0,
+                backend_fetch: backends_count,
+                cache_hit_discount: if cache_hit { -1.0 } else { 0.0 },
+                currency: "relative-units".to_string(),
+                comment: "Free + open source — costs are relative-units used by the dispatch policy, not USD".to_string(),
+            },
+            latency: LatencyTrace {
+                total_ms: elapsed_ms,
+                cache_ms: None,
+                fanout_ms: None,
+                witness_ms: None,
+            },
+            refusals: decision.refusals.clone(),
+        }
+    }
+}
+
+/// Wire envelope that surfaces ADR-009's `decision_trace` block alongside
+/// the existing QueryResponse. Built at the rmcp emission layer so no
+/// QueryResponse construction site changes.
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct TracedQueryResponse {
+    #[serde(flatten)]
+    pub inner: QueryResponse,
+    pub decision_trace: DecisionTrace,
 }
 
 // ─── Errors ────────────────────────────────────────────────────────────

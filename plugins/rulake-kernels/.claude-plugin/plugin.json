@@ -3,8 +3,8 @@
   "description": "ADR-157 accelerator plane: AVX-512 host SIMD (bit-equal to CpuNaive on the conformance fixture) and wgpu portable GPU (auto-detects Vulkan / Metal / DX12 / GL / WebGPU). Off-by-default; operator opt-in.",
   "version": "0.1.0",
   "author": {
-    "name": "ruvnet",
-    "email": "ruv@ruv.net"
+    "name": "rUv",
+    "email": "hello@cognitum.one"
   },
   "homepage": "https://ruvnet.github.io/RuLake/",
   "license": "MIT OR Apache-2.0"

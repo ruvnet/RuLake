@@ -3,8 +3,8 @@
   "description": "Killer-path install for ruLake. Bundles rulake-core + rulake-substrates + rulake-witness with sensible defaults so a fresh Claude Code session has working witness-anchored retrieval in under 60 seconds.",
   "version": "2.3.0-alpha.1",
   "author": {
-    "name": "ruvnet",
-    "email": "ruv@ruv.net"
+    "name": "rUv",
+    "email": "hello@cognitum.one"
   },
   "homepage": "https://ruvnet.github.io/RuLake/",
   "license": "MIT OR Apache-2.0"
