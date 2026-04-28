@@ -1,7 +1,7 @@
 {
   "name": "rulake-stack",
-  "description": "Killer-path install for ruLake. Bundles rulake-core + rulake-rvdna + rulake-ruqu + rulake-witness with sensible defaults so a fresh Claude Code session has working witness-anchored retrieval in under 60 seconds. v2.3.0-alpha.3 splits substrates into separate rvdna + ruqu plugins.",
-  "version": "2.3.0-alpha.3",
+  "description": "Killer-path install for ruLake. Bundles rulake-core + rulake-rvdna + rulake-ruqu + rulake-witness + rulake-memory with sensible defaults so a fresh Claude Code session has working witness-anchored retrieval in under 60 seconds. v2.3.0-alpha.4 adds the rulake-memory surface (self-learning agentic memory) plus the /rulake-discover advisory tool.",
+  "version": "2.3.0-alpha.4",
   "author": {
     "name": "rUv",
     "email": "hello@cognitum.one"

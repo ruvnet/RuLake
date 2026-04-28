@@ -1,0 +1,11 @@
+{
+  "name": "rulake-memory",
+  "description": "Self-learning, self-optimizing agentic memory. Wraps the witness-anchored ruLake cache as a working-memory surface for agents — remember/recall/forget primitives, hit-ratio tuning, drift detection, audit-driven optimization. Memory that gets faster the more it's used.",
+  "version": "0.1.0",
+  "author": {
+    "name": "rUv",
+    "email": "hello@cognitum.one"
+  },
+  "homepage": "https://ruvnet.github.io/RuLake/",
+  "license": "MIT OR Apache-2.0"
+}

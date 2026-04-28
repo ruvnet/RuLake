@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "rulake-marketplace",
-  "description": "ruLake — witness-anchored vector federation for agentic AI. Seven installable Claude Code plugins (one killer-path + six composable) per ADR-009.",
+  "description": "ruLake — witness-anchored vector federation for agentic AI. Eight installable Claude Code plugins (one killer-path + seven composable) per ADR-009.",
   "owner": {
     "name": "rUv",
     "email": "hello@cognitum.one"
@@ -17,10 +17,18 @@
     },
     {
       "name": "rulake-core",
-      "description": "The eight rulake_* MCP tools and the rulake_query decision layer. Wires to the live demo at https://rulake-mcp.ruv.io/ by default; switch to stdio for production.",
+      "description": "The eight rulake_* MCP tools and the rulake_query decision layer plus /rulake-discover advisory tool. Wires to the live demo at https://rulake-mcp.ruv.io/ by default; switch to stdio for production.",
       "author": { "name": "rUv", "email": "hello@cognitum.one" },
       "category": "data",
       "source": "./plugins/rulake-core",
+      "homepage": "https://ruvnet.github.io/RuLake/"
+    },
+    {
+      "name": "rulake-memory",
+      "description": "Self-learning, self-optimizing agentic memory. Wraps the witness-anchored ruLake cache as a working-memory surface — remember/recall/forget verbs, hit-ratio tuning, drift detection, audit-driven optimization. Memory that gets faster the more it's used.",
+      "author": { "name": "rUv", "email": "hello@cognitum.one" },
+      "category": "data",
+      "source": "./plugins/rulake-memory",
       "homepage": "https://ruvnet.github.io/RuLake/"
     },
     {

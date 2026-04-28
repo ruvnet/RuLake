@@ -1,7 +1,7 @@
 {
   "name": "rulake-core",
-  "description": "The eight rulake_* MCP tools (query, list_backends, list_collections, publish_bundle, refresh_from_bundle_dir, save_cache_to_dir, warm_from_dir, invalidate_cache) and the /rulake-query decision-layer skill. Wires to the live Cloud Run demo by default; switch to stdio for production.",
-  "version": "2.3.0-alpha.1",
+  "description": "The eight rulake_* MCP tools (query, list_backends, list_collections, publish_bundle, refresh_from_bundle_dir, save_cache_to_dir, warm_from_dir, invalidate_cache), the /rulake-query decision-layer skill, and the /rulake-discover advisory tool that recommends which other ruLake plugin to install for a given goal. Wires to the live Cloud Run demo by default; switch to stdio for production.",
+  "version": "2.3.0-alpha.2",
   "author": {
     "name": "rUv",
     "email": "hello@cognitum.one"
