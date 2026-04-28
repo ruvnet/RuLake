@@ -1,7 +1,7 @@
 {
   "name": "rulake-stack",
-  "description": "Killer-path install for ruLake. Bundles rulake-core + rulake-substrates + rulake-witness with sensible defaults so a fresh Claude Code session has working witness-anchored retrieval in under 60 seconds.",
-  "version": "2.3.0-alpha.1",
+  "description": "Killer-path install for ruLake. Bundles rulake-core + rulake-substrates + rulake-witness with sensible defaults so a fresh Claude Code session has working witness-anchored retrieval in under 60 seconds. v2.3.0-alpha.2 adds the bundled rvdna-find + ruqu-simulate slash commands.",
+  "version": "2.3.0-alpha.2",
   "author": {
     "name": "rUv",
     "email": "hello@cognitum.one"
