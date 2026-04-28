@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct McpConfig {
     /// `Fresh` (default), `Eventual { ttl_ms }`, or `Frozen`.
     #[serde(default)]
@@ -60,6 +60,30 @@ pub struct McpConfig {
     /// `demo_backend = true` in mcp.toml.
     #[serde(default)]
     pub demo_backend: bool,
+}
+
+impl Default for McpConfig {
+    /// Hand-written `Default` (rather than `#[derive(Default)]`) because
+    /// `#[serde(default = "default_workers")]` only fires during
+    /// deserialization. A no-config deploy (e.g. `rulake-mcp http
+    /// --bind ... --auth none` with no `--config` flag) calls
+    /// `McpConfig::default()`, which would otherwise inherit
+    /// `usize::default() = 0` for `workers` and DEGRADE the worker pool.
+    /// Caught live on https://rulake-mcp.ruv.io/ via agent-side
+    /// capability map: rulake_list_collections returned RULAKE_DEGRADED
+    /// even after the serde-default fix shipped.
+    fn default() -> Self {
+        Self {
+            consistency: ConsistencyConfig::default(),
+            rerank_factor: default_rerank(),
+            rotation_seed: default_seed(),
+            workers: default_workers(),
+            max_inflight: default_max_inflight(),
+            backends: Vec::new(),
+            allow: Vec::new(),
+            demo_backend: false,
+        }
+    }
 }
 
 /// One [[allow]] block in mcp.toml.
