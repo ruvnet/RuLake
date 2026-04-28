@@ -1,5 +1,5 @@
 ---
-description: rvDNA T0 — DNA → protein translation for a genomic region in a pinned collection. Returns the protein string + witness. v0.0.1 stub; codon table + ORF logic lands in v0.1.
+description: rvDNA T0 — real codon-table DNA → protein translation. Standard genetic code (64 codons → 20 amino acids + 3 stop codons). Case-insensitive, skips Ns + whitespace, stops at first stop codon. Witness-anchored.
 ---
 
 # /rulake-substrates:rvdna-translate

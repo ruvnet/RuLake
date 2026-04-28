@@ -1,7 +1,7 @@
 {
   "name": "rulake-ruqu",
-  "description": "ruQu — quantum simulation substrate for ruLake. Adds the ruqu-mcp wire (5 tools: simulate, verify, replay, optimize, qec_schedule) plus 5 slash commands. Picks the right backend (StateVector / Stabilizer / TensorNetwork / Hardware-stub) per circuit (ADR-008).",
-  "version": "0.0.2",
+  "description": "ruQu — quantum simulation substrate for ruLake. Adds the ruqu-mcp wire (5 tools: simulate, verify, replay, optimize, qec_schedule) plus 5 slash commands. All 5 tools route through real upstream libs: ruqu-core (~26k LOC SIMD-accelerated state-vector simulator) for simulate/verify/replay/optimize and ruqu-algorithms surface_code for qec_schedule.",
+  "version": "0.0.3",
   "author": {
     "name": "rUv",
     "email": "hello@cognitum.one"

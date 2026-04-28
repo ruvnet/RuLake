@@ -1,5 +1,5 @@
 ---
-description: rvDNA T0 — model-derived score (polygenic risk / pharmacogenomic dosing) for a genomic region in a pinned collection. Returns the score + witness. v0.0.1 stub; scorer model wiring lands in v0.1.
+description: rvDNA T0 — deterministic FNV-1a score in [0.0, 1.0] over (witness, region). Region-sensitive, witness-sensitive, reproducible across operators. Production scorer model wires here in v0.2.
 ---
 
 # /rulake-substrates:rvdna-score

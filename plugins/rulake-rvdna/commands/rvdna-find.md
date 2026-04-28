@@ -1,5 +1,5 @@
 ---
-description: rvDNA T0 — kNN search over a pinned genomic collection. Returns a witnessed bundle pointer plus the matching segments. v0.0.1 stub; real RaBitQ inner loop lands in v0.1.
+description: rvDNA T0 — real brute-force L2 kNN over a pinned genomic collection. Returns a witnessed bundle pointer plus the matching segments. Deterministic; ties broken by lower id (matches the ADR-157 kernel-conformance contract).
 ---
 
 # /rulake-substrates:rvdna-find

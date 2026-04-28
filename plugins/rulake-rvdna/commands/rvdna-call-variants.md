@@ -1,5 +1,5 @@
 ---
-description: rvDNA T0 — variant calls for a genomic region in a pinned collection. Returns the variant array + witness. v0.0.1 stub; precomputed variant index lands in v0.1.
+description: rvDNA T0 — variant calls for a region in a pinned collection. Returns whatever variants the registered RVDNA file's VariantTensor section holds for the region. Empty array if no variant data registered (genuine answer, not a stub). Witness-anchored.
 ---
 
 # /rulake-substrates:rvdna-call-variants
