@@ -46,20 +46,20 @@ npm   install rulake-wasm             # Browsers, Cloudflare Workers, Deno, Bun
 
 ### Claude Code integration — at a glance
 
-| | Feature | Why it matters |
+| | Feature | What it does |
 |---|---|---|
-| ⚡ | **One-command install** | `/plugin install rulake-stack@rulake-marketplace` — zero config, zero secrets |
-| 🚀 | **<60-second first query** | Marketplace add → install → reload → query, end-to-end |
-| 🔌 | **3 live MCP wires bundled** | `rulake-mcp.ruv.io`, `rvdna-mcp.ruv.io`, `ruqu-mcp.ruv.io` — public demos auto-wired |
-| 🎯 | **18 retrieval tools across 3 surfaces** | 8 `rulake_*` + 5 `rvdna_*` (genomic) + 5 `ruqu_*` (quantum) |
-| 🛡️ | **Witness-anchored every result** | SHAKE-256(32) over `(data_ref, dim, seed, rerank, gen)` — refuses on tamper |
-| 📊 | **`decision_trace` on every response** | Cost (relative-units), witness match, substrates used, latency, refusals |
-| 🔬 | **Local witness verify** | `/rulake-stack:rulake-verify path/to/bundle.json` — no MCP needed |
-| 🧬 | **Genomic substrate** | rvDNA v0.0.2 — find / score / lineage / variants / translate |
-| ⚛️ | **Quantum substrate** | ruQu v0.0.2 — simulate / verify / replay / optimize / qec_schedule |
-| ⚙️ | **ADR-157 accelerator opt-in** | AVX-512 host SIMD + wgpu portable GPU (Vulkan / Metal / DX12 / GL / WebGPU) |
-| 🏗️ | **Six composable plugins** | `stack` (90% case) + `core` / `substrates` / `kernels` / `witness` / `loop-vector` |
-| 💸 | **$0 / query, MIT + Apache-2.0** | No service to host, no per-query fee, no API key |
+| ⚡ | **One-command install** | `/plugin install rulake-stack@rulake-marketplace` — no API keys, no config files, nothing to set up |
+| 🚀 | **Working in under a minute** | Type four lines, get a real query result with a receipt back |
+| 🔌 | **Three free demo servers built in** | Talks to `rulake-mcp.ruv.io`, `rvdna-mcp.ruv.io`, `ruqu-mcp.ruv.io` out of the box |
+| 🎯 | **18 ready-to-use tools** | 8 retrieval (search / verify / explain / refresh) + 5 genomic + 5 quantum |
+| 🛡️ | **Cryptographic receipt on every answer** | Each result is fingerprinted; tampered or stale data is rejected, not served |
+| 📊 | **A decision trace with every answer** | The agent sees how it was made: what it cost, where it came from, how long it took, what was refused |
+| 🔬 | **Verify an answer without the network** | `/rulake-stack:rulake-verify path/to/bundle.json` — runs locally, no server needed |
+| 🧬 | **Genomic memory built in** | Find variants, score sequences, trace lineage, translate to protein — five tools |
+| ⚛️ | **Quantum simulation built in** | Run circuits, verify results, replay history, optimize, schedule error-correction — five tools |
+| ⚙️ | **Optional speed-ups for big workloads** | Plug in CPU vector instructions or GPU shaders when you need them; fall back to plain CPU when you don't |
+| 🏗️ | **Six plugins, mix and match** | `stack` (all-in-one) plus `core`, `substrates`, `kernels`, `witness`, `loop-vector` for finer control |
+| 💸 | **Free forever, $0 per query** | MIT or Apache-2.0; no service to pay for, no per-query metering, no API key |
 
 Six-plugin catalog + trust posture: see [ADR-009](docs/adrs/sdk/ADR-009-rulake-plugin-marketplace.md). For the bare `npm install rulake-wasm` path on edge runtimes (browsers, Cloudflare Workers, Deno, Bun), see the install paths above.
 
