@@ -10,6 +10,7 @@
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use anyhow::Context;
 
@@ -17,6 +18,7 @@ use ruvector_rulake_mcp_rvdna::{
     AllowBearerOnPublic, AuditSink, AuthMode, CapabilitySet, InsecureAllowNoAuth,
     RvdnaMcpServer,
 };
+use ruvector_rulake_rvdna::{RvdnaCollection, RvdnaT0Backend};
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> anyhow::Result<()> {
@@ -47,6 +49,41 @@ async fn main() -> anyhow::Result<()> {
         .with_capabilities(capabilities)
         .with_audit(audit);
 
+    // --demo-collection: register a deterministic RvdnaT0Backend("demo")
+    // with one seeded collection ("demo", 64 k-mer vectors at D=8, PCG32
+    // seed 0xDEADBEEF). Lets the public Cloud Run rvdna-mcp answer real
+    // rvdna_find / call_variants / translate / score calls instead of
+    // refusing every request with RVDNA_UNKNOWN_COLLECTION. Off in
+    // production deploys (the witness over a 64-row toy isn't useful).
+    if args.demo_collection {
+        let backend = Arc::new(RvdnaT0Backend::new("demo"));
+        let mut state = 0xDEADBEEFu64;
+        let mut next_f32 = || {
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            let bits = (state >> 40) as u32;
+            let x = (bits as f32) / (1u32 << 24) as f32;
+            x * 2.0 - 1.0
+        };
+        let coll = RvdnaCollection {
+            ids: (0..64u64).collect(),
+            vectors: (0..64).map(|_| (0..8).map(|_| next_f32()).collect()).collect(),
+            dim: 8,
+            generation: 1,
+        };
+        backend.put_collection("demo", coll);
+        server
+            .register_collection(backend, "demo", 0xDEADBEEF, 20)
+            .context("--demo-collection: register seeded T0 backend")?;
+        tracing::info!(
+            backend = "demo",
+            collection = "demo",
+            vectors = 64,
+            "rvdna demo collection registered (--demo-collection)"
+        );
+    }
+
     match args.transport {
         Transport::Stdio => server.serve_stdio().await,
         Transport::Http(http) => {
@@ -67,6 +104,7 @@ struct Args {
     transport: Transport,
     capabilities: Option<String>,
     audit_file: Option<PathBuf>,
+    demo_collection: bool,
 }
 
 #[derive(Debug)]
@@ -87,6 +125,7 @@ fn parse_args() -> anyhow::Result<Args> {
     let mut audit_file: Option<PathBuf> = None;
     let mut http_bind: Option<SocketAddr> = None;
     let mut http_insecure_allow_no_auth = false;
+    let mut demo_collection = false;
 
     let mut it = std::env::args().skip(1);
     while let Some(arg) = it.next() {
@@ -106,6 +145,7 @@ fn parse_args() -> anyhow::Result<Args> {
                 http_bind = Some(s.parse().with_context(|| format!("--bind {s:?}"))?);
             }
             "--insecure-allow-no-auth" => http_insecure_allow_no_auth = true,
+            "--demo-collection" => demo_collection = true,
             "-h" | "--help" => {
                 print_help();
                 std::process::exit(0);
@@ -130,6 +170,7 @@ fn parse_args() -> anyhow::Result<Args> {
         transport,
         capabilities,
         audit_file,
+        demo_collection,
     })
 }
 
