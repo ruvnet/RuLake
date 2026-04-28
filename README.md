@@ -36,14 +36,32 @@ npm   install rulake-wasm             # Browsers, Cloudflare Workers, Deno, Bun
 /plugin install rulake-stack@rulake-marketplace
 /reload-plugins                                  # required — Claude Code's install message asks for this
 
-# Slash commands resolve via the <plugin>:<command> namespace.
-# Type /rul to autocomplete.
-/rulake-core:rulake-query "what does ADR-157 commit to?"
-/rulake-witness:rulake-verify path/to/table.rulake.json
-/rulake-witness:rulake-bundle-info path/to/table.rulake.json
+# Slash commands resolve via <plugin>:<command>. Type /ru to autocomplete.
+/rulake-stack:rulake-query "what does ADR-157 commit to?"
+/rulake-stack:rulake-verify path/to/table.rulake.json
+/rulake-stack:rulake-bundle-info path/to/table.rulake.json
 ```
 
-`rulake-stack` bundles three live MCP wires (`rulake-mcp.ruv.io`, `rvdna-mcp.ruv.io`, `ruqu-mcp.ruv.io`) and the slash commands above. The query against the live demo MCP returns the data plus a `decision_trace` block (cost in relative-units, witness match, substrates used, latency).
+`rulake-stack` is the killer-path install. To use the namespaced form `/rulake-core:*`, `/rulake-witness:*`, or `/rulake-kernels:*`, install those plugins separately (`/plugin install <name>@rulake-marketplace`).
+
+### Claude Code integration — at a glance
+
+| | Feature | Why it matters |
+|---|---|---|
+| ⚡ | **One-command install** | `/plugin install rulake-stack@rulake-marketplace` — zero config, zero secrets |
+| 🚀 | **<60-second first query** | Marketplace add → install → reload → query, end-to-end |
+| 🔌 | **3 live MCP wires bundled** | `rulake-mcp.ruv.io`, `rvdna-mcp.ruv.io`, `ruqu-mcp.ruv.io` — public demos auto-wired |
+| 🎯 | **18 retrieval tools across 3 surfaces** | 8 `rulake_*` + 5 `rvdna_*` (genomic) + 5 `ruqu_*` (quantum) |
+| 🛡️ | **Witness-anchored every result** | SHAKE-256(32) over `(data_ref, dim, seed, rerank, gen)` — refuses on tamper |
+| 📊 | **`decision_trace` on every response** | Cost (relative-units), witness match, substrates used, latency, refusals |
+| 🔬 | **Local witness verify** | `/rulake-stack:rulake-verify path/to/bundle.json` — no MCP needed |
+| 🧬 | **Genomic substrate** | rvDNA v0.0.2 — find / score / lineage / variants / translate |
+| ⚛️ | **Quantum substrate** | ruQu v0.0.2 — simulate / verify / replay / optimize / qec_schedule |
+| ⚙️ | **ADR-157 accelerator opt-in** | AVX-512 host SIMD + wgpu portable GPU (Vulkan / Metal / DX12 / GL / WebGPU) |
+| 🏗️ | **Six composable plugins** | `stack` (90% case) + `core` / `substrates` / `kernels` / `witness` / `loop-vector` |
+| 💸 | **$0 / query, MIT + Apache-2.0** | No service to host, no per-query fee, no API key |
+
+Six-plugin catalog + trust posture: see [ADR-009](docs/adrs/sdk/ADR-009-rulake-plugin-marketplace.md). For the bare `npm install rulake-wasm` path on edge runtimes (browsers, Cloudflare Workers, Deno, Bun), see the install paths above.
 
 ## Where to next
 
