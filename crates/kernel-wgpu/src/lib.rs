@@ -63,6 +63,24 @@ use bytemuck::{Pod, Zeroable};
 use rulake::kernel::{KernelCapabilities, VectorKernel};
 use wgpu::util::DeviceExt;
 
+/// Per-call host + GPU buffer-allocation cap, in bytes.
+///
+/// `l2_distance_one` and `rabitq_popcount` refuse any request whose
+/// host-side flat buffer (`dim × n × elem_bytes`) would exceed this
+/// cap, returning an empty top-K and emitting a single `eprintln!`
+/// warning. This is the [security review](../../docs/research/security/kernels-v2.md#r-wgpu-1-medium)
+/// **R-WGPU-1** mitigation: it converts a malicious `n × dim` shape
+/// into a structured refusal instead of an OOM that takes down the
+/// caller's worker thread.
+///
+/// 1 GiB is enough for the ADR-157 reference grid (D=768, n=1M, f32
+/// = 3.0 GiB → split caller into batches; if the caller insists on a
+/// single dispatch it must compile-time override this constant). It
+/// is intentionally well below the typical 4 GiB Vulkan
+/// `Limits::max_buffer_size` so the cap is *the* refusal point, not
+/// the device.
+pub const MAX_DISPATCH_BYTES: u64 = 1 << 30;
+
 /// Errors that can occur when constructing a [`WgpuKernel`].
 #[derive(Debug)]
 pub enum WgpuKernelError {
@@ -530,6 +548,18 @@ impl VectorKernel for WgpuKernel {
         // cold; we still handle it for parity.
         let dim = query.len();
         let n = candidates.len();
+        // R-WGPU-1 cap. Use saturating arithmetic so a u64 overflow in
+        // the multiply itself can't bypass the check.
+        let request_bytes = (dim as u64)
+            .saturating_mul(n as u64)
+            .saturating_mul(std::mem::size_of::<f32>() as u64);
+        if request_bytes > MAX_DISPATCH_BYTES {
+            eprintln!(
+                "kernel-wgpu: refusing l2 dispatch — dim*n*4 = {request_bytes} bytes \
+                 exceeds MAX_DISPATCH_BYTES = {MAX_DISPATCH_BYTES} (R-WGPU-1 cap)"
+            );
+            return Vec::new();
+        }
         let mut flat = vec![0.0f32; dim * n];
         for (i, c) in candidates.iter().enumerate() {
             let len = dim.min(c.len());
@@ -585,6 +615,19 @@ impl VectorKernel for WgpuKernel {
         let dim_u64 = query.len();
         let dim_u32 = (dim_u64 * 2) as u32;
         let n = candidates.len();
+
+        // R-WGPU-1 cap. Same shape as the L2 path; element size is 8
+        // bytes (u64) here.
+        let request_bytes = (dim_u64 as u64)
+            .saturating_mul(n as u64)
+            .saturating_mul(std::mem::size_of::<u64>() as u64);
+        if request_bytes > MAX_DISPATCH_BYTES {
+            eprintln!(
+                "kernel-wgpu: refusing popcount dispatch — dim*n*8 = {request_bytes} bytes \
+                 exceeds MAX_DISPATCH_BYTES = {MAX_DISPATCH_BYTES} (R-WGPU-1 cap)"
+            );
+            return Vec::new();
+        }
 
         // Rectangular flatten with zero-pad on short rows. Same
         // rationale as the L2 path.
@@ -645,5 +688,74 @@ mod tests {
         assert!(!c.popcount_native);
         assert!(c.gpu);
         assert_eq!(k.id(), "wgpu");
+    }
+
+    /// R-WGPU-1: an over-cap dispatch must return an empty result
+    /// rather than allocating `dim * n * 4` bytes on the host.
+    /// We construct a request whose flat-buffer size would be
+    /// `MAX_DISPATCH_BYTES + 4` bytes and assert that the kernel
+    /// refuses *before* the host vec is allocated. The query and
+    /// candidate slices we pass are tiny (1 element each) — the cap
+    /// is computed from `query.len() * candidates.len() * 4`, so
+    /// triggering it only requires a candidates Vec long enough
+    /// to push the product over the threshold.
+    #[test]
+    fn r_wgpu_1_l2_refuses_over_cap_dispatch() {
+        let Ok(k) = WgpuKernel::new_blocking() else {
+            eprintln!("skipping cap test: no wgpu adapter on this host");
+            return;
+        };
+        // dim=1, candidates Vec long enough that dim*n*4 > MAX_DISPATCH_BYTES.
+        // We never actually allocate the underlying f32 data — we hand
+        // the kernel a Vec of the right length whose elements are
+        // tiny stub Vecs. The cap check fires on `dim * n * 4` (which
+        // here is `1 * n * 4 > 1 GiB`), so the kernel refuses before
+        // it tries to materialise the n*dim host vec.
+        let n_over_cap: usize = ((MAX_DISPATCH_BYTES / 4) + 1) as usize;
+        let query = vec![0.0f32; 1];
+        // Use empty inner Vecs so we don't actually allocate
+        // `n_over_cap * inner_len * 4` bytes ourselves.
+        let candidates: Vec<Vec<f32>> = vec![Vec::new(); n_over_cap];
+        let out = k.l2_distance_one(&query, &candidates, 10);
+        assert!(
+            out.is_empty(),
+            "expected empty result on over-cap dispatch, got {} entries",
+            out.len()
+        );
+    }
+
+    /// Same as `r_wgpu_1_l2_refuses_over_cap_dispatch` but for the
+    /// rabitq popcount path. Element size is 8 bytes (u64) here, so
+    /// the threshold is `MAX_DISPATCH_BYTES / 8`.
+    #[test]
+    fn r_wgpu_1_popcount_refuses_over_cap_dispatch() {
+        let Ok(k) = WgpuKernel::new_blocking() else {
+            eprintln!("skipping cap test: no wgpu adapter on this host");
+            return;
+        };
+        let n_over_cap: usize = ((MAX_DISPATCH_BYTES / 8) + 1) as usize;
+        let query = vec![0u64; 1];
+        let candidates: Vec<Vec<u64>> = vec![Vec::new(); n_over_cap];
+        let out = k.rabitq_popcount(&query, &candidates, 10);
+        assert!(
+            out.is_empty(),
+            "expected empty result on over-cap popcount dispatch, got {} entries",
+            out.len()
+        );
+    }
+
+    /// And the negative direction — well-under-cap requests must
+    /// still produce a non-empty result. Sanity check that the cap
+    /// hasn't accidentally clamped legitimate workloads.
+    #[test]
+    fn r_wgpu_1_under_cap_dispatch_succeeds() {
+        let Ok(k) = WgpuKernel::new_blocking() else {
+            eprintln!("skipping cap test: no wgpu adapter on this host");
+            return;
+        };
+        let query = vec![0u64; 4];
+        let candidates: Vec<Vec<u64>> = vec![vec![1u64; 4], vec![2u64; 4]];
+        let out = k.rabitq_popcount(&query, &candidates, 1);
+        assert_eq!(out.len(), 1, "under-cap dispatch must return top_k");
     }
 }
