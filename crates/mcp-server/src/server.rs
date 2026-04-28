@@ -29,7 +29,7 @@ use rulake::{LocalBackend, RuLake, BackendAdapter, FsBackend};
 
 use crate::allow::AllowList;
 use crate::audit::{AuditEntry, AuditSink, PolicyDecision, now_ts};
-use crate::config::{BackendConfig, McpConfig};
+use crate::config::{AllowBlock, BackendConfig, McpConfig};
 use crate::planner::{DecisionTrace, PlanError, Planner, QueryRequest, TracedQueryResponse};
 use crate::policy::{Capability, CapabilitySet};
 use crate::workers::WorkerPool;
@@ -66,7 +66,49 @@ impl RuLakeMcpServer {
         let lake = RuLake::new(config.rerank_factor, config.rotation_seed)
             .with_consistency(consistency);
 
-        let mut backend_ids = Vec::with_capacity(config.backends.len());
+        let mut backend_ids = Vec::with_capacity(config.backends.len() + 1);
+
+        // Demo-backend short-circuit (--demo-backend / demo_backend = true).
+        // Registers a deterministic LocalBackend("demo") + adds an allow
+        // block so the public Cloud Run demo can serve real query results
+        // out of the box. PCG32 seed pinned at 0xDEADBEEF so the witness
+        // chain is reproducible across restarts and across operators.
+        let mut effective_allow = config.allow.clone();
+        if config.demo_backend {
+            let demo = Arc::new(LocalBackend::new("demo"));
+            // Seed a tiny collection: 100 vectors at D=8.
+            let mut state = 0xDEADBEEFu64;
+            let mut next_f32 = || {
+                state = state
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
+                let bits = (state >> 40) as u32;
+                let x = (bits as f32) / (1u32 << 24) as f32;
+                x * 2.0 - 1.0
+            };
+            let ids: Vec<u64> = (0..100u64).collect();
+            let vectors: Vec<Vec<f32>> = (0..100)
+                .map(|_| (0..8).map(|_| next_f32()).collect())
+                .collect();
+            demo.put_collection("memory", 8, ids, vectors)
+                .map_err(|e| anyhow::anyhow!("seed demo collection: {e}"))?;
+            let dyn_be: Arc<dyn BackendAdapter> = demo;
+            lake.register_backend(dyn_be)
+                .map_err(|e| anyhow::anyhow!("register demo backend: {e}"))?;
+            backend_ids.push("demo".to_string());
+            effective_allow.push(AllowBlock {
+                backend: "demo".to_string(),
+                collection: ".*".to_string(),
+                caps: vec!["read".to_string(), "publish".to_string()],
+            });
+            tracing::info!(
+                backend = "demo",
+                collection = "memory",
+                vectors = 100,
+                "demo backend registered (--demo-backend); allow read,publish on demo/.*"
+            );
+        }
+
         for backend in &config.backends {
             match backend {
                 BackendConfig::Local { id } => {
@@ -93,7 +135,7 @@ impl RuLakeMcpServer {
         }
 
         let workers = WorkerPool::new(config.workers, config.max_inflight)?;
-        let allow = AllowList::from_blocks(&config.allow)?;
+        let allow = AllowList::from_blocks(&effective_allow)?;
         if !allow.is_empty() {
             tracing::info!(blocks = config.allow.len(), "RBAC allow-list active");
         }

@@ -89,10 +89,23 @@ gcloud run deploy rulake-mcp-demo \
   --timeout=60s \
   --set-env-vars="RUST_LOG=info" \
   --command=/usr/local/bin/rulake-mcp \
-  --args="^|^http|--bind|0.0.0.0:8080|--auth|none|--insecure-allow-no-auth|--capabilities|read,publish,admin"
+  --args="^|^http|--bind|0.0.0.0:8080|--auth|none|--insecure-allow-no-auth|--capabilities|read,publish,admin|--demo-backend"
 ```
 
-Three things in there are non-obvious:
+Four things in there are non-obvious:
+
+> **Gotcha — `--demo-backend`.** Without this flag the demo deploy ships
+> with **zero registered backends**. Every `rulake_query` then refuses
+> with `POLICY_REFUSED_ALLOWLIST` (the witness chain refuses to serve
+> from an empty backend set), and `rulake_list_collections` returns
+> empty. With `--demo-backend`, the server registers a deterministic
+> `LocalBackend("demo")` with one seeded collection (`memory`, 100
+> vectors at D=8, PCG32 seed `0xDEADBEEF`) and adds a matching
+> `[[allow]]` block granting `read,publish` on `(demo, .*)`. Result:
+> a fresh `rulake_query intent=search target.routes=[["demo","memory"]]`
+> returns real witness-anchored hits out of the box, with no further
+> operator action. Off in production deploys (the witness over a 100-row
+> toy collection isn't useful there).
 
 > **Gotcha — `--port=8080` + hardcoded bind.** Cloud Run sets `PORT`
 > dynamically; the container is supposed to listen on `$PORT`. Our

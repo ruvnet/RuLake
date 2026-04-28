@@ -21,11 +21,14 @@ async fn main() -> anyhow::Result<()> {
 
     let args = parse_args()?;
 
-    let config = match args.config {
+    let mut config = match args.config {
         Some(path) => McpConfig::from_path(&path)
             .with_context(|| format!("loading config: {}", path.display()))?,
         None => McpConfig::default(),
     };
+    if args.demo_backend {
+        config.demo_backend = true;
+    }
 
     let capabilities = match args.capabilities.as_deref() {
         Some(csv) => CapabilitySet::from_csv(csv)?,
@@ -175,6 +178,7 @@ struct Args {
     config: Option<PathBuf>,
     capabilities: Option<String>,
     audit_file: Option<PathBuf>,
+    demo_backend: bool,
 }
 
 #[derive(Debug)]
@@ -211,6 +215,7 @@ fn parse_args() -> anyhow::Result<Args> {
     let mut config = None;
     let mut capabilities: Option<String> = None;
     let mut audit_file: Option<PathBuf> = None;
+    let mut demo_backend = false;
 
     // For http subcommand:
     let mut http_bind: Option<SocketAddr> = None;
@@ -249,6 +254,7 @@ fn parse_args() -> anyhow::Result<Args> {
                     it.next().context("--audit-file expects PATH")?,
                 ));
             }
+            "--demo-backend" => demo_backend = true,
             "--bind" => {
                 let s = it.next().context("--bind expects ADDR:PORT")?;
                 http_bind = Some(s.parse().with_context(|| format!("--bind {s:?}"))?);
@@ -352,6 +358,7 @@ fn parse_args() -> anyhow::Result<Args> {
         config,
         capabilities,
         audit_file,
+        demo_backend,
     })
 }
 

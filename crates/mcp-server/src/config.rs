@@ -46,6 +46,20 @@ pub struct McpConfig {
     /// must match at least one block.
     #[serde(default, rename = "allow")]
     pub allow: Vec<AllowBlock>,
+
+    /// When true, register a deterministic in-memory `LocalBackend`
+    /// named `"demo"` with one seeded collection (`memory`, 100
+    /// vectors at D=8, PCG32 seed = 0xDEADBEEF) and add an
+    /// allow-block granting `read,publish` against
+    /// `(backend="demo", collection=".*")`. Lets the public Cloud
+    /// Run demo answer real `rulake_query` / `rulake_list_collections`
+    /// / `rulake_publish_bundle` calls instead of refusing on an
+    /// empty allowlist.
+    ///
+    /// Off in production. Enable via `--demo-backend` on the CLI or
+    /// `demo_backend = true` in mcp.toml.
+    #[serde(default)]
+    pub demo_backend: bool,
 }
 
 /// One [[allow]] block in mcp.toml.
