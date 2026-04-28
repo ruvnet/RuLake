@@ -2,10 +2,24 @@
 
 ## Status
 
-**Proposed** — discovery + distribution surface for ruLake's existing
-shipping artifacts (the `rulake-mcp` server, the four backend adapters,
-the two ADR-157 kernels, the witness-anchored bundle ergonomics). No
-new core code; the marketplace is packaging + a static landing page.
+**Proposed (revised 2026-04-27)** — discovery + distribution + positioning
+surface for ruLake. The first revision was packaging; this revision adds
+the killer-path plugin (`rulake-stack`), the cost-aware response shape on
+`rulake_query`, the named default flow ("deterministic retrieval path"),
+and the answer to "invisible infrastructure or developer-facing product?"
+(both, at different layers). No new *core* code; what's new are install
+ergonomics, response-field surface, and a documented happy path.
+
+## One-line positioning
+
+> **ruLake turns retrieval into a first-class, installable primitive for agents.**
+
+Agents (Claude Code, Cursor, Cline, Continue, agentic-flow, OpenAI Apps,
+Replit Agent, Flow Nexus) get one MCP tool — `rulake_query` — that takes
+intent + freshness budget + policy and returns a witness-anchored result
+plus the cost / latency / trust trace it took to produce it. Plugins are
+how operators install that primitive into their Claude Code session in
+under 60 seconds.
 
 ## Date
 
@@ -90,15 +104,93 @@ RuLake/
 
 The plugins **do not duplicate code**. Each plugin's `.mcp.json` references the binaries that already live in `crates/*/target/release/` (or, for production deploys, the public Cloud Run URL `https://rulake-mcp.ruv.io/`). A plugin install is a declaration that "this Claude Code session knows about these tools"; it is not a code transfer.
 
-### The five plugins
+### The six plugins (one killer-path + five composable)
 
-| Plugin | Wraps | Purpose | Default MCP wire |
+| Plugin | Role | Wraps | Default MCP wire |
 |---|---|---|---|
-| `rulake-core` | `crates/mcp-server/`, `crates/core/` | The load-bearing plugin. Installs the eight `rulake_*` tools (ADR-004 §4b) plus the `/rulake-query` decision-layer skill. | `https://rulake-mcp.ruv.io/` (public demo) or local stdio |
-| `rulake-substrates` | `crates/{rvdna,ruqu,gcs,ipfs}-backend/` + `crates/{mcp-rvdna,mcp-ruqu}/` | The four backend adapters and their two companion MCP servers. Installs `rvdna_*` + `ruqu_*` tools (5 each, ADR-007/008). | `https://{rvdna,ruqu}-mcp.ruv.io/` |
-| `rulake-kernels` | `crates/{kernel-avx512,kernel-wgpu}/` | The ADR-157 accelerator plane. Off-by-default, operator opt-in. Installs `/rulake-kernel-bench` + `/rulake-kernel-status` commands surfacing the `KernelCapabilities` and the security cap (R-WGPU-1). | none — kernels run in-process |
-| `rulake-witness` | `crates/core/src/{bundle,witness}.rs` | The trust-anchored bundle ergonomics. Installs `/rulake-verify <bundle>`, `/rulake-bundle-info`, and the witness viewer's CLI counterpart. | none — verification is local |
-| `rulake-loop-vector` | `scripts/smoke-*.sh` patterns + `docs/adrs/ADR-005` workers | `/loop`-aware vector workers: incremental indexing from a backend, refresh-from-bundle on schedule, witness-mismatch refuse-and-replan. The agentic-flow integration. | uses `rulake-core` + `rulake-substrates` |
+| **`rulake-stack`** | **Killer path — the 90% case.** One install gets retrieval working end-to-end. Bundles `rulake-core` + `rulake-substrates` + `rulake-witness` with sensible defaults; `rulake-kernels` and `rulake-loop-vector` stay opt-in. | composition of the four below | inherits `rulake-core`'s default |
+| `rulake-core` | The load-bearing plugin. Installs the eight `rulake_*` tools (ADR-004 §4b) plus the `/rulake-query` decision-layer skill. | `crates/{mcp-server,core}/` | `https://rulake-mcp.ruv.io/` (public demo) or local stdio |
+| `rulake-substrates` | The four backend adapters and their two companion MCP servers. Installs `rvdna_*` + `ruqu_*` tools (5 each, ADR-007/008). | `crates/{rvdna,ruqu,gcs,ipfs}-backend/` + `crates/{mcp-rvdna,mcp-ruqu}/` | `https://{rvdna,ruqu}-mcp.ruv.io/` |
+| `rulake-kernels` | The ADR-157 accelerator plane. Off-by-default, operator opt-in. Installs `/rulake-kernel-bench` + `/rulake-kernel-status` commands surfacing the `KernelCapabilities` and the R-WGPU-1 security cap. | `crates/kernel-{avx512,wgpu}/` | none — kernels run in-process |
+| `rulake-witness` | The trust-anchored bundle ergonomics. Installs `/rulake-verify <bundle>`, `/rulake-bundle-info`, and the witness viewer's CLI counterpart. | `crates/core/src/{bundle,witness}.rs` | none — verification is local |
+| `rulake-loop-vector` | `/loop`-aware vector workers: incremental indexing from a backend, refresh-from-bundle on schedule, witness-mismatch refuse-and-replan. The agentic-flow integration. | `scripts/smoke-*.sh` patterns + ADR-005 workers | uses `rulake-core` + `rulake-substrates` |
+
+The killer-path install is intentional: a new operator who wants to feel
+the value of ruLake should not be making a five-plugin shopping decision.
+`/plugin install rulake-stack` gets them a retrieval primitive in one
+command. The composable plugins exist for operators who already know
+they want a specific subset (kernel-only on a CI runner; substrates-only
+on a worker that doesn't itself answer queries; loop-vector-only when
+folding into an agentic-flow workflow).
+
+### The "deterministic retrieval path" — the named default flow
+
+Every install of `rulake-stack` ships with one opinionated default flow,
+named so it can be referenced + reasoned about:
+
+```
+intent  →  cache check  →  substrate fanout  →  mincut prune  →  witness verify  →  return
+```
+
+| Step | What happens | Where it lives |
+|---|---|---|
+| **intent** | Parse `rulake_query`'s intent (search / verify / explain / refresh), risk, freshness budget, target collection set. | `crates/mcp-server/src/server.rs` `rulake_query` handler |
+| **cache check** | Hit the `RuLake` in-process cache. ~1 ms cache-hit at n=100k, D=128 (1.02× direct RaBitQ). If hit + within freshness budget → skip to witness verify. | `crates/core/src/cache.rs` |
+| **substrate fanout** | If miss, fan out to the registered `BackendAdapter`s in parallel (federation graph). Each adapter returns its own witnessed bundle pointer. | `crates/core/src/backend.rs` + the four substrate crates |
+| **mincut prune** | Apply the contrastive-retrieval primitive: rank not by "find similar" but by "find boundary-defining" (the mincut-pruned candidate set that maximally distinguishes the query from the corpus). This is the unique surface ruLake exposes that no other retrieval layer ships cleanly today. | future — `crates/core/src/select.rs` (v2.4 roadmap) |
+| **witness verify** | Recompute SHAKE-256(32) over the returned bundle; compare to the substrate-supplied witness. On mismatch, **refuse with `WITNESS_MISMATCH_REFUSED`** — never serve stale data with a high score. | `crates/core/src/witness.rs` |
+| **return** | Result + `decision_trace` (see "Cost-aware retrieval" below) + audit row emitted to JSONL sink. | `crates/mcp-server/src/server.rs` + `audit.rs` |
+
+The whole path is the default contract of `rulake_query`. An operator who
+wants a different ordering (e.g. "skip mincut," "skip cache, always pull
+fresh") sets the corresponding policy flag in the call. The point of
+naming the path is that it becomes a first-class object — the docs, the
+audit trace, and the metrics all reference "deterministic retrieval path"
+as the unit of measurement.
+
+### Cost-aware retrieval — the response shape
+
+Every `rulake_query` response carries a `decision_trace` block alongside
+the data. This is the structural answer to "should `rulake_query` expose
+policy inputs?" — it does, and it also exposes the policy *outputs* it
+chose:
+
+```jsonc
+{
+  "result": [ /* the actual ranked retrieval */ ],
+  "decision_trace": {
+    "chosen_path": "deterministic-retrieval-path",
+    "intent": "search",
+    "freshness": { "budget_ms": 5000, "actual_ms": 1031 },
+    "cache": { "hit": true, "hit_ratio_session": 0.87 },
+    "substrates_used": ["gcs-backend", "rvdna-backend"],
+    "kernel": { "id": "cpu-naive", "deterministic": true },
+    "witness": { "expected": "...32-byte hex...", "computed": "...32-byte hex...", "match": true },
+    "cost": {
+      "compute_kernel": 0.0,
+      "backend_fetch": 0.0,
+      "cache_hit_discount": -1.0,
+      "currency": "relative-units",
+      "comment": "Free + open source — costs are relative-units used by the dispatch policy, not USD"
+    },
+    "latency": {
+      "total_ms": 1.02,
+      "cache_ms": 0.4,
+      "fanout_ms": 0.0,
+      "witness_ms": 0.6
+    },
+    "refusals": []
+  }
+}
+```
+
+The `cost` block is **economic routing telemetry**, not billing. Even
+though ruLake is free + MIT/Apache, the dispatch policy uses relative
+cost units to decide which substrate / kernel to pick — and surfacing
+those numbers to the agent caller is what lets a calling agent make
+informed `rulake_query` calls (e.g. "if cost > X, narrow the query and
+retry"). This is the missing layer that turns retrieval from an opaque
+black box into a primitive an agent can negotiate with.
 
 ### Marketplace catalog (`.claude-plugin/marketplace.json`)
 
@@ -107,7 +199,14 @@ The plugins **do not duplicate code**. Each plugin's `.mcp.json` references the 
   "name": "rulake-marketplace",
   "owner": { "name": "ruvnet" },
   "description": "Witness-anchored vector federation for agentic AI — installable as Claude Code plugins.",
+  "default_install": "rulake-stack",
   "plugins": [
+    {
+      "name": "rulake-stack",
+      "source": "./plugins/rulake-stack",
+      "description": "The 90% install. Bundles rulake-core + rulake-substrates + rulake-witness with the deterministic retrieval path enabled and kernels off by default.",
+      "default": true
+    },
     {
       "name": "rulake-core",
       "source": "./plugins/rulake-core",
@@ -136,6 +235,18 @@ The plugins **do not duplicate code**. Each plugin's `.mcp.json` references the 
   ]
 }
 ```
+
+The "first-query-in-60-seconds" success metric:
+
+```text
+1. /plugin marketplace add ruvnet/RuLake          ~5 s
+2. /plugin install rulake-stack                   ~10 s
+3. /rulake-query "what does ADR-157 commit to?"   ~1 s
+```
+
+The result returns with the data + the `decision_trace` (cache hit?
+which substrate? what witness?). If that loop is under 60 s wall-clock
+on a fresh Claude Code install, the killer path has succeeded.
 
 ### Per-plugin manifest example (`plugins/rulake-core/.claude-plugin/plugin.json`)
 
@@ -259,10 +370,69 @@ Rejected. Claude Code's installer is `/plugin install` — running over the GitH
 - The five-plugin shape is a starting point. If operator usage proves a different axis matters (e.g. "I want only the IPFS adapter, not GCS"), the catalog can split `rulake-substrates` without breaking the installed-base contract — a new plugin replaces a subset of the old plugin's tools, and the deprecation cycle is managed via marketplace-version pins.
 - The storefront extension to `/marketplace` reuses the Console's existing route shape (the seven `*Screen.jsx` components in `ui/src/components/screens.jsx`); it's a sixth screen, not a separate app. No new build pipeline.
 
-## Open questions
+## Failure modes (and how the design mitigates each)
+
+| Failure mode | Symptom an operator hits | Mitigation in this ADR |
+|---|---|---|
+| **Plugin fatigue** | Operator faces five install commands and walks away. | `rulake-stack` is the marketplace's `"default": true`. The storefront leads with one install command; the four composable plugins are below the fold. |
+| **Trust gap** | Operator installs an unsigned plugin and runs `--capabilities admin` against the demo URL. | Plugins default to `--capabilities read`. Storefront's per-plugin landing page leads with the trust model. Releases are tagged. Signing is forward-committed to Anthropic's roadmap. |
+| **Demo misuse** | Operator installs `rulake-core`, points production data at `https://rulake-mcp.ruv.io/`. | The default `.mcp.json` ships the public-demo URL with a `comment` field warning "for real data, switch to the stdio profile." The Console's topbar shows ● LIVE vs ○ DEMO so the wire is unambiguous. The deploy doc walks the production-mode setup. |
+| **Latency variance across substrates** | A query that fans out to GCS + IPFS sees 800 ms tail latency from the slowest substrate. | The `decision_trace.latency` block exposes per-substrate timing. The deterministic-retrieval-path's substrate-fanout step is parameterized by a per-substrate timeout; tail-substrate timeout returns a partial result with a `refusals: ["substrate-X-timeout"]` row in the trace, not a 500. |
+
+These four failure modes are the ones that look bad in a demo before
+they look bad in production; the mitigations are baked into the install
+defaults, the response shape, and the docs — not deferred.
+
+## Design questions resolved
+
+The first revision left two big questions open. This revision answers
+both.
+
+**Q: Invisible infrastructure or developer-facing product?**
+
+**Both, at different layers.** ruLake is *invisible at the agent layer*
+— the agent calls `rulake_query`, gets a result + a `decision_trace`,
+and never sees the witness machinery, the substrate fanout, or the
+kernel dispatch. The agent author writes one line of MCP-tool code, and
+the rest of the stack is below the API.
+
+ruLake is *developer-facing at the operator layer* — the Console (with
+its 7 routes), the CLI (`/rulake-verify`, `/rulake-bundle-info`,
+`/rulake-kernel-status`), the per-plugin install commands, the audit
+ledger, the deploy docs. Operators see, configure, and debug the
+substrate.
+
+The two layers don't compete; they're stacked. An agent that uses
+`rulake_query` doesn't need to know there's a Console. An operator
+running the Console doesn't need to write agent code. The plugin
+shape (one MCP-tool plugin + the storefront) is the bridge between
+them.
+
+**Q: Should `rulake_query` expose policy inputs (cost, trust, latency),
+or stay simple?**
+
+**Expose them.** The `decision_trace` block (above) is the structural
+answer. Hiding the cost / trust / latency intelligence inside the
+server makes it impossible for an agent to negotiate — it has to
+either accept whatever ruLake decides, or reach around the abstraction
+to the underlying substrates (which destroys the value of the
+intermediary). Exposing the trace lets an agent author make
+risk-vs-cost trade-offs in their prompt logic ("if cost.backend_fetch
+> X, narrow query and retry"). Keep `rulake_query`'s **inputs** simple
+(intent / risk / freshness / target) but its **outputs** rich
+(`decision_trace` is part of the contract, not a debug field).
+
+The opposite design (hidden policy) was the failure mode of every
+"smart router" that came before — opaque dispatch is what made
+LangChain and the early MCP middlewares un-debuggable. ruLake explicitly
+rejects that path.
+
+## Open questions (down from 5 to 4)
 
 1. **Should `rulake-kernels` be installable on hosts without the host requirements?** The AVX-512 kernel needs `is_x86_feature_detected!("avx512vpopcntdq")`; the wgpu kernel needs an adapter. Both already fail-closed at construction. But should the *plugin install* refuse on those hosts, or install with a runtime-warning banner? Current direction: install always, document the capability.
 2. **Does `rulake-loop-vector` need its own MCP server, or is it a skill-only plugin?** It composes `rulake-core` + `rulake-substrates`; if all its capabilities are reachable through those plugins' tools, a skill-only shape is cleaner. Tentative: skill-only for v0.1, revisit if a /loop-specific tool surface emerges.
-3. **Submission to `anthropics/claude-plugins-official`?** The ADR commits to "submission-ready" but not "submitted." Submission is downstream and depends on Anthropic's review cadence. Mitigation: ship the marketplace at `ruvnet/RuLake` first; submit once the five plugins have been smoke-installed by external operators.
-4. **Plugin signing.** Claude Code does not currently support signed plugins. When it does, ruLake commits to signing every plugin release. Until then, version-pinning + tag-based releases are the strongest signal we can ship.
-5. **Do plugin docs duplicate `docs/userguide/`?** The 11 user-guide pages already explain Stats, Connect, Bundle, etc. Per-plugin READMEs should *link* to the relevant userguide pages, not duplicate them. The marketplace storefront should also link out, not in.
+3. **Submission to `anthropics/claude-plugins-official`?** The ADR commits to "submission-ready" but not "submitted." Submission is downstream and depends on Anthropic's review cadence. Mitigation: ship the marketplace at `ruvnet/RuLake` first; submit once the six plugins have been smoke-installed by external operators.
+4. **The mincut-prune step** in the deterministic retrieval path is **v2.4 roadmap** — `crates/core/src/select.rs` doesn't exist yet. The flow is otherwise complete; this is the one step the contractual diagram references that ships later. Until then, the path is `intent → cache check → substrate fanout → witness verify → return` (no pruning), and `decision_trace.chosen_path` reports `"deterministic-retrieval-path-v0.1"` so the upgrade is visible.
+
+(Plugin signing was open question 4 in the previous revision; it's now
+folded into the trust-posture commitment — no separate question.)
