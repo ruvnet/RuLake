@@ -47,9 +47,16 @@ name = "ruqu-mcp"
 path = "src/main.rs"
 
 [dependencies]
-# The substrate this server wraps. Path-dep onto the sibling
-# `ruqu-backend/` crate per ADR-001; no workspace.
+# The v0.0.x stub substrate (StateVector / Stabilizer / TensorNetwork /
+# Hardware-stub) — kept for the existing wire shape + witness semantics.
 ruvector-rulake-ruqu = { path = "../ruqu-backend" }
+
+# Phase B: the real upstream quantum simulator (~26k LOC).
+# vendor/ruvector/crates/ruqu-core ships `Simulator::run_shots(&circuit,
+# shots, seed)` with SIMD acceleration, noise models, multi-threading.
+# Wired alongside the stub so the planner can route the actual compute
+# through the real lib without changing the MCP wire shape.
+ruqu-core = { path = "../../vendor/ruvector/crates/ruqu-core" }
 
 # ruLake itself — needed for `RuLake::search_one` (the cache short-
 # circuit `ruqu_replay` rides on) and for `RuLakeBundle` / witness

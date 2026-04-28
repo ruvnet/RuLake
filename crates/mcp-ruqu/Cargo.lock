@@ -974,6 +974,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ruqu-core"
+version = "2.0.5"
+dependencies = [
+ "rand 0.8.6",
+ "thiserror",
+]
+
+[[package]]
 name = "rustix"
 version = "1.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1016,6 +1024,7 @@ dependencies = [
  "hyper-util",
  "rmcp",
  "rulake",
+ "ruqu-core",
  "ruvector-rulake-ruqu",
  "schemars",
  "serde",

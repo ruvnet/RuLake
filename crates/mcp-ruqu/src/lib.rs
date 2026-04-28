@@ -37,6 +37,7 @@
 
 pub mod audit;
 pub mod http;
+pub mod ruqu_core_engine;
 pub mod server;
 
 pub use audit::{AuditEntry, AuditSink, PolicyDecision};

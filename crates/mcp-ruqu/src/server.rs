@@ -462,7 +462,13 @@ impl RuquMcpServer {
         // so the trait stays uniform; for the wire response we need
         // the first 32 amps. The cost is negligible (we just paid
         // for the full simulation).
-        let sv = state_vector::simulate(&circuit);
+        // Phase B: route through ruqu-core (the real upstream lib),
+        // not the v0.0.x stub. ruqu_core_engine::simulate() compiles
+        // the wire `Circuit` to ruqu-core's `QuantumCircuit` and runs
+        // it through `Simulator::run`. Witness chain unchanged because
+        // it's anchored on the wire-side `Circuit` shape, not the
+        // engine that produced the state vector.
+        let sv = crate::ruqu_core_engine::simulate(&circuit);
         let dim = sv.len();
         let head_n = dim.min(32);
         let amplitudes_head: Vec<[f64; 2]> = sv
