@@ -62,11 +62,16 @@ npm   install rulake-wasm             # Browsers, Cloudflare Workers, Deno, Bun
 # Claude Code — install the marketplace (ADR-009)
 /plugin marketplace add ruvnet/RuLake
 /plugin install rulake-stack@rulake-marketplace
-/reload-plugins                                  # required after install
-/rulake-query "what does ADR-157 commit to?"
+/reload-plugins                                  # required — Claude Code's install message asks for this
+
+# Slash commands resolve via the <plugin>:<command> namespace.
+# Type /rul to autocomplete.
+/rulake-core:rulake-query "what does ADR-157 commit to?"
+/rulake-witness:rulake-verify path/to/table.rulake.json
+/rulake-witness:rulake-bundle-info path/to/table.rulake.json
 ```
 
-The killer-path plugin (`rulake-stack`) bundles three slash commands (`/rulake-query`, `/rulake-verify`, `/rulake-bundle-info`) plus three live MCP wires (`rulake-mcp.ruv.io`, `rvdna-mcp.ruv.io`, `ruqu-mcp.ruv.io`) so a working query lands in under 60 seconds. See [ADR-009](docs/adrs/sdk/ADR-009-rulake-plugin-marketplace.md) for the full six-plugin catalog + trust posture.
+`rulake-stack` is the killer-path install: one command bundles three live MCP wires (`rulake-mcp.ruv.io`, `rvdna-mcp.ruv.io`, `ruqu-mcp.ruv.io`) and exposes the `rulake-core` + `rulake-witness` slash commands above. The query against the live demo MCP returns the data plus a `decision_trace` block (cost in relative-units, witness match, substrates used, latency) — the contract from [ADR-009](docs/adrs/sdk/ADR-009-rulake-plugin-marketplace.md). For the full six-plugin catalog (substrates, kernels, /loop-aware workers) + trust posture, see the ADR.
 
 Open source. ❤️ Free forever.
 
