@@ -1,0 +1,11 @@
+{
+  "name": "rulake-core",
+  "description": "The eight rulake_* MCP tools (query, list_backends, list_collections, publish_bundle, refresh_from_bundle_dir, save_cache_to_dir, warm_from_dir, invalidate_cache) and the /rulake-query decision-layer skill. Wires to the live Cloud Run demo by default; switch to stdio for production.",
+  "version": "2.3.0-alpha.1",
+  "author": {
+    "name": "ruvnet",
+    "email": "ruv@ruv.net"
+  },
+  "homepage": "https://ruvnet.github.io/RuLake/",
+  "license": "MIT OR Apache-2.0"
+}

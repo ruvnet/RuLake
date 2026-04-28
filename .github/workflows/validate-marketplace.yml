@@ -1,0 +1,97 @@
+# Validates the ruLake plugin marketplace catalog on every push + PR.
+#
+# Catches the failure modes the ADR-009 marketplace.json contract is
+# vulnerable to:
+#   1. JSON parse error
+#   2. A `source:` path in marketplace.json that doesn't exist in the repo
+#   3. A plugin without a `.claude-plugin/plugin.json`
+#   4. A plugin.json missing `name` / `version` / `description`
+#   5. Plugin `name` field disagreeing with the marketplace.json entry
+#
+# Note: cross-checking plugin version against parent crate version is
+# deferred until the version-bump helper script lands (ADR-009 §C).
+
+name: validate-marketplace
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".claude-plugin/**"
+      - "plugins/**"
+      - ".github/workflows/validate-marketplace.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".claude-plugin/**"
+      - "plugins/**"
+      - ".github/workflows/validate-marketplace.yml"
+
+jobs:
+  validate:
+    name: validate marketplace.json
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Marketplace JSON parses
+        run: |
+          jq empty .claude-plugin/marketplace.json
+          echo "✓ marketplace.json parses"
+
+      - name: Every source path exists
+        run: |
+          fail=0
+          jq -r '.plugins[].source' .claude-plugin/marketplace.json | while read src; do
+            if [[ ! -d "${src}" ]]; then
+              echo "✗ source path missing: ${src}"
+              fail=1
+            fi
+          done
+          test "${fail}" -eq 0 || exit 1
+          echo "✓ all source paths exist"
+
+      - name: Every plugin has plugin.json with required fields
+        run: |
+          fail=0
+          for d in plugins/*/; do
+            mf="${d}.claude-plugin/plugin.json"
+            if [[ ! -f "${mf}" ]]; then
+              echo "✗ missing manifest: ${mf}"
+              fail=1
+              continue
+            fi
+            jq empty "${mf}" || { echo "✗ ${mf} does not parse"; fail=1; continue; }
+            for field in name version description; do
+              if ! jq -e ".${field}" "${mf}" >/dev/null; then
+                echo "✗ ${mf} missing required field: ${field}"
+                fail=1
+              fi
+            done
+          done
+          test "${fail}" -eq 0 || exit 1
+          echo "✓ every plugin manifest is well-formed"
+
+      - name: Plugin name in manifest matches marketplace entry
+        run: |
+          fail=0
+          jq -r '.plugins[] | "\(.name) \(.source)"' .claude-plugin/marketplace.json | while read name src; do
+            mf="${src}/.claude-plugin/plugin.json"
+            mname=$(jq -r '.name' "${mf}")
+            if [[ "${name}" != "${mname}" ]]; then
+              echo "✗ marketplace name '${name}' != plugin.json name '${mname}' for ${src}"
+              fail=1
+            fi
+          done
+          test "${fail}" -eq 0 || exit 1
+          echo "✓ marketplace + plugin.json names agree"
+
+      - name: .mcp.json files parse where present
+        run: |
+          fail=0
+          for f in plugins/*/.mcp.json; do
+            test -f "${f}" || continue
+            jq empty "${f}" || { echo "✗ ${f} does not parse"; fail=1; }
+          done
+          test "${fail}" -eq 0 || exit 1
+          echo "✓ all .mcp.json files parse"

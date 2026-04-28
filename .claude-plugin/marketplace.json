@@ -1,0 +1,52 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "rulake-marketplace",
+  "description": "ruLake — witness-anchored vector federation for agentic AI. Six installable Claude Code plugins (one killer-path + five composable) per ADR-009.",
+  "owner": {
+    "name": "ruvnet"
+  },
+  "plugins": [
+    {
+      "name": "rulake-stack",
+      "description": "Killer-path install: bundles rulake-core + rulake-substrates + rulake-witness with the deterministic retrieval path enabled and kernels off by default. The 90% case — one command gets retrieval working end-to-end.",
+      "category": "data",
+      "source": "./plugins/rulake-stack",
+      "homepage": "https://ruvnet.github.io/RuLake/"
+    },
+    {
+      "name": "rulake-core",
+      "description": "The eight rulake_* MCP tools and the rulake_query decision layer. Wires to the live demo at https://rulake-mcp.ruv.io/ by default; switch to stdio for production.",
+      "category": "data",
+      "source": "./plugins/rulake-core",
+      "homepage": "https://ruvnet.github.io/RuLake/"
+    },
+    {
+      "name": "rulake-substrates",
+      "description": "Four backend adapters (rvdna, ruqu, gcs, ipfs) plus the two companion MCP servers (rvdna-mcp, ruqu-mcp). Adds 10 tools across the substrate surface.",
+      "category": "data",
+      "source": "./plugins/rulake-substrates",
+      "homepage": "https://ruvnet.github.io/RuLake/"
+    },
+    {
+      "name": "rulake-kernels",
+      "description": "ADR-157 accelerator plane: AVX-512 host SIMD and wgpu portable GPU. Off-by-default; operator opt-in. Includes /rulake-kernel-status and /rulake-kernel-bench commands.",
+      "category": "performance",
+      "source": "./plugins/rulake-kernels",
+      "homepage": "https://ruvnet.github.io/RuLake/"
+    },
+    {
+      "name": "rulake-witness",
+      "description": "SHAKE-256(32) bundle verification and witness viewer CLI. /rulake-verify and /rulake-bundle-info commands.",
+      "category": "security",
+      "source": "./plugins/rulake-witness",
+      "homepage": "https://ruvnet.github.io/RuLake/"
+    },
+    {
+      "name": "rulake-loop-vector",
+      "description": "/loop-aware vector workers — incremental indexing from a backend, refresh-from-bundle on schedule, witness-mismatch refuse-and-replan. The agentic-flow integration.",
+      "category": "automation",
+      "source": "./plugins/rulake-loop-vector",
+      "homepage": "https://ruvnet.github.io/RuLake/"
+    }
+  ]
+}

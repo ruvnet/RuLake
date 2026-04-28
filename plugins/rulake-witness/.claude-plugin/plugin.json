@@ -1,0 +1,11 @@
+{
+  "name": "rulake-witness",
+  "description": "SHAKE-256(32) bundle verification and witness viewer CLI. Provides /rulake-verify and /rulake-bundle-info commands so operators can verify the trust chain on a `table.rulake.json` sidecar without booting an agent.",
+  "version": "2.3.0-alpha.1",
+  "author": {
+    "name": "ruvnet",
+    "email": "ruv@ruv.net"
+  },
+  "homepage": "https://ruvnet.github.io/RuLake/",
+  "license": "MIT OR Apache-2.0"
+}

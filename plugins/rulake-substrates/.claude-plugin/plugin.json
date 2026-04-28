@@ -1,0 +1,11 @@
+{
+  "name": "rulake-substrates",
+  "description": "Four backend adapters (rvdna, ruqu, gcs, ipfs) plus the two companion MCP servers (rvdna-mcp, ruqu-mcp). Adds 10 tools — 5 rvdna_* + 5 ruqu_* — to the agent's MCP surface.",
+  "version": "2.3.0-alpha.1",
+  "author": {
+    "name": "ruvnet",
+    "email": "ruv@ruv.net"
+  },
+  "homepage": "https://ruvnet.github.io/RuLake/",
+  "license": "MIT OR Apache-2.0"
+}

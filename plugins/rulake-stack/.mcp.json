@@ -1,0 +1,14 @@
+{
+  "rulake": {
+    "type": "http",
+    "url": "https://rulake-mcp.ruv.io/"
+  },
+  "rvdna-mcp": {
+    "type": "http",
+    "url": "https://rvdna-mcp.ruv.io/"
+  },
+  "ruqu-mcp": {
+    "type": "http",
+    "url": "https://ruqu-mcp.ruv.io/"
+  }
+}
