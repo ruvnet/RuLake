@@ -59,13 +59,14 @@ npm   install rulake-wasm             # Browsers, Cloudflare Workers, Deno, Bun
 ```
 
 ```text
-# Claude Code, Cursor, Cline — install the Claude Code marketplace (ADR-009)
+# Claude Code — install the marketplace (ADR-009)
 /plugin marketplace add ruvnet/RuLake
 /plugin install rulake-stack@rulake-marketplace
+/reload-plugins                                  # required after install
 /rulake-query "what does ADR-157 commit to?"
 ```
 
-The killer-path plugin (`rulake-stack`) bundles core + substrates + witness with sensible defaults; the live demo MCP at `https://rulake-mcp.ruv.io/` is wired by default so you get a working `/rulake-query` in under 60 seconds. See [ADR-009](docs/adrs/sdk/ADR-009-rulake-plugin-marketplace.md) for the full plugin catalog (six plugins) + trust posture.
+The killer-path plugin (`rulake-stack`) bundles three slash commands (`/rulake-query`, `/rulake-verify`, `/rulake-bundle-info`) plus three live MCP wires (`rulake-mcp.ruv.io`, `rvdna-mcp.ruv.io`, `ruqu-mcp.ruv.io`) so a working query lands in under 60 seconds. See [ADR-009](docs/adrs/sdk/ADR-009-rulake-plugin-marketplace.md) for the full six-plugin catalog + trust posture.
 
 Open source. ❤️ Free forever.
 
