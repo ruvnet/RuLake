@@ -21,7 +21,14 @@ pub struct McpConfig {
 
     /// Number of worker threads in the bounded pool. `0` = `cores * 2`
     /// (the ADR-004 §6 default). Capped at 256.
-    #[serde(default)]
+    /// Number of rayon worker threads. Defaults to `num_cpus::get_physical()`
+    /// when omitted from config — `0` was the prior `#[serde(default)]` value
+    /// and caused the live demo to ship with `workers=0 max_inflight=64`,
+    /// which buffers up to 64 calls then DEGRADEs because no workers consume.
+    /// See https://github.com/ruvnet/RuLake/issues — discovered via
+    /// agent-side capability map showing rulake_list_collections DEGRADED
+    /// while rulake_list_backends (static lookup, no pool) succeeded.
+    #[serde(default = "default_workers")]
     pub workers: usize,
 
     /// Max in-flight tool calls before backpressure. ADR-004 §6 default 64.
@@ -123,6 +130,19 @@ fn default_seed() -> u64 {
 
 fn default_max_inflight() -> usize {
     64
+}
+
+/// Default rayon worker count — `available_parallelism()` clamped to `[2, 16]`.
+/// The clamp keeps small-host (1-core CI) installs from getting `workers=1`
+/// and big-host (64-core server) installs from spinning a worker per core
+/// when the bounded `max_inflight=64` channel can't feed them all anyway.
+/// Operators wanting a different sizing pass `--workers N` on the CLI or
+/// set `workers = N` in config.toml.
+fn default_workers() -> usize {
+    std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(4)
+        .clamp(2, 16)
 }
 
 impl McpConfig {
