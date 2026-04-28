@@ -15,13 +15,28 @@ The load-bearing plugin: the witness-anchored cache and the eight `rulake_*` MCP
 | `rulake_warm_from_dir` | admin | Restore from disk |
 | `rulake_invalidate_cache` | admin | Drop pointer (substrate forget) |
 
-## Default wire
+## How to wire the MCP
 
-```json
-{ "rulake": { "type": "http", "url": "https://rulake-mcp.ruv.io/" } }
+`rulake-core` ships **commands only** (no bundled `.mcp.json`). Pick one of:
+
+**Option 1 — install `rulake-stack`** (recommended, includes the wire):
+
+```text
+/plugin install rulake-stack@rulake-marketplace
 ```
 
-Public demo. Read-only, no auth. For production, switch to stdio:
+**Option 2 — add the wire to your global Claude Code config**:
+
+```json
+// ~/.claude.json
+{
+  "mcpServers": {
+    "rulake": { "type": "http", "url": "https://rulake-mcp.ruv.io/" }
+  }
+}
+```
+
+**Option 3 — production stdio**:
 
 ```json
 {
@@ -32,6 +47,8 @@ Public demo. Read-only, no auth. For production, switch to stdio:
   }
 }
 ```
+
+The reason `rulake-core` doesn't bundle the wire: when both `rulake-core` and `rulake-stack` are installed, Claude Code dedupes the duplicate `rulake` MCP server name and emits a warning. Cleaner to source the wire from one place.
 
 ## Skills
 

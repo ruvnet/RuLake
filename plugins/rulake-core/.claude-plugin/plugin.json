@@ -1,7 +1,7 @@
 {
   "name": "rulake-core",
-  "description": "The eight rulake_* MCP tools (query, list_backends, list_collections, publish_bundle, refresh_from_bundle_dir, save_cache_to_dir, warm_from_dir, invalidate_cache), the /rulake-query decision-layer skill, and the /rulake-discover advisory tool that recommends which other ruLake plugin to install for a given goal. Wires to the live Cloud Run demo by default; switch to stdio for production.",
-  "version": "2.3.0-alpha.2",
+  "description": "Commands for the eight rulake_* MCP tools plus /rulake-query and /rulake-discover. v2.3.0-alpha.3 drops the bundled .mcp.json — install rulake-stack for the wire, OR add the rulake MCP to your global Claude Code config. Avoids URL collision when both rulake-core and rulake-stack are installed.",
+  "version": "2.3.0-alpha.3",
   "author": {
     "name": "rUv",
     "email": "hello@cognitum.one"

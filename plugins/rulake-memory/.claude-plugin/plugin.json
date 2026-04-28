@@ -1,7 +1,7 @@
 {
   "name": "rulake-memory",
-  "description": "Self-learning, self-optimizing agentic memory. Wraps the witness-anchored ruLake cache as a working-memory surface for agents — remember/recall/forget primitives, hit-ratio tuning, drift detection, audit-driven optimization. Memory that gets faster the more it's used.",
-  "version": "0.1.0",
+  "description": "Self-learning, self-optimizing agentic memory. Wraps the witness-anchored ruLake cache as a working-memory surface for agents — remember/recall/forget primitives, hit-ratio tuning, drift detection, audit-driven optimization. Memory that gets faster the more it's used. v0.1.1 drops the bundled .mcp.json — install rulake-stack for the wire, or add the rulake MCP to your global Claude Code config.",
+  "version": "0.1.1",
   "author": {
     "name": "rUv",
     "email": "hello@cognitum.one"

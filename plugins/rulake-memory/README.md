@@ -47,9 +47,13 @@ This plugin also ships a [`memory`](skills/memory/SKILL.md) skill that Claude ca
 | `rulake-rvdna`, `rulake-ruqu` | If installed, the memory surface federates over them too — recall a quantum simulation result by witness, remember a genomic search by region. |
 | `rulake-loop-vector` | The memory plugin's `/memory-tune` recommendations can be wired into a `/loop` worker for continuous auto-tuning. |
 
-## Production deploy
+## How to wire the MCP
 
-Defaults to the public demo MCP at `https://rulake-mcp.ruv.io/` (read-only). For production with real data, deploy your own MCP per [`docs/deploy/cloud-run.md`](../../docs/deploy/cloud-run.md) and override the URL in `.mcp.json`.
+`rulake-memory` ships **commands only** (no bundled `.mcp.json`) — same shape as `rulake-core`, for the same reason: when both this plugin and `rulake-stack` are installed, the duplicate `rulake` MCP server name would emit a warning. Pick one of:
+
+- **Install `rulake-stack`** (recommended) — bundles the wire
+- Add the `rulake` MCP server to your `~/.claude.json` global config
+- For production: deploy your own MCP per [`docs/deploy/cloud-run.md`](../../docs/deploy/cloud-run.md) and point your config at it
 
 ## See also
 
