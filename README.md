@@ -14,9 +14,9 @@
 [![rvdna-mcp](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/ruvnet/RuLake/main/badges/rvdna-mcp.json)](https://rvdna-mcp.ruv.io/)
 [![ruqu-mcp](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/ruvnet/RuLake/main/badges/ruqu-mcp.json)](https://ruqu-mcp.ruv.io/)
 
-### Give your AI agents fast, trustworthy memory — without standing up a vector database.
+### Self-learning memory for your AI agents — without standing up a vector database.
 
-ruLake is the layer between your **agents** and the **data they remember**. Plug in the storage you already have (S3, BigQuery, Snowflake, Parquet, files), expose it through one MCP tool, and every agent on every host gets the same low-latency, content-addressed view of memory. About **1 millisecond per query** at 100k vectors (1.02× raw RaBitQ — the abstraction is free), **32× smaller** than f32 vectors, and every result carries a **SHAKE-256 witness** so two agents on two machines querying the same data get the byte-identical answer or an honest refusal.
+ruLake gives your AI agents **memory that gets faster the more it's used.** Point it at the storage you already have (S3, BigQuery, Snowflake, Parquet, files), and every agent — on every host — shares the same fast, trustworthy recall. It **learns what gets asked** (so the next ask returns in about a millisecond), **pins each answer to a cryptographic receipt** (so two agents on two machines see the byte-identical result), and **refuses to guess** when the underlying data has changed (an honest "I don't know" beats a confident lie). Roughly **1 ms per lookup** at 100,000 things to remember, **32× less RAM** than the raw embeddings, **zero per-query cost**.
 
 > Created by [rUv](https://ruv.io). Part of the [RuVector](https://github.com/ruvnet/ruvector) ecosystem alongside [`ruvector-rabitq`](https://github.com/ruvnet/ruvector/tree/main/crates/ruvector-rabitq) (1-bit compression kernel) and RVF (durable segment format). Powered by [Cognitum](https://cognitum.one).
 
