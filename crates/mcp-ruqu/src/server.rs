@@ -379,6 +379,23 @@ pub struct StubResponse {
     /// Reason — populated with the audit code so the wire response
     /// and the audit log carry matching strings.
     pub note: String,
+    /// Phase B (ruqu_optimize only): gate count BEFORE the optimizer
+    /// pass. `None` for stubs and for ruqu_qec_schedule.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gate_count_before: Option<usize>,
+    /// Phase B (ruqu_optimize only): gate count AFTER fuse_gates.
+    /// `None` for stubs.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gate_count_after: Option<usize>,
+    /// Phase B (ruqu_optimize only): true if the circuit is Clifford
+    /// (per ruqu-core's `circuit_analyzer::is_clifford_circuit`).
+    /// Clifford circuits get the Stabilizer fast path on simulate.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_clifford: Option<bool>,
+    /// Phase B (ruqu_optimize only): non-Clifford gate count
+    /// (T-gates etc.) — the standard quantum-resource-estimation metric.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub non_clifford_count: Option<usize>,
 }
 
 // ─── Tool definitions ────────────────────────────────────────────────
@@ -716,11 +733,28 @@ impl RuquMcpServer {
             ));
         }
 
+        // Phase B: real ruqu-core optimizer + analyzer pass.
+        // Translate the wire circuit, run fuse_gates, then summarise.
+        let circuit: ruvector_rulake_ruqu::circuit::Circuit = req.circuit.into();
+        let qc = crate::ruqu_core_engine::compile(&circuit);
+        let gate_count_before = qc.gates().len();
+        let optimized = ruqu_core::optimizer::fuse_gates(&qc);
+        let gate_count_after = optimized.gates().len();
+        let is_clifford = ruqu_core::circuit_analyzer::is_clifford_circuit(&qc);
+        let non_clifford_count = ruqu_core::circuit_analyzer::count_non_clifford(&qc);
+
         let resp = StubResponse {
-            status: "stub".into(),
-            v01_planned: true,
+            status: "live".into(),
+            v01_planned: false,
             v02_planned: false,
-            note: "RUQU_OPTIMIZE_STUB: planner ships in mcp-ruqu v0.1 (ADR-008 §3)".into(),
+            note: format!(
+                "ruqu-core::optimizer::fuse_gates ran — {} gates -> {} gates (clifford={}, T-gate-count={})",
+                gate_count_before, gate_count_after, is_clifford, non_clifford_count
+            ),
+            gate_count_before: Some(gate_count_before),
+            gate_count_after: Some(gate_count_after),
+            is_clifford: Some(is_clifford),
+            non_clifford_count: Some(non_clifford_count),
         };
 
         self.audit.emit(AuditEntry {
@@ -732,12 +766,12 @@ impl RuquMcpServer {
             tool: "ruqu_optimize".into(),
             intent: Some(format!("optimize:{id_for_audit}")),
             outcome: "ok".into(),
-            result_size: None,
-            trust_level: None,
+            result_size: Some(gate_count_after as u32),
+            trust_level: Some("verified".into()),
             duration_ms: start.elapsed().as_secs_f64() * 1000.0,
             witness_in: None,
             witness_out: None,
-            code: Some("RUQU_OPTIMIZE_STUB".into()),
+            code: Some("RUQU_OPTIMIZE_OK".into()),
             policy_decision: Some(PolicyDecision {
                 capability_required: "read".into(),
                 capability_granted: vec!["read".into()],
@@ -780,6 +814,10 @@ impl RuquMcpServer {
             v01_planned: false,
             v02_planned: true,
             note: "RUQU_QEC_STUB: QEC scheduler ships in mcp-ruqu v0.2 (ADR-008 §4)".into(),
+            gate_count_before: None,
+            gate_count_after: None,
+            is_clifford: None,
+            non_clifford_count: None,
         };
 
         self.audit.emit(AuditEntry {
