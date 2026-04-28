@@ -58,6 +58,12 @@ ruvector-rulake-ruqu = { path = "../ruqu-backend" }
 # through the real lib without changing the MCP wire shape.
 ruqu-core = { path = "../../vendor/ruvector/crates/ruqu-core" }
 
+# Phase B: real upstream surface-code QEC + algorithms (Grover, QAOA, VQE).
+# vendor/ruvector/crates/ruqu-algorithms ships `run_surface_code(&config)`
+# with distance-3 rotated surface code, 9 data qubits, 8 ancillas,
+# X/Z stabilizer measurement, syndrome extraction, lookup decoder.
+ruqu-algorithms = { path = "../../vendor/ruvector/crates/ruqu-algorithms" }
+
 # ruLake itself — needed for `RuLake::search_one` (the cache short-
 # circuit `ruqu_replay` rides on) and for `RuLakeBundle` / witness
 # byte-equality semantics. Match the version mcp-server pins.

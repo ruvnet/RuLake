@@ -396,6 +396,22 @@ pub struct StubResponse {
     /// (T-gates etc.) — the standard quantum-resource-estimation metric.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub non_clifford_count: Option<usize>,
+    /// Phase B (ruqu_qec_schedule only): code distance picked
+    /// (currently always 3 — only distance ruqu-algorithms supports).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code_distance: Option<u32>,
+    /// Phase B (ruqu_qec_schedule only): QEC cycles run.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_cycles: Option<u32>,
+    /// Phase B (ruqu_qec_schedule only): empirical logical-error rate
+    /// from running the distance-3 surface code with the chosen
+    /// physical_error_rate. Lower = better protection.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub logical_error_rate: Option<f64>,
+    /// Phase B (ruqu_qec_schedule only): logical error count over
+    /// the run.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub logical_errors: Option<u32>,
 }
 
 // ─── Tool definitions ────────────────────────────────────────────────
@@ -755,6 +771,10 @@ impl RuquMcpServer {
             gate_count_after: Some(gate_count_after),
             is_clifford: Some(is_clifford),
             non_clifford_count: Some(non_clifford_count),
+            code_distance: None,
+            total_cycles: None,
+            logical_error_rate: None,
+            logical_errors: None,
         };
 
         self.audit.emit(AuditEntry {
@@ -809,15 +829,44 @@ impl RuquMcpServer {
             ));
         }
 
+        // Phase B: real ruqu-algorithms distance-3 rotated surface code.
+        // Use sensible defaults — 100 cycles at 1e-3 physical error rate,
+        // seed pinned at 0xCAFEBABE for reproducible witness chain.
+        let cfg = ruqu_algorithms::surface_code::SurfaceCodeConfig {
+            distance: 3,
+            num_cycles: 100,
+            noise_rate: 1e-3,
+            seed: Some(0xCAFEBABE),
+        };
+        let result = ruqu_algorithms::surface_code::run_surface_code(&cfg)
+            .map_err(|e| {
+                self.emit_refusal(
+                    "ruqu_qec_schedule",
+                    "read",
+                    "RUQU_QEC_INTERNAL",
+                    &id_for_audit,
+                    start.elapsed().as_secs_f64() * 1000.0,
+                );
+                McpError::internal_error(format!("RUQU_QEC_INTERNAL: {e}"), None)
+            })?;
+
         let resp = StubResponse {
-            status: "stub".into(),
+            status: "live".into(),
             v01_planned: false,
-            v02_planned: true,
-            note: "RUQU_QEC_STUB: QEC scheduler ships in mcp-ruqu v0.2 (ADR-008 §4)".into(),
+            v02_planned: false,
+            note: format!(
+                "ruqu-algorithms::surface_code::run_surface_code ran d={} cycles={} noise={} -> logical_errors={} rate={:.6}",
+                cfg.distance, result.total_cycles, cfg.noise_rate,
+                result.logical_errors, result.logical_error_rate
+            ),
             gate_count_before: None,
             gate_count_after: None,
             is_clifford: None,
             non_clifford_count: None,
+            code_distance: Some(cfg.distance),
+            total_cycles: Some(result.total_cycles),
+            logical_error_rate: Some(result.logical_error_rate),
+            logical_errors: Some(result.logical_errors),
         };
 
         self.audit.emit(AuditEntry {
@@ -913,7 +962,9 @@ fn derive_witness(circuit: &Circuit, backend_tag: &str, seed: u64) -> String {
     // witness only depends on the inputs — the simulation runs
     // for parity with `RuquStateVectorBackend::execute` so timings
     // and audit `duration_ms` are honest.
-    let _sv = state_vector::simulate(circuit);
+    // Phase B: route through ruqu-core (the real upstream lib),
+    // matching the swap done in ruqu_simulate at server.rs:472.
+    let _sv = crate::ruqu_core_engine::simulate(circuit);
     let inputs = inputs_for(circuit, backend_tag, seed, /* generation = */ 1);
     let bundle = ruqu_bundle(&inputs.as_borrowed());
     bundle.rvf_witness

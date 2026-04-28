@@ -974,6 +974,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ruqu-algorithms"
+version = "2.0.5"
+dependencies = [
+ "rand 0.8.6",
+ "ruqu-core",
+ "thiserror",
+]
+
+[[package]]
 name = "ruqu-core"
 version = "2.0.5"
 dependencies = [
@@ -1024,6 +1033,7 @@ dependencies = [
  "hyper-util",
  "rmcp",
  "rulake",
+ "ruqu-algorithms",
  "ruqu-core",
  "ruvector-rulake-ruqu",
  "schemars",
