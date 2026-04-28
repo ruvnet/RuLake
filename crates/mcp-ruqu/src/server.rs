@@ -878,12 +878,12 @@ impl RuquMcpServer {
             tool: "ruqu_qec_schedule".into(),
             intent: Some(format!("qec:{id_for_audit}")),
             outcome: "ok".into(),
-            result_size: None,
-            trust_level: None,
+            result_size: Some(result.logical_errors),
+            trust_level: Some("verified".into()),
             duration_ms: start.elapsed().as_secs_f64() * 1000.0,
             witness_in: None,
             witness_out: None,
-            code: Some("RUQU_QEC_STUB".into()),
+            code: Some("RUQU_QEC_OK".into()),
             policy_decision: Some(PolicyDecision {
                 capability_required: "read".into(),
                 capability_granted: vec!["read".into()],
@@ -1112,36 +1112,50 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn ruqu_optimize_returns_v01_stub_envelope() {
+    async fn ruqu_optimize_returns_real_fuse_gates_envelope() {
+        // Phase B (commit 56f130a): ruqu_optimize now runs real
+        // ruqu_core::optimizer::fuse_gates + circuit_analyzer.
+        // Bell pair (H + CX) has no consecutive same-qubit gates to fuse,
+        // is fully Clifford, has 0 T-gates.
         let server = RuquMcpServer::new("ruqu-sv");
         let resp = server
             .call_optimize(StubRequest { circuit: bell() })
             .await
             .unwrap();
-        assert_eq!(resp.status, "stub");
-        assert!(resp.v01_planned);
+        assert_eq!(resp.status, "live");
+        assert!(!resp.v01_planned);
         assert!(!resp.v02_planned);
-        assert!(resp.note.contains("RUQU_OPTIMIZE_STUB"));
+        assert!(resp.note.contains("ruqu-core::optimizer::fuse_gates"));
+        assert_eq!(resp.gate_count_before, Some(2));
+        assert_eq!(resp.gate_count_after, Some(2));
+        assert_eq!(resp.is_clifford, Some(true));
+        assert_eq!(resp.non_clifford_count, Some(0));
 
-        // The audit row must carry the same code on every call.
         let tail = server.audit().tail(1);
-        assert_eq!(tail.last().unwrap()["code"], "RUQU_OPTIMIZE_STUB");
+        assert_eq!(tail.last().unwrap()["code"], "RUQU_OPTIMIZE_OK");
         assert_eq!(tail.last().unwrap()["tool"], "ruqu_optimize");
     }
 
     #[tokio::test]
-    async fn ruqu_qec_schedule_returns_v02_stub_envelope() {
+    async fn ruqu_qec_schedule_runs_real_surface_code() {
+        // Phase B (commit 681dfbb): ruqu_qec_schedule now runs real
+        // ruqu_algorithms::surface_code::run_surface_code (d=3 rotated).
         let server = RuquMcpServer::new("ruqu-sv");
         let resp = server
             .call_qec_schedule(StubRequest { circuit: bell() })
             .await
             .unwrap();
-        assert_eq!(resp.status, "stub");
+        assert_eq!(resp.status, "live");
         assert!(!resp.v01_planned);
-        assert!(resp.v02_planned);
-        assert!(resp.note.contains("RUQU_QEC_STUB"));
+        assert!(!resp.v02_planned);
+        assert!(resp.note.contains("ruqu-algorithms::surface_code::run_surface_code"));
+        assert_eq!(resp.code_distance, Some(3));
+        assert_eq!(resp.total_cycles, Some(100));
+        // logical_error_rate is empirical — bounded by [0, 1] but content varies.
+        let r = resp.logical_error_rate.unwrap();
+        assert!((0.0..=1.0).contains(&r), "rate in unit interval, got {r}");
         let tail = server.audit().tail(1);
-        assert_eq!(tail.last().unwrap()["code"], "RUQU_QEC_STUB");
+        assert_eq!(tail.last().unwrap()["code"], "RUQU_QEC_OK");
     }
 
     // ── R-1 / R-2 security guards ────────────────────────────────

@@ -713,9 +713,17 @@ mod tests {
             }))
             .await
             .expect("find ok");
-        assert!(resp.0.stub, "v0.0.1 is a stub");
+        // Phase B (commit ae92be3): rvdna_find now does real brute-force
+        // L2 kNN over the registered backend (4 vectors at D=8 from
+        // make_server). k=5 → returns all 4 (truncate ≥ available).
+        // Determinism check: query is [0.0; 8], vectors are [i; 8] for
+        // i in 0..4. L2² distances are i² * 8 → 0, 8, 32, 72. Closest
+        // is id 0 with score 0.
+        assert!(!resp.0.stub, "Phase B: rvdna_find runs real kNN");
         assert!(!resp.0.witness.is_empty(), "live witness present");
-        assert!(resp.0.hits.is_empty(), "stub returns no hits");
+        assert_eq!(resp.0.hits.len(), 4, "all 4 registered vectors returned (k=5 > n=4)");
+        assert_eq!(resp.0.hits[0].id, 0, "closest = id 0 ([0;8] vs [0;8])");
+        assert_eq!(resp.0.hits[0].score, 0.0, "exact match → distance 0");
     }
 
     #[tokio::test]
