@@ -50,16 +50,13 @@ fn bench_emit_below_capacity(c: &mut Criterion) {
     // alloc dominates an otherwise trivial body.
     let mut group = c.benchmark_group("mcp_audit_emit_below_cap");
     group.bench_function("push_only", |b| {
-        b.iter_with_setup(
-            AuditSink::stderr,
-            |sink| {
-                // 100 emits — well under the 256 cap.
-                for i in 0..100u64 {
-                    sink.emit(entry(i));
-                }
-                black_box(sink);
-            },
-        );
+        b.iter_with_setup(AuditSink::stderr, |sink| {
+            // 100 emits — well under the 256 cap.
+            for i in 0..100u64 {
+                sink.emit(entry(i));
+            }
+            black_box(sink);
+        });
     });
     group.finish();
 }

@@ -95,16 +95,26 @@ mod tests {
     #[test]
     fn hard_ceiling_is_not_self_contradictory() {
         // The advertised v0.0 cap must be at or below the hard ceiling.
-        assert!(MAX_QUBITS_V0_0 <= MAX_QUBITS_HARD);
+        const {
+            assert!(MAX_QUBITS_V0_0 <= MAX_QUBITS_HARD);
+        }
         // The hard ceiling must be strictly below the `dim()` saturation
         // point (31) so we never get within a factor of two of OOM on
         // a 32 GiB host.
-        assert!(MAX_QUBITS_HARD < 31);
+        const {
+            assert!(MAX_QUBITS_HARD < 31);
+        }
     }
 
     #[test]
     fn error_display_mentions_inputs() {
-        let s = format!("{}", QubitCapError { requested: 25, cap: 16 });
+        let s = format!(
+            "{}",
+            QubitCapError {
+                requested: 25,
+                cap: 16
+            }
+        );
         assert!(s.contains("25"));
         assert!(s.contains("16"));
     }

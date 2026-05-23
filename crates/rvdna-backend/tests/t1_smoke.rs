@@ -62,7 +62,12 @@ fn t0_collection_from(seed: u64, n: usize, dim: usize) -> RvdnaCollection {
     let vectors: Vec<Vec<f32>> = (0..n)
         .map(|i| flat[i * dim..(i + 1) * dim].to_vec())
         .collect();
-    RvdnaCollection { ids, vectors, dim, generation: 1 }
+    RvdnaCollection {
+        ids,
+        vectors,
+        dim,
+        generation: 1,
+    }
 }
 
 #[test]
@@ -79,16 +84,15 @@ fn t1_backend_round_trips_through_rulake_cache() {
             file.path(),
             dim,
             1,
-            0,                // ids_offset (unused — has_ids=false)
+            0, // ids_offset (unused — has_ids=false)
             vectors_offset,
             n,
-            false,            // synthesise positional ids
+            false, // synthesise positional ids
         )
         .expect("register");
     let t1_be: Arc<dyn BackendAdapter> = Arc::clone(&t1_raw) as Arc<dyn BackendAdapter>;
 
-    let t1_lake =
-        RuLake::new(20, 42).with_consistency(Consistency::Eventual { ttl_ms: 1_000 });
+    let t1_lake = RuLake::new(20, 42).with_consistency(Consistency::Eventual { ttl_ms: 1_000 });
     t1_lake.register_backend(t1_be).unwrap();
 
     let q = vec![0.0_f32; dim];
@@ -108,8 +112,7 @@ fn t1_backend_round_trips_through_rulake_cache() {
     let t0 = RvdnaT0Backend::new("rvdna-t0-fixture");
     t0.put_collection("hbb-kmers", t0_collection_from(0xc0ffee, n, dim));
     let t0_be: Arc<dyn BackendAdapter> = Arc::new(t0);
-    let t0_lake =
-        RuLake::new(20, 42).with_consistency(Consistency::Eventual { ttl_ms: 1_000 });
+    let t0_lake = RuLake::new(20, 42).with_consistency(Consistency::Eventual { ttl_ms: 1_000 });
     t0_lake.register_backend(t0_be).unwrap();
     let t0_hits = t0_lake
         .search_one("rvdna-t0-fixture", "hbb-kmers", &q, 5)

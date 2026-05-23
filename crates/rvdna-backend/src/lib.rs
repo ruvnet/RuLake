@@ -86,8 +86,15 @@ impl RvdnaT0Backend {
     /// Insert / replace a hot-tier collection by name.
     ///
     /// Returns the previous collection if one existed under this name.
-    pub fn put_collection(&self, name: impl Into<String>, c: RvdnaCollection) -> Option<RvdnaCollection> {
-        self.collections.write().expect("poisoned").insert(name.into(), c)
+    pub fn put_collection(
+        &self,
+        name: impl Into<String>,
+        c: RvdnaCollection,
+    ) -> Option<RvdnaCollection> {
+        self.collections
+            .write()
+            .expect("poisoned")
+            .insert(name.into(), c)
     }
 
     /// Bump the generation of a collection — call this after rotating
@@ -113,17 +120,23 @@ impl BackendAdapter for RvdnaT0Backend {
     }
 
     fn list_collections(&self) -> Result<Vec<CollectionId>> {
-        Ok(self.collections.read().expect("poisoned").keys().cloned().collect())
+        Ok(self
+            .collections
+            .read()
+            .expect("poisoned")
+            .keys()
+            .cloned()
+            .collect())
     }
 
     fn pull_vectors(&self, collection: &str) -> Result<PulledBatch> {
         let g = self.collections.read().expect("poisoned");
-        let c = g.get(collection).ok_or_else(|| {
-            rulake::error::RuLakeError::UnknownCollection {
+        let c = g
+            .get(collection)
+            .ok_or_else(|| rulake::error::RuLakeError::UnknownCollection {
                 backend: self.id.clone(),
                 collection: collection.to_string(),
-            }
-        })?;
+            })?;
         Ok(PulledBatch {
             collection: collection.to_string(),
             ids: c.ids.clone(),
@@ -135,12 +148,12 @@ impl BackendAdapter for RvdnaT0Backend {
 
     fn generation(&self, collection: &str) -> Result<u64> {
         let g = self.collections.read().expect("poisoned");
-        let c = g.get(collection).ok_or_else(|| {
-            rulake::error::RuLakeError::UnknownCollection {
+        let c = g
+            .get(collection)
+            .ok_or_else(|| rulake::error::RuLakeError::UnknownCollection {
                 backend: self.id.clone(),
                 collection: collection.to_string(),
-            }
-        })?;
+            })?;
         Ok(c.generation)
     }
 }

@@ -137,17 +137,25 @@ impl Tableau {
     }
 
     /// `n_qubits` the tableau is sized for.
-    pub fn n_qubits(&self) -> usize { self.n }
+    pub fn n_qubits(&self) -> usize {
+        self.n
+    }
 
     /// Words per row — useful for callers serialising the raw storage.
-    pub fn words_per_row(&self) -> usize { self.words_per_row }
+    pub fn words_per_row(&self) -> usize {
+        self.words_per_row
+    }
 
     /// Total number of rows (`2n + 1`).
-    pub fn rows(&self) -> usize { 2 * self.n + 1 }
+    pub fn rows(&self) -> usize {
+        2 * self.n + 1
+    }
 
     /// Borrow the raw packed storage. Layout is documented on
     /// [`Tableau`].
-    pub fn raw(&self) -> &[u64] { &self.data }
+    pub fn raw(&self) -> &[u64] {
+        &self.data
+    }
 
     /// Read the bit at `(row, col)`. `col ∈ 0..n` reads `x_col`,
     /// `col ∈ n..2n` reads `z_{col - n}`, `col == 2n` reads the sign
@@ -174,20 +182,32 @@ impl Tableau {
     /// hot paths to warrant a dedicated helper.
     #[inline]
     pub fn xor_bit(&mut self, row: usize, col: usize, v: bool) {
-        if !v { return; }
+        if !v {
+            return;
+        }
         let (w, b) = self.bit_pos(row, col);
         self.data[w] ^= 1u64 << b;
     }
 
     /// Read the `x_{row, q}` bit. Convenience for the gate updates.
-    #[inline] pub fn x(&self, row: usize, q: usize) -> bool { self.bit(row, q) }
+    #[inline]
+    pub fn x(&self, row: usize, q: usize) -> bool {
+        self.bit(row, q)
+    }
     /// Read the `z_{row, q}` bit. Convenience for the gate updates.
-    #[inline] pub fn z(&self, row: usize, q: usize) -> bool { self.bit(row, self.n + q) }
+    #[inline]
+    pub fn z(&self, row: usize, q: usize) -> bool {
+        self.bit(row, self.n + q)
+    }
     /// Read the sign bit `r_row`. Convenience for the gate updates.
-    #[inline] pub fn r(&self, row: usize) -> bool { self.bit(row, 2 * self.n) }
+    #[inline]
+    pub fn r(&self, row: usize) -> bool {
+        self.bit(row, 2 * self.n)
+    }
 
     /// Write the sign bit `r_row`.
-    #[inline] pub fn set_r(&mut self, row: usize, v: bool) {
+    #[inline]
+    pub fn set_r(&mut self, row: usize, v: bool) {
         self.set_bit(row, 2 * self.n, v);
     }
 
@@ -213,7 +233,10 @@ pub struct StabilizerState {
 impl StabilizerState {
     /// `|0…0⟩` on `n` qubits.
     pub fn zero(n: u8) -> Self {
-        Self { n_qubits: n, tableau: Tableau::identity(n as usize) }
+        Self {
+            n_qubits: n,
+            tableau: Tableau::identity(n as usize),
+        }
     }
 }
 
@@ -226,7 +249,9 @@ pub fn apply_h(state: &mut StabilizerState, q: usize) {
     for i in 0..t.rows() {
         let xi = t.x(i, q);
         let zi = t.z(i, q);
-        if xi & zi { t.xor_bit(i, 2 * t.n, true); }
+        if xi & zi {
+            t.xor_bit(i, 2 * t.n, true);
+        }
         // swap x_{i,q} ↔ z_{i,q}
         t.set_bit(i, q, zi);
         t.set_bit(i, t.n + q, xi);
@@ -240,8 +265,12 @@ pub fn apply_s(state: &mut StabilizerState, q: usize) {
     for i in 0..t.rows() {
         let xi = t.x(i, q);
         let zi = t.z(i, q);
-        if xi & zi { t.xor_bit(i, 2 * t.n, true); }
-        if xi { t.xor_bit(i, t.n + q, true); }
+        if xi & zi {
+            t.xor_bit(i, 2 * t.n, true);
+        }
+        if xi {
+            t.xor_bit(i, t.n + q, true);
+        }
     }
 }
 
@@ -259,8 +288,12 @@ pub fn apply_cx(state: &mut StabilizerState, control: usize, target: usize) {
         if xc & zt & (xt ^ zc ^ true) {
             t.xor_bit(i, 2 * t.n, true);
         }
-        if xc { t.xor_bit(i, target, true); }
-        if zt { t.xor_bit(i, t.n + control, true); }
+        if xc {
+            t.xor_bit(i, target, true);
+        }
+        if zt {
+            t.xor_bit(i, t.n + control, true);
+        }
     }
 }
 
@@ -269,7 +302,9 @@ pub fn apply_cx(state: &mut StabilizerState, control: usize, target: usize) {
 pub fn apply_x(state: &mut StabilizerState, q: usize) {
     let t = &mut state.tableau;
     for i in 0..t.rows() {
-        if t.z(i, q) { t.xor_bit(i, 2 * t.n, true); }
+        if t.z(i, q) {
+            t.xor_bit(i, 2 * t.n, true);
+        }
     }
 }
 
@@ -277,7 +312,9 @@ pub fn apply_x(state: &mut StabilizerState, q: usize) {
 pub fn apply_z(state: &mut StabilizerState, q: usize) {
     let t = &mut state.tableau;
     for i in 0..t.rows() {
-        if t.x(i, q) { t.xor_bit(i, 2 * t.n, true); }
+        if t.x(i, q) {
+            t.xor_bit(i, 2 * t.n, true);
+        }
     }
 }
 
@@ -286,7 +323,9 @@ pub fn apply_z(state: &mut StabilizerState, q: usize) {
 pub fn apply_y(state: &mut StabilizerState, q: usize) {
     let t = &mut state.tableau;
     for i in 0..t.rows() {
-        if t.x(i, q) ^ t.z(i, q) { t.xor_bit(i, 2 * t.n, true); }
+        if t.x(i, q) ^ t.z(i, q) {
+            t.xor_bit(i, 2 * t.n, true);
+        }
     }
 }
 
@@ -305,7 +344,10 @@ pub fn simulate(circuit: &Circuit) -> Result<StabilizerState, StabilizerError> {
 
     let in_range = |q: u8| -> Result<usize, StabilizerError> {
         if q >= n {
-            Err(StabilizerError::QubitIndexOutOfRange { qubit: q, n_qubits: n })
+            Err(StabilizerError::QubitIndexOutOfRange {
+                qubit: q,
+                n_qubits: n,
+            })
         } else {
             Ok(q as usize)
         }
@@ -323,13 +365,14 @@ pub fn simulate(circuit: &Circuit) -> Result<StabilizerState, StabilizerError> {
                 let t = in_range(target)?;
                 if c == t {
                     return Err(StabilizerError::QubitIndexOutOfRange {
-                        qubit: control, n_qubits: n,
+                        qubit: control,
+                        n_qubits: n,
                     });
                 }
                 apply_cx(&mut state, c, t);
             }
-            Gate::T { .. }       => return Err(StabilizerError::NonClifford { gate: "t" }),
-            Gate::Rz { .. }      => return Err(StabilizerError::NonClifford { gate: "rz" }),
+            Gate::T { .. } => return Err(StabilizerError::NonClifford { gate: "t" }),
+            Gate::Rz { .. } => return Err(StabilizerError::NonClifford { gate: "rz" }),
         }
     }
     Ok(state)
@@ -355,9 +398,13 @@ pub fn to_pulled_batch_form(state: &StabilizerState) -> Vec<Vec<f32>> {
         let mut v = Vec::with_capacity(row_len);
         v.push(1.0_f32);
         v.push(0.0_f32);
-        for q in 0..n { v.push(if state.tableau.x(row, q) { 1.0 } else { 0.0 }); }
-        for q in 0..n { v.push(if state.tableau.z(row, q) { 1.0 } else { 0.0 }); }
-        v.push(if state.tableau.r(row)   { 1.0 } else { 0.0 });
+        for q in 0..n {
+            v.push(if state.tableau.x(row, q) { 1.0 } else { 0.0 });
+        }
+        for q in 0..n {
+            v.push(if state.tableau.z(row, q) { 1.0 } else { 0.0 });
+        }
+        v.push(if state.tableau.r(row) { 1.0 } else { 0.0 });
         out.push(v);
     }
     out
@@ -374,15 +421,27 @@ mod tests {
         // Destabilizer i should have x_{i,i} = 1, all other bits 0.
         for i in 0..3 {
             assert!(t.x(i, i));
-            for j in 0..3 { if j != i { assert!(!t.x(i, j)); } }
-            for j in 0..3 { assert!(!t.z(i, j)); }
+            for j in 0..3 {
+                if j != i {
+                    assert!(!t.x(i, j));
+                }
+            }
+            for j in 0..3 {
+                assert!(!t.z(i, j));
+            }
             assert!(!t.r(i));
         }
         // Stabilizer i should have z_{i,i} = 1.
         for i in 0..3 {
             assert!(t.z(3 + i, i));
-            for j in 0..3 { if j != i { assert!(!t.z(3 + i, j)); } }
-            for j in 0..3 { assert!(!t.x(3 + i, j)); }
+            for j in 0..3 {
+                if j != i {
+                    assert!(!t.z(3 + i, j));
+                }
+            }
+            for j in 0..3 {
+                assert!(!t.x(3 + i, j));
+            }
             assert!(!t.r(3 + i));
         }
     }
@@ -442,8 +501,11 @@ mod tests {
     #[test]
     fn simulate_bell_runs_clean() {
         let mut c = Circuit::new("bell-stab", 2);
-        c.push(Gate::H  { q: 0 });
-        c.push(Gate::Cx { control: 0, target: 1 });
+        c.push(Gate::H { q: 0 });
+        c.push(Gate::Cx {
+            control: 0,
+            target: 1,
+        });
         let s = simulate(&c).unwrap();
         // After H on q0 then CX(0,1) starting from Z_0, Z_1:
         // stabilizers should be X_0 X_1 and Z_0 Z_1.

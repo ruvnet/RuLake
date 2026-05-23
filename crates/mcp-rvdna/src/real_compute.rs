@@ -48,7 +48,11 @@ pub fn knn_l2(
             (id, acc)
         })
         .collect();
-    scored.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal).then(a.0.cmp(&b.0)));
+    scored.sort_by(|a, b| {
+        a.1.partial_cmp(&b.1)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then(a.0.cmp(&b.0))
+    });
     scored.truncate(k);
     Ok(scored)
 }
@@ -109,18 +113,23 @@ pub fn translate_dna(dna: &str) -> String {
         }
     };
 
-    let bytes: Vec<u8> = dna.bytes().filter_map(|b| {
-        match b.to_ascii_uppercase() {
-            b'A' | b'C' | b'G' | b'T' => Some(b.to_ascii_uppercase()),
-            _ => None,  // skip whitespace, Ns, anything non-canonical
-        }
-    }).collect();
+    let bytes: Vec<u8> = dna
+        .bytes()
+        .filter_map(|b| {
+            match b.to_ascii_uppercase() {
+                b'A' | b'C' | b'G' | b'T' => Some(b.to_ascii_uppercase()),
+                _ => None, // skip whitespace, Ns, anything non-canonical
+            }
+        })
+        .collect();
 
     let mut protein = String::with_capacity(bytes.len() / 3);
     let mut i = 0;
     while i + 3 <= bytes.len() {
         let aa = codon_table(bytes[i], bytes[i + 1], bytes[i + 2]);
-        if aa == '*' { break; }
+        if aa == '*' {
+            break;
+        }
         protein.push(aa);
         i += 3;
     }

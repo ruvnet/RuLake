@@ -204,9 +204,13 @@ pub fn assert_kernel_conformant(k: &dyn VectorKernel, fixture_seed: u64) {
     let top_k = 5usize;
 
     // Tiny LCG so the fixture is reproducible without pulling rand.
-    let mut state = fixture_seed.wrapping_mul(0x9E37_79B9_7F4A_7C15).wrapping_add(1);
+    let mut state = fixture_seed
+        .wrapping_mul(0x9E37_79B9_7F4A_7C15)
+        .wrapping_add(1);
     let mut next_u64 = || {
-        state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        state = state
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         state
     };
     let mut next_f32 = || {
@@ -231,7 +235,8 @@ pub fn assert_kernel_conformant(k: &dyn VectorKernel, fixture_seed: u64) {
     let got_l2 = k.l2_distance_one(&query_f, &candidates_f, top_k);
     let want_l2 = reference.l2_distance_one(&query_f, &candidates_f, top_k);
     assert_eq!(
-        got_l2, want_l2,
+        got_l2,
+        want_l2,
         "kernel {:?} l2_distance_one diverges from CpuNaiveKernel reference",
         k.id()
     );
@@ -239,7 +244,8 @@ pub fn assert_kernel_conformant(k: &dyn VectorKernel, fixture_seed: u64) {
     let got_pc = k.rabitq_popcount(&query_u, &candidates_u, top_k);
     let want_pc = reference.rabitq_popcount(&query_u, &candidates_u, top_k);
     assert_eq!(
-        got_pc, want_pc,
+        got_pc,
+        want_pc,
         "kernel {:?} rabitq_popcount diverges from CpuNaiveKernel reference",
         k.id()
     );

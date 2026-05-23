@@ -7,13 +7,11 @@ use arrow::array::{Array, AsArray, Float32Array, Int64Array, ListArray};
 use arrow::datatypes::Float32Type;
 use futures::StreamExt;
 use object_store::path::Path as OsPath;
-use object_store::{ObjectMeta, ObjectStore, ObjectStoreExt, gcp::GoogleCloudStorageBuilder};
-use parquet::arrow::ParquetRecordBatchStreamBuilder;
+use object_store::{gcp::GoogleCloudStorageBuilder, ObjectMeta, ObjectStore, ObjectStoreExt};
 use parquet::arrow::async_reader::ParquetObjectReader;
+use parquet::arrow::ParquetRecordBatchStreamBuilder;
 
-use rulake::backend::{
-    BackendAdapter, CollectionId, PulledBatch, MAX_PULLED_DIM,
-};
+use rulake::backend::{BackendAdapter, CollectionId, PulledBatch, MAX_PULLED_DIM};
 use rulake::bundle::{Generation, RuLakeBundle};
 use rulake::error::{Result, RuLakeError};
 
@@ -167,38 +165,30 @@ impl BackendAdapter for GcsParquetBackend {
 
         let id = self.id.clone();
         let id_for_err = id.clone();
-        let (ids, vectors, dim, generation) = self
-            .inner
-            .runtime
-            .block_on(async move {
-                let head = store.head(&path).await.map_err(|e| RuLakeError::Backend {
-                    backend: id_for_err.clone(),
-                    detail: format!("HEAD {path}: {e}"),
-                })?;
-                let generation = generation_of(&head);
-                let reader = ParquetObjectReader::new(store, path.clone());
-                let builder = ParquetRecordBatchStreamBuilder::new(reader)
-                    .await
-                    .map_err(|e| RuLakeError::Backend {
-                        backend: id_for_err.clone(),
-                        detail: format!("parquet open {path}: {e}"),
-                    })?;
-                let stream = builder.build().map_err(|e| RuLakeError::Backend {
-                    backend: id_for_err.clone(),
-                    detail: format!("parquet build {path}: {e}"),
-                })?;
-                read_batches(stream, &id_for_err, &path).await
-                    .map(|(ids, vectors, dim)| (ids, vectors, dim, generation))
+        let (ids, vectors, dim, generation) = self.inner.runtime.block_on(async move {
+            let head = store.head(&path).await.map_err(|e| RuLakeError::Backend {
+                backend: id_for_err.clone(),
+                detail: format!("HEAD {path}: {e}"),
             })?;
+            let generation = generation_of(&head);
+            let reader = ParquetObjectReader::new(store, path.clone());
+            let builder = ParquetRecordBatchStreamBuilder::new(reader)
+                .await
+                .map_err(|e| RuLakeError::Backend {
+                    backend: id_for_err.clone(),
+                    detail: format!("parquet open {path}: {e}"),
+                })?;
+            let stream = builder.build().map_err(|e| RuLakeError::Backend {
+                backend: id_for_err.clone(),
+                detail: format!("parquet build {path}: {e}"),
+            })?;
+            read_batches(stream, &id_for_err, &path)
+                .await
+                .map(|(ids, vectors, dim)| (ids, vectors, dim, generation))
+        })?;
 
         // Cache the (dim, generation) for cheap current_bundle() later.
-        self.put_cached_schema(
-            collection,
-            SchemaCache {
-                dim,
-                generation,
-            },
-        );
+        self.put_cached_schema(collection, SchemaCache { dim, generation });
 
         if dim > MAX_PULLED_DIM {
             return Err(RuLakeError::InvalidParameter(format!(
@@ -251,10 +241,13 @@ impl BackendAdapter for GcsParquetBackend {
         let head_path = path.clone();
         let head_store = Arc::clone(&store);
         let generation = self.inner.runtime.block_on(async move {
-            let head = head_store.head(&head_path).await.map_err(|e| RuLakeError::Backend {
-                backend: id_head.clone(),
-                detail: format!("HEAD {head_path}: {e}"),
-            })?;
+            let head = head_store
+                .head(&head_path)
+                .await
+                .map_err(|e| RuLakeError::Backend {
+                    backend: id_head.clone(),
+                    detail: format!("HEAD {head_path}: {e}"),
+                })?;
             Ok::<u64, RuLakeError>(generation_of(&head))
         })?;
 
@@ -274,13 +267,7 @@ impl BackendAdapter for GcsParquetBackend {
         };
 
         // Update cache.
-        self.put_cached_schema(
-            collection,
-            SchemaCache {
-                dim,
-                generation,
-            },
-        );
+        self.put_cached_schema(collection, SchemaCache { dim, generation });
 
         let data_ref = format!("gs://{bucket}/{}", c.object);
         Ok(RuLakeBundle::new(
@@ -315,14 +302,13 @@ impl GcsParquetBackend {
                     backend: id.clone(),
                     detail: format!("schema: no `vector` column ({e})"),
                 })?;
-            list_element_count_estimate(field.data_type())
-                .ok_or_else(|| RuLakeError::Backend {
-                    backend: id.clone(),
-                    detail: format!(
-                        "schema: `vector` column is not a fixed-size list of floats (type: {:?})",
-                        field.data_type()
-                    ),
-                })
+            list_element_count_estimate(field.data_type()).ok_or_else(|| RuLakeError::Backend {
+                backend: id.clone(),
+                detail: format!(
+                    "schema: `vector` column is not a fixed-size list of floats (type: {:?})",
+                    field.data_type()
+                ),
+            })
         })
     }
 }

@@ -79,7 +79,11 @@ pub struct Circuit {
 impl Circuit {
     /// Empty circuit on `n` qubits.
     pub fn new(id: impl Into<String>, n_qubits: u8) -> Self {
-        Self { id: id.into(), n_qubits, gates: Vec::new() }
+        Self {
+            id: id.into(),
+            n_qubits,
+            gates: Vec::new(),
+        }
     }
 
     /// Push a gate. Returns `&mut self` for ergonomic chaining.

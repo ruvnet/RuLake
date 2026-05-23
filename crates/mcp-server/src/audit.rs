@@ -206,9 +206,7 @@ pub fn now_ts() -> String {
     // Hand-roll an ISO-8601 string to avoid pulling chrono into the
     // dep tree just for a timestamp. Year 9999 is fine.
     let (year, month, day, hour, minute, second) = epoch_to_ymdhms(secs);
-    format!(
-        "{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}.{millis:03}Z"
-    )
+    format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}.{millis:03}Z")
 }
 
 fn epoch_to_ymdhms(secs: u64) -> (u32, u32, u32, u32, u32, u32) {

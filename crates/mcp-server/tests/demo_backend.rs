@@ -13,8 +13,10 @@ use ruvector_rulake_mcp::{config::McpConfig, server::RuLakeMcpServer};
 
 #[test]
 fn demo_backend_registers_seeded_collection_and_allow_block() {
-    let mut cfg = McpConfig::default();
-    cfg.demo_backend = true;
+    let cfg = McpConfig {
+        demo_backend: true,
+        ..McpConfig::default()
+    };
     // Construct should succeed — the seeded LocalBackend is wired in.
     let _server = RuLakeMcpServer::new(cfg).expect("build server with demo_backend = true");
     // Successful construction is the assertion. The path that registers
@@ -26,6 +28,9 @@ fn demo_backend_registers_seeded_collection_and_allow_block() {
 #[test]
 fn demo_backend_off_by_default() {
     let cfg = McpConfig::default();
-    assert!(!cfg.demo_backend, "production deploys must opt in explicitly");
+    assert!(
+        !cfg.demo_backend,
+        "production deploys must opt in explicitly"
+    );
     let _server = RuLakeMcpServer::new(cfg).expect("default-config server still constructs");
 }

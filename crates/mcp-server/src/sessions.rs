@@ -69,7 +69,9 @@ impl SessionBindings {
     ) -> SessionDecision {
         if session_id.is_empty() {
             // No session id (initialize call etc.) — pass through.
-            return SessionDecision::Allowed { first_sighting: false };
+            return SessionDecision::Allowed {
+                first_sighting: false,
+            };
         }
         let want = BindingTuple {
             principal: principal.to_string(),
@@ -79,7 +81,9 @@ impl SessionBindings {
         let mut inner = self.inner.lock().unwrap();
         if let Some(existing) = inner.bindings.get(session_id) {
             if existing == &want {
-                return SessionDecision::Allowed { first_sighting: false };
+                return SessionDecision::Allowed {
+                    first_sighting: false,
+                };
             }
             return SessionDecision::Mismatch {
                 expected_principal: existing.principal.clone(),
@@ -94,7 +98,9 @@ impl SessionBindings {
         }
         inner.seen.push_back(session_id.to_string());
         inner.bindings.insert(session_id.to_string(), want);
-        SessionDecision::Allowed { first_sighting: true }
+        SessionDecision::Allowed {
+            first_sighting: true,
+        }
     }
 
     pub fn binding_count(&self) -> usize {
@@ -123,14 +129,24 @@ mod tests {
     fn empty_session_id_passes() {
         let s = SessionBindings::new();
         let d = s.check_or_bind("", "alice", None, None);
-        assert_eq!(d, SessionDecision::Allowed { first_sighting: false });
+        assert_eq!(
+            d,
+            SessionDecision::Allowed {
+                first_sighting: false
+            }
+        );
     }
 
     #[test]
     fn first_sighting_records_binding() {
         let s = SessionBindings::new();
         let d = s.check_or_bind("sess-1", "alice", Some("cursor"), None);
-        assert_eq!(d, SessionDecision::Allowed { first_sighting: true });
+        assert_eq!(
+            d,
+            SessionDecision::Allowed {
+                first_sighting: true
+            }
+        );
         assert_eq!(s.binding_count(), 1);
     }
 
@@ -139,7 +155,12 @@ mod tests {
         let s = SessionBindings::new();
         s.check_or_bind("sess-1", "alice", Some("cursor"), None);
         let d = s.check_or_bind("sess-1", "alice", Some("cursor"), None);
-        assert_eq!(d, SessionDecision::Allowed { first_sighting: false });
+        assert_eq!(
+            d,
+            SessionDecision::Allowed {
+                first_sighting: false
+            }
+        );
     }
 
     #[test]
@@ -148,7 +169,10 @@ mod tests {
         s.check_or_bind("sess-1", "alice", Some("cursor"), None);
         let d = s.check_or_bind("sess-1", "mallory", Some("cursor"), None);
         match d {
-            SessionDecision::Mismatch { expected_principal, presented_principal } => {
+            SessionDecision::Mismatch {
+                expected_principal,
+                presented_principal,
+            } => {
                 assert_eq!(expected_principal, "alice");
                 assert_eq!(presented_principal, "mallory");
             }
@@ -181,6 +205,11 @@ mod tests {
         assert_eq!(s.binding_count(), WINDOW);
         // The first session aged out — re-binding it counts as first sighting.
         let d = s.check_or_bind("sess-0", "u", None, None);
-        assert_eq!(d, SessionDecision::Allowed { first_sighting: true });
+        assert_eq!(
+            d,
+            SessionDecision::Allowed {
+                first_sighting: true
+            }
+        );
     }
 }

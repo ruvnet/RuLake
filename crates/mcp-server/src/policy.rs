@@ -3,11 +3,11 @@
 //! The four tiers from ADR-004 §4b:
 //! - `read`     — default; exposes `rulake_query` (and `rulake_list_backends`)
 //! - `internal` — operator-only (no OAuth scope); exposes the internal
-//!                kernel tools that `rulake_query` composes
+//!   kernel tools that `rulake_query` composes
 //! - `publish`  — adds `rulake_publish_bundle` + `rulake_refresh_from_bundle_dir`
-//!                + enables `intent: "refresh"`
+//!   + enables `intent: "refresh"`
 //! - `admin`    — adds `rulake_save_cache_to_dir` + `rulake_warm_from_dir` +
-//!                `rulake_invalidate_cache`
+//!   `rulake_invalidate_cache`
 //!
 //! v0.3 enforces capability membership at tool-call time. OAuth-scope
 //! mapping (mcp:rulake:read|publish|admin) lands in v0.4 with the
@@ -61,7 +61,9 @@ impl Capability {
             "internal" => Ok(Self::Internal),
             "publish" => Ok(Self::Publish),
             "admin" => Ok(Self::Admin),
-            other => anyhow::bail!("unknown capability {other:?} — expected read|internal|publish|admin"),
+            other => {
+                anyhow::bail!("unknown capability {other:?} — expected read|internal|publish|admin")
+            }
         }
     }
 }

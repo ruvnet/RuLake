@@ -51,7 +51,9 @@ pub fn build_acceptor(config: &MtlsConfig) -> anyhow::Result<TlsAcceptor> {
     let mut key_reader = std::io::BufReader::new(&config.server_key_pem[..]);
     let server_key: PrivateKeyDer<'static> = private_key(&mut key_reader)
         .map_err(|e| anyhow::anyhow!("server key PEM: {e}"))?
-        .ok_or_else(|| anyhow::anyhow!("server key PEM contained no recognized PRIVATE KEY block"))?;
+        .ok_or_else(|| {
+            anyhow::anyhow!("server key PEM contained no recognized PRIVATE KEY block")
+        })?;
 
     // Client CA(s) we'll trust.
     let mut ca_reader = std::io::BufReader::new(&config.client_ca_pem[..]);
@@ -59,7 +61,9 @@ pub fn build_acceptor(config: &MtlsConfig) -> anyhow::Result<TlsAcceptor> {
     let mut added = 0usize;
     for cert in certs(&mut ca_reader) {
         let cert = cert.map_err(|e| anyhow::anyhow!("client CA PEM: {e}"))?;
-        client_root.add(cert).map_err(|e| anyhow::anyhow!("client CA add: {e}"))?;
+        client_root
+            .add(cert)
+            .map_err(|e| anyhow::anyhow!("client CA add: {e}"))?;
         added += 1;
     }
     if added == 0 {

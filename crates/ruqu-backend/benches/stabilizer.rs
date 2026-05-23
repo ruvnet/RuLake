@@ -89,5 +89,9 @@ fn bench_statevector_for_compare(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_stabilizer_simulate, bench_statevector_for_compare);
+criterion_group!(
+    benches,
+    bench_stabilizer_simulate,
+    bench_statevector_for_compare
+);
 criterion_main!(benches);

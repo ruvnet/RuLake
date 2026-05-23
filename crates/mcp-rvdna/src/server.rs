@@ -20,8 +20,6 @@
 use std::sync::Arc;
 
 use rmcp::{
-    ErrorData as McpError,
-    ServerHandler, ServiceExt,
     handler::server::{
         router::tool::ToolRouter,
         wrapper::{Json, Parameters},
@@ -32,13 +30,13 @@ use rmcp::{
         ServerInfo,
     },
     service::RequestContext,
-    tool, tool_handler, tool_router,
+    tool, tool_handler, tool_router, ErrorData as McpError, ServerHandler, ServiceExt,
 };
 use serde::{Deserialize, Serialize};
 
 use rulake::backend::BackendAdapter;
 
-use crate::audit::{AuditEntry, AuditSink, PolicyDecision, now_ts};
+use crate::audit::{now_ts, AuditEntry, AuditSink, PolicyDecision};
 use crate::policy::{Capability, CapabilitySet};
 use crate::registry::{RvdnaRegistry, WitnessCheckError};
 
@@ -248,7 +246,8 @@ impl RvdnaMcpServer {
                 &args.collection,
                 &args.query,
                 args.k as usize,
-            ).map_err(|e| McpError::internal_error(format!("RVDNA_FIND_INTERNAL: {e}"), None))?;
+            )
+            .map_err(|e| McpError::internal_error(format!("RVDNA_FIND_INTERNAL: {e}"), None))?;
             let hits: Vec<FindHit> = hits_raw
                 .into_iter()
                 .map(|(id, score)| FindHit { id, score })
@@ -458,6 +457,7 @@ impl RvdnaMcpServer {
     /// Outcome/code derived from the `Result` so the call site doesn't
     /// have to reshape state — mirrors `mcp-server::server::audit_mutation`
     /// (commit 56b497b).
+    #[allow(clippy::too_many_arguments)]
     fn audit_tool<T>(
         &self,
         tool: &str,
@@ -478,8 +478,6 @@ impl RvdnaMcpServer {
                     ("refused", Some("RVDNA_UNKNOWN_COLLECTION".to_string()))
                 } else if msg.contains("RVDNA_CAPABILITY_REFUSED") {
                     ("refused", Some("RVDNA_CAPABILITY_REFUSED".to_string()))
-                } else if msg.starts_with("RVDNA_INTERNAL") {
-                    ("error", Some("RVDNA_INTERNAL".to_string()))
                 } else {
                     ("error", Some("RVDNA_INTERNAL".to_string()))
                 }
@@ -588,8 +586,10 @@ impl ServerHandler for RvdnaMcpServer {
             .into_iter()
             .filter(|t| self.capabilities.has(required_cap_for_tool(&t.name)))
             .collect();
-        let mut result = ListToolsResult::default();
-        result.tools = tools;
+        let result = ListToolsResult {
+            tools,
+            ..ListToolsResult::default()
+        };
         Ok(result)
     }
 
@@ -721,7 +721,11 @@ mod tests {
         // is id 0 with score 0.
         assert!(!resp.0.stub, "Phase B: rvdna_find runs real kNN");
         assert!(!resp.0.witness.is_empty(), "live witness present");
-        assert_eq!(resp.0.hits.len(), 4, "all 4 registered vectors returned (k=5 > n=4)");
+        assert_eq!(
+            resp.0.hits.len(),
+            4,
+            "all 4 registered vectors returned (k=5 > n=4)"
+        );
         assert_eq!(resp.0.hits[0].id, 0, "closest = id 0 ([0;8] vs [0;8])");
         assert_eq!(resp.0.hits[0].score, 0.0, "exact match → distance 0");
     }

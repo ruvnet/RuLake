@@ -54,7 +54,12 @@ pub fn ruqu_bundle(inputs: &RuquWitnessInputs<'_>) -> RuLakeBundle {
 /// seed. The backend tag flows into `data_ref` so StateVector and
 /// Stabilizer over the same circuit get distinct witnesses. v0.0
 /// uses backend tag "sv" for StateVector.
-pub fn inputs_for(c: &Circuit, backend_tag: &str, seed: u64, generation: u64) -> RuquWitnessInputsOwned {
+pub fn inputs_for(
+    c: &Circuit,
+    backend_tag: &str,
+    seed: u64,
+    generation: u64,
+) -> RuquWitnessInputsOwned {
     RuquWitnessInputsOwned {
         data_ref: format!("ruqu://{}@{}", c.id, backend_tag),
         dim: c.dim(),
@@ -101,8 +106,11 @@ mod tests {
     #[test]
     fn witness_deterministic_for_same_circuit_and_seed() {
         let mut c = Circuit::new("bell", 2);
-        c.push(Gate::H  { q: 0 });
-        c.push(Gate::Cx { control: 0, target: 1 });
+        c.push(Gate::H { q: 0 });
+        c.push(Gate::Cx {
+            control: 0,
+            target: 1,
+        });
         let i = inputs_for(&c, "sv", 0, 1);
         let a = ruqu_bundle(&i.as_borrowed());
         let b = ruqu_bundle(&i.as_borrowed());
@@ -113,9 +121,12 @@ mod tests {
     #[test]
     fn witness_changes_when_backend_tag_changes() {
         let mut c = Circuit::new("bell", 2);
-        c.push(Gate::H  { q: 0 });
-        c.push(Gate::Cx { control: 0, target: 1 });
-        let a = ruqu_bundle(&inputs_for(&c, "sv",         0, 1).as_borrowed());
+        c.push(Gate::H { q: 0 });
+        c.push(Gate::Cx {
+            control: 0,
+            target: 1,
+        });
+        let a = ruqu_bundle(&inputs_for(&c, "sv", 0, 1).as_borrowed());
         let b = ruqu_bundle(&inputs_for(&c, "stabilizer", 0, 1).as_borrowed());
         assert_ne!(
             a.rvf_witness, b.rvf_witness,

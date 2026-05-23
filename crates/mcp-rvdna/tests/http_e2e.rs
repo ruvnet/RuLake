@@ -23,8 +23,8 @@ use ruvector_rulake_mcp_rvdna::{
 use ruvector_rulake_rvdna::{RvdnaCollection, RvdnaT0Backend};
 
 fn make_server() -> (RvdnaMcpServer, String) {
-    let server = RvdnaMcpServer::new()
-        .with_capabilities(CapabilitySet::from_csv("read,internal").unwrap());
+    let server =
+        RvdnaMcpServer::new().with_capabilities(CapabilitySet::from_csv("read,internal").unwrap());
     let be = Arc::new(RvdnaT0Backend::new("rvdna-e2e"));
     be.put_collection(
         "chr1",
@@ -198,12 +198,11 @@ async fn rvdna_lineage_round_trips_pinned_witness_over_http() {
         live, expected_witness,
         "live re-derived witness must equal pinned (no drift)"
     );
-    assert_eq!(
+    assert!(
         payload
             .get("witness_verified")
             .and_then(|v| v.as_bool())
             .unwrap_or(false),
-        true,
         "witness_verified must be true on a successful lineage call"
     );
 }

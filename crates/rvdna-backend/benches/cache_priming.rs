@@ -31,7 +31,12 @@ fn fixture_collection(seed: u64, n: usize, dim: usize) -> RvdnaCollection {
     let vectors: Vec<Vec<f32>> = (0..n)
         .map(|_| (0..dim).map(|_| next() * 2.0 - 1.0).collect())
         .collect();
-    RvdnaCollection { ids, vectors, dim, generation: 1 }
+    RvdnaCollection {
+        ids,
+        vectors,
+        dim,
+        generation: 1,
+    }
 }
 
 fn build_lake_with_collection(n: usize, dim: usize) -> RuLake {
@@ -40,8 +45,7 @@ fn build_lake_with_collection(n: usize, dim: usize) -> RuLake {
         b.put_collection("col", fixture_collection(0xc0ffee, n, dim));
         b
     });
-    let lake = RuLake::new(20, 42)
-        .with_consistency(Consistency::Eventual { ttl_ms: 60_000 });
+    let lake = RuLake::new(20, 42).with_consistency(Consistency::Eventual { ttl_ms: 60_000 });
     lake.register_backend(be).unwrap();
     lake
 }

@@ -9,8 +9,6 @@
 use std::sync::Arc;
 
 use rmcp::{
-    ErrorData as McpError,
-    ServerHandler, ServiceExt,
     handler::server::{
         router::tool::ToolRouter,
         wrapper::{Json, Parameters},
@@ -21,14 +19,14 @@ use rmcp::{
         ServerInfo,
     },
     service::RequestContext,
-    tool, tool_handler, tool_router,
+    tool, tool_handler, tool_router, ErrorData as McpError, ServerHandler, ServiceExt,
 };
 use serde::{Deserialize, Serialize};
 
-use rulake::{LocalBackend, RuLake, BackendAdapter, FsBackend};
+use rulake::{BackendAdapter, FsBackend, LocalBackend, RuLake};
 
 use crate::allow::AllowList;
-use crate::audit::{AuditEntry, AuditSink, PolicyDecision, now_ts};
+use crate::audit::{now_ts, AuditEntry, AuditSink, PolicyDecision};
 use crate::config::{AllowBlock, BackendConfig, McpConfig};
 use crate::planner::{DecisionTrace, PlanError, Planner, QueryRequest, TracedQueryResponse};
 use crate::policy::{Capability, CapabilitySet};
@@ -63,8 +61,8 @@ impl RuLakeMcpServer {
         let consistency = config.consistency.into_runtime();
         let consistency_label = format!("{consistency:?}");
 
-        let lake = RuLake::new(config.rerank_factor, config.rotation_seed)
-            .with_consistency(consistency);
+        let lake =
+            RuLake::new(config.rerank_factor, config.rotation_seed).with_consistency(consistency);
 
         let mut backend_ids = Vec::with_capacity(config.backends.len() + 1);
 
@@ -118,7 +116,11 @@ impl RuLakeMcpServer {
                         .map_err(|e| anyhow::anyhow!("register {id}: {e}"))?;
                     backend_ids.push(id.clone());
                 }
-                BackendConfig::Fs { id, root, collections } => {
+                BackendConfig::Fs {
+                    id,
+                    root,
+                    collections,
+                } => {
                     let fs = FsBackend::new(id.clone(), root)
                         .map_err(|e| anyhow::anyhow!("fs {id}: {e}"))?;
                     for c in collections {
@@ -249,7 +251,12 @@ impl RuLakeMcpServer {
         let freshness_budget_ms = req.budget.max_latency_ms;
         let result = self.planner.handle(req).await;
         let elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
-        let cap_grant = self.capabilities.labels().iter().map(|s| s.to_string()).collect();
+        let cap_grant = self
+            .capabilities
+            .labels()
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
         match result {
             Ok(resp) => {
                 let outcome = if resp.data.is_empty()
@@ -286,7 +293,10 @@ impl RuLakeMcpServer {
                     freshness_budget_ms,
                     elapsed_ms,
                 );
-                Ok(Json(TracedQueryResponse { inner: resp, decision_trace: trace }))
+                Ok(Json(TracedQueryResponse {
+                    inner: resp,
+                    decision_trace: trace,
+                }))
             }
             Err(PlanError::Refused(resp)) => {
                 self.audit.emit(AuditEntry {
@@ -316,7 +326,10 @@ impl RuLakeMcpServer {
                     freshness_budget_ms,
                     elapsed_ms,
                 );
-                Ok(Json(TracedQueryResponse { inner: resp, decision_trace: trace }))
+                Ok(Json(TracedQueryResponse {
+                    inner: *resp,
+                    decision_trace: trace,
+                }))
             }
             Err(PlanError::Degraded { inflight, cap }) => {
                 self.audit.emit(AuditEntry {
@@ -367,7 +380,10 @@ impl RuLakeMcpServer {
                     }),
                     decision: None,
                 });
-                Err(McpError::internal_error(format!("RULAKE_INTERNAL: {s}"), None))
+                Err(McpError::internal_error(
+                    format!("RULAKE_INTERNAL: {s}"),
+                    None,
+                ))
             }
         }
     }
@@ -438,7 +454,10 @@ impl RuLakeMcpServer {
             let res = self
                 .planner
                 .workers
-                .submit(move || lake.publish_bundle(&key, &dir).map(|p| p.to_string_lossy().to_string()))
+                .submit(move || {
+                    lake.publish_bundle(&key, &dir)
+                        .map(|p| p.to_string_lossy().to_string())
+                })
                 .await
                 .map_err(|e| McpError::internal_error(format!("RULAKE_DEGRADED: {e}"), None))?
                 .map_err(|e| McpError::internal_error(format!("RULAKE_INTERNAL: {e}"), None))?;
@@ -484,7 +503,9 @@ impl RuLakeMcpServer {
                 rulake::RefreshResult::Invalidated => "invalidated",
                 rulake::RefreshResult::BundleMissing => "bundle_missing",
             };
-            Ok(Json(RefreshResponse { status: status.into() }))
+            Ok(Json(RefreshResponse {
+                status: status.into(),
+            }))
         }
         .await;
         self.audit_mutation(
@@ -519,7 +540,10 @@ impl RuLakeMcpServer {
             let res = self
                 .planner
                 .workers
-                .submit(move || lake.save_cache_to_dir(&key, &dir).map(|p| p.to_string_lossy().to_string()))
+                .submit(move || {
+                    lake.save_cache_to_dir(&key, &dir)
+                        .map(|p| p.to_string_lossy().to_string())
+                })
                 .await
                 .map_err(|e| McpError::internal_error(format!("RULAKE_DEGRADED: {e}"), None))?
                 .map_err(|e| McpError::internal_error(format!("RULAKE_INTERNAL: {e}"), None))?;
@@ -560,7 +584,9 @@ impl RuLakeMcpServer {
                 .await
                 .map_err(|e| McpError::internal_error(format!("RULAKE_DEGRADED: {e}"), None))?
                 .map_err(|e| McpError::internal_error(format!("RULAKE_INTERNAL: {e}"), None))?;
-            Ok(Json(WarmResponse { vectors: res as u32 }))
+            Ok(Json(WarmResponse {
+                vectors: res as u32,
+            }))
         }
         .await;
         self.audit_mutation(
@@ -676,9 +702,9 @@ fn required_cap_for_tool(name: &str) -> Capability {
         "rulake_query" | "rulake_list_backends" | "rulake_list_collections" => Capability::Read,
         // Mutation tools — publish/admin tiers.
         "rulake_publish_bundle" | "rulake_refresh_from_bundle_dir" => Capability::Publish,
-        "rulake_save_cache_to_dir"
-        | "rulake_warm_from_dir"
-        | "rulake_invalidate_cache" => Capability::Admin,
+        "rulake_save_cache_to_dir" | "rulake_warm_from_dir" | "rulake_invalidate_cache" => {
+            Capability::Admin
+        }
         // Anything else (future internal-kernel tools etc.) defaults
         // to internal — invisible by default until --capabilities
         // internal is granted. Safer than defaulting to Read.
@@ -815,8 +841,10 @@ impl ServerHandler for RuLakeMcpServer {
             .into_iter()
             .filter(|t| effective.has(required_cap_for_tool(&t.name)))
             .collect();
-        let mut result = ListToolsResult::default();
-        result.tools = tools;
+        let result = ListToolsResult {
+            tools,
+            ..ListToolsResult::default()
+        };
         Ok(result)
     }
 
@@ -840,8 +868,10 @@ impl ServerHandler for RuLakeMcpServer {
                 rmcp::model::Annotated::new(r, None)
             },
             {
-                let mut r = RawResource::new("rulake://stats/by-backend", "cache stats per backend");
-                r.description = Some("Per-backend cache stats: hits/misses/primes per backend id.".into());
+                let mut r =
+                    RawResource::new("rulake://stats/by-backend", "cache stats per backend");
+                r.description =
+                    Some("Per-backend cache stats: hits/misses/primes per backend id.".into());
                 r.mime_type = Some("application/json".into());
                 rmcp::model::Annotated::new(r, None)
             },
@@ -879,9 +909,9 @@ impl ServerHandler for RuLakeMcpServer {
         params: ReadResourceRequestParams,
         _context: RequestContext<rmcp::service::RoleServer>,
     ) -> Result<ReadResourceResult, McpError> {
-        let body = self.read_resource_json(&params.uri).map_err(|e| {
-            McpError::invalid_params(format!("RULAKE_RESOURCE: {e}"), None)
-        })?;
+        let body = self
+            .read_resource_json(&params.uri)
+            .map_err(|e| McpError::invalid_params(format!("RULAKE_RESOURCE: {e}"), None))?;
         let contents = ResourceContents::text(body, params.uri);
         Ok(ReadResourceResult::new(vec![contents]))
     }
@@ -967,4 +997,3 @@ impl RuLakeMcpServer {
         }
     }
 }
-

@@ -2,7 +2,7 @@
 //!
 //! Mirrors `mcp-server::policy` but with rvdna scope vocabulary:
 //! - `read`     — exposes `rvdna_find`, `rvdna_call_variants`,
-//!                `rvdna_translate`, `rvdna_score`
+//!   `rvdna_translate`, `rvdna_score`
 //! - `internal` — adds `rvdna_lineage` (operator/SRE/Console-trust)
 //! - `clinical` — reserved for `rvdna_call_variants` PHI flow (v0.1)
 //! - `admin`    — reserved (v0.1+); no admin tools in v0.0.1

@@ -40,7 +40,9 @@ async fn spawn_mock_kubo(state: MockState) -> u16 {
     let port = listener.local_addr().unwrap().port();
     tokio::spawn(async move {
         loop {
-            let Ok((stream, _)) = listener.accept().await else { break };
+            let Ok((stream, _)) = listener.accept().await else {
+                break;
+            };
             let state = state.clone();
             tokio::spawn(async move {
                 let io = TokioIo::new(stream);
@@ -214,13 +216,7 @@ fn pull_vectors_errors_with_bundle_only_message() {
 #[test]
 fn gateway_only_mode_refuses_publish() {
     let backend = IpfsBackend::gateway_only("ipfs-gw", "https://ipfs.io").unwrap();
-    let bundle = RuLakeBundle::new(
-        "ipfs://x",
-        8,
-        42,
-        20,
-        Generation::Opaque("x".into()),
-    );
+    let bundle = RuLakeBundle::new("ipfs://x", 8, 42, 20, Generation::Opaque("x".into()));
     let err = backend.publish_bundle("c", &bundle).unwrap_err();
     let s = err.to_string();
     assert!(
@@ -260,8 +256,8 @@ fn ipfs_live_publish_and_fetch() {
         eprintln!("skip: RULAKE_IPFS_LIVE_TEST not set");
         return;
     }
-    let api = std::env::var("RULAKE_IPFS_KUBO_API")
-        .unwrap_or_else(|_| "http://127.0.0.1:5001".into());
+    let api =
+        std::env::var("RULAKE_IPFS_KUBO_API").unwrap_or_else(|_| "http://127.0.0.1:5001".into());
 
     let backend = IpfsBackend::new(
         "ipfs-live",

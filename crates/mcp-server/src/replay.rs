@@ -2,8 +2,8 @@
 //!
 //! Per-request `MCP-Request-Id` nonce dedup over a 10k-entry LRU
 //! window. Replays inside that window are rejected; OAuth signature
-//! + audience + short expiry handles the bulk of the threat, this
-//! is the same-window second-strike layer.
+//! + audience + short expiry handles the bulk of the threat, and
+//!   this is the same-window second-strike layer.
 //!
 //! Session-id binding to `(principal, client_id, mTLS-cert)` is also
 //! per ADR-004 §5; we surface the binding hash so the HTTP layer can

@@ -77,7 +77,11 @@ mod tests {
     /// |0> with no gates: state vector = [1, 0]. ruqu-core matches.
     #[test]
     fn empty_one_qubit_is_ground_state() {
-        let c = Circuit { id: "test".into(), n_qubits: 1, gates: vec![] };
+        let c = Circuit {
+            id: "test".into(),
+            n_qubits: 1,
+            gates: vec![],
+        };
         let sv = simulate(&c);
         assert_eq!(sv.len(), 2);
         assert!(approx_eq(sv[0].re, 1.0) && approx_eq(sv[0].im, 0.0));
@@ -107,7 +111,10 @@ mod tests {
             n_qubits: 2,
             gates: vec![
                 WireGate::H { q: 0 },
-                WireGate::Cx { control: 0, target: 1 },
+                WireGate::Cx {
+                    control: 0,
+                    target: 1,
+                },
             ],
         };
         let sv = simulate(&c);

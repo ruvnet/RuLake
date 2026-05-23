@@ -23,8 +23,15 @@ fn fixture_collection(seed: u64, n: usize, dim: usize) -> RvdnaCollection {
         x as f32 / u64::MAX as f32
     };
     let ids: Vec<u64> = (0..n as u64).collect();
-    let vectors: Vec<Vec<f32>> = (0..n).map(|_| (0..dim).map(|_| next() * 2.0 - 1.0).collect()).collect();
-    RvdnaCollection { ids, vectors, dim, generation: 1 }
+    let vectors: Vec<Vec<f32>> = (0..n)
+        .map(|_| (0..dim).map(|_| next() * 2.0 - 1.0).collect())
+        .collect();
+    RvdnaCollection {
+        ids,
+        vectors,
+        dim,
+        generation: 1,
+    }
 }
 
 #[test]
@@ -39,7 +46,10 @@ fn t0_backend_adapter_contract_holds() {
     // list_collections
     let mut cols = be.list_collections().unwrap();
     cols.sort();
-    assert_eq!(cols, vec!["brca1-kmers".to_string(), "hbb-kmers".to_string()]);
+    assert_eq!(
+        cols,
+        vec!["brca1-kmers".to_string(), "hbb-kmers".to_string()]
+    );
 
     // pull_vectors
     let batch = be.pull_vectors("hbb-kmers").unwrap();
@@ -66,12 +76,16 @@ fn t0_backend_round_trips_through_rulake_cache() {
 
     // First search primes from the backend.
     let q = vec![0.0_f32; 16];
-    let hits1 = lake.search_one("rvdna-fixture", "hbb-kmers", &q, 5).unwrap();
+    let hits1 = lake
+        .search_one("rvdna-fixture", "hbb-kmers", &q, 5)
+        .unwrap();
     assert_eq!(hits1.len(), 5, "got {} hits", hits1.len());
 
     // Second search hits the cache (faster, but we just verify it
     // returns the same byte-exact ranking).
-    let hits2 = lake.search_one("rvdna-fixture", "hbb-kmers", &q, 5).unwrap();
+    let hits2 = lake
+        .search_one("rvdna-fixture", "hbb-kmers", &q, 5)
+        .unwrap();
     assert_eq!(hits1, hits2);
 
     let stats = lake.cache_stats();
@@ -95,14 +109,21 @@ fn generation_bump_invalidates_cache() {
     lake.register_backend(be).unwrap();
 
     let q = vec![0.0_f32; 16];
-    let _ = lake.search_one("rvdna-fixture", "hbb-kmers", &q, 3).unwrap();
+    let _ = lake
+        .search_one("rvdna-fixture", "hbb-kmers", &q, 3)
+        .unwrap();
     let primes_before = lake.cache_stats().primes;
 
     // Bump the underlying generation via the concrete handle. Next
     // Fresh search must re-prime.
     let _ = raw.bump_generation("hbb-kmers").unwrap();
 
-    let _ = lake.search_one("rvdna-fixture", "hbb-kmers", &q, 3).unwrap();
+    let _ = lake
+        .search_one("rvdna-fixture", "hbb-kmers", &q, 3)
+        .unwrap();
     let primes_after = lake.cache_stats().primes;
-    assert!(primes_after > primes_before, "Fresh + gen bump must invalidate");
+    assert!(
+        primes_after > primes_before,
+        "Fresh + gen bump must invalidate"
+    );
 }

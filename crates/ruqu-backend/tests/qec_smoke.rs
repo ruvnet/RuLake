@@ -14,8 +14,7 @@ fn one_qubit_logical() -> Circuit {
 #[test]
 fn repetition_code_at_distance_3_returns_3_qubit_plan() {
     let logical = one_qubit_logical();
-    let plan = plan_surface_code(&logical, 3, 64)
-        .expect("d=3 with cap=64 must succeed");
+    let plan = plan_surface_code(&logical, 3, 64).expect("d=3 with cap=64 must succeed");
 
     assert_eq!(plan.code_distance, 3);
     assert_eq!(

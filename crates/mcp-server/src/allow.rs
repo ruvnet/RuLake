@@ -43,7 +43,9 @@ impl AllowList {
             let re = Regex::new(&anchored).map_err(|e| {
                 anyhow::anyhow!(
                     "[[allow]] block backend={:?} collection={:?}: bad regex: {}",
-                    b.backend, b.collection, e
+                    b.backend,
+                    b.collection,
+                    e
                 )
             })?;
             let caps: Result<Vec<Capability>, _> =
@@ -140,7 +142,9 @@ impl std::fmt::Display for AllowDenied {
             AllowDeniedReason::CollectionAllowedButCapNotGranted => write!(
                 f,
                 "RULAKE_ALLOWLIST_DENIED: {}/{} matched but cap `{}` not granted",
-                self.backend, self.collection, self.cap.label()
+                self.backend,
+                self.collection,
+                self.cap.label()
             ),
         }
     }

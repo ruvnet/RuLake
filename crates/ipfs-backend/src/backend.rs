@@ -443,17 +443,15 @@ async fn kubo_add(backend: &IpfsBackend, body: Vec<u8>) -> Result<String> {
     // intermediate dir entries when the input is a directory).
     let last = text
         .lines()
-        .filter(|l| !l.trim().is_empty())
-        .next_back()
+        .rfind(|l| !l.trim().is_empty())
         .ok_or_else(|| RuLakeError::Backend {
             backend: backend.id.clone(),
             detail: "kubo add: empty response".into(),
         })?;
-    let parsed: KuboAddResponse =
-        serde_json::from_str(last).map_err(|e| RuLakeError::Backend {
-            backend: backend.id.clone(),
-            detail: format!("kubo add: parse {last:?}: {e}"),
-        })?;
+    let parsed: KuboAddResponse = serde_json::from_str(last).map_err(|e| RuLakeError::Backend {
+        backend: backend.id.clone(),
+        detail: format!("kubo add: parse {last:?}: {e}"),
+    })?;
     Ok(parsed.hash)
 }
 
@@ -546,6 +544,9 @@ mod tests {
         assert!(validate_cid_shape("Qm 123").is_err());
         assert!(validate_cid_shape("Qm\x01x").is_err());
         assert!(validate_cid_shape("QmZ4tDuvesekSs4qM5ZBKpXiZGun7S2CYtEZRB3DYXkjGx").is_ok());
-        assert!(validate_cid_shape("bafybeigdyrztktbnzdmnfvk7t6mjg6mbsj4mejxvgjlb6scxorsbcs6htu").is_ok());
+        assert!(
+            validate_cid_shape("bafybeigdyrztktbnzdmnfvk7t6mjg6mbsj4mejxvgjlb6scxorsbcs6htu")
+                .is_ok()
+        );
     }
 }

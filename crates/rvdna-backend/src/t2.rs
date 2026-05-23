@@ -166,6 +166,7 @@ impl RvdnaT2Backend {
     /// scale files are remote-mounted on FUSE / S3FS in production
     /// and stat'ing them up-front defeats the lazy-tier purpose. The
     /// per-call `seek+read` will surface an error at first access.
+    #[allow(clippy::too_many_arguments)]
     pub fn register_file(
         &self,
         name: impl Into<String>,
@@ -181,7 +182,7 @@ impl RvdnaT2Backend {
                 "rvdna-t2: dim must be > 0".into(),
             ));
         }
-        if vectors_offset % (std::mem::align_of::<f32>() as u64) != 0 {
+        if !vectors_offset.is_multiple_of(std::mem::align_of::<f32>() as u64) {
             return Err(RuLakeError::InvalidParameter(format!(
                 "rvdna-t2: vectors_offset={vectors_offset} not f32-aligned"
             )));
@@ -206,10 +207,7 @@ impl RvdnaT2Backend {
 
         let path_buf = path.as_ref().to_path_buf();
         let file = std::fs::File::open(&path_buf).map_err(|e| {
-            RuLakeError::InvalidParameter(format!(
-                "rvdna-t2: open {}: {e}",
-                path_buf.display()
-            ))
+            RuLakeError::InvalidParameter(format!("rvdna-t2: open {}: {e}", path_buf.display()))
         })?;
 
         let cap = NonZeroUsize::new(DEFAULT_LRU_CAP).expect("DEFAULT_LRU_CAP > 0");
@@ -297,10 +295,12 @@ impl BackendAdapter for RvdnaT2Backend {
 
     fn pull_vectors(&self, collection: &str) -> Result<PulledBatch> {
         let g = self.mappings.read().expect("poisoned");
-        let m = g.get(collection).ok_or_else(|| RuLakeError::UnknownCollection {
-            backend: self.id.clone(),
-            collection: collection.to_string(),
-        })?;
+        let m = g
+            .get(collection)
+            .ok_or_else(|| RuLakeError::UnknownCollection {
+                backend: self.id.clone(),
+                collection: collection.to_string(),
+            })?;
 
         let mut vectors: Vec<Vec<f32>> = Vec::with_capacity(m.n_vectors);
 
@@ -405,10 +405,12 @@ impl BackendAdapter for RvdnaT2Backend {
 
     fn generation(&self, collection: &str) -> Result<u64> {
         let g = self.mappings.read().expect("poisoned");
-        let m = g.get(collection).ok_or_else(|| RuLakeError::UnknownCollection {
-            backend: self.id.clone(),
-            collection: collection.to_string(),
-        })?;
+        let m = g
+            .get(collection)
+            .ok_or_else(|| RuLakeError::UnknownCollection {
+                backend: self.id.clone(),
+                collection: collection.to_string(),
+            })?;
         Ok(m.generation)
     }
 }
