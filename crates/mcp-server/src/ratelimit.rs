@@ -14,7 +14,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use dashmap::DashMap;
-use governor::{Quota, RateLimiter, clock::DefaultClock, state::keyed::DefaultKeyedStateStore};
+use governor::{clock::DefaultClock, state::keyed::DefaultKeyedStateStore, Quota, RateLimiter};
 
 /// Configuration for one rate-limit layer. Defaults match ADR-004 §6.
 #[derive(Debug, Clone, Copy)]
@@ -58,9 +58,18 @@ struct Inner {
 impl Default for LayeredRateLimiter {
     fn default() -> Self {
         Self::new(
-            LayerConfig { per_second: 60, burst: 120 },
-            LayerConfig { per_second: 30, burst: 60 },
-            LayerConfig { per_second: 600, burst: 1200 },
+            LayerConfig {
+                per_second: 60,
+                burst: 120,
+            },
+            LayerConfig {
+                per_second: 30,
+                burst: 60,
+            },
+            LayerConfig {
+                per_second: 600,
+                burst: 1200,
+            },
         )
     }
 }
@@ -104,7 +113,9 @@ impl LayeredRateLimiter {
             return RateLimitDecision::Denied { layer: "principal" };
         }
         if self.inner.per_collection.check_key(&key_c).is_err() {
-            return RateLimitDecision::Denied { layer: "collection" };
+            return RateLimitDecision::Denied {
+                layer: "collection",
+            };
         }
         RateLimitDecision::Allowed
     }
@@ -131,7 +142,9 @@ pub enum RateLimitDecision {
     Allowed,
     /// `layer` ∈ {"process", "principal", "collection"} — matches the
     /// audit `decision.refusals[].code` taxonomy.
-    Denied { layer: &'static str },
+    Denied {
+        layer: &'static str,
+    },
 }
 
 #[cfg(test)]
@@ -142,22 +155,37 @@ mod tests {
     fn allows_under_burst() {
         let rl = LayeredRateLimiter::default();
         for _ in 0..10 {
-            assert_eq!(rl.check("stdio", "alice", "be", "docs"), RateLimitDecision::Allowed);
+            assert_eq!(
+                rl.check("stdio", "alice", "be", "docs"),
+                RateLimitDecision::Allowed
+            );
         }
     }
 
     #[test]
     fn isolates_principals() {
         let rl = LayeredRateLimiter::new(
-            LayerConfig { per_second: 1, burst: 2 },
-            LayerConfig { per_second: 100, burst: 200 },
-            LayerConfig { per_second: 1000, burst: 2000 },
+            LayerConfig {
+                per_second: 1,
+                burst: 2,
+            },
+            LayerConfig {
+                per_second: 100,
+                burst: 200,
+            },
+            LayerConfig {
+                per_second: 1000,
+                burst: 2000,
+            },
         );
         // Burn alice's bucket.
         rl.check("h", "alice", "be", "x");
         rl.check("h", "alice", "be", "x");
         let alice_third = rl.check("h", "alice", "be", "x");
-        assert!(matches!(alice_third, RateLimitDecision::Denied { layer: "principal" }));
+        assert!(matches!(
+            alice_third,
+            RateLimitDecision::Denied { layer: "principal" }
+        ));
         // Bob is unaffected.
         let bob = rl.check("h", "bob", "be", "x");
         assert_eq!(bob, RateLimitDecision::Allowed);

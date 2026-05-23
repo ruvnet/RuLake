@@ -150,9 +150,7 @@ pub enum WitnessCheckError {
     },
     #[error("RVDNA_BACKEND_ERROR: {0}")]
     Backend(String),
-    #[error(
-        "RVDNA_WITNESS_DRIFT: pinned={pinned} live={live} — backend mutated since register"
-    )]
+    #[error("RVDNA_WITNESS_DRIFT: pinned={pinned} live={live} — backend mutated since register")]
     Drift { pinned: String, live: String },
 }
 

@@ -37,7 +37,7 @@ pub struct AuditSink {
 /// Backing store for an [`AuditSink`]. v0.0.1 shipped only `Stderr`;
 /// v0.1 adds `File` so the `--audit-file` CLI flag (mcp-ruqu's `http`
 /// + `stdio` subcommands) can persist JSONL the same way mcp-rvdna and
-/// mcp-server do. Schema unchanged.
+///   mcp-server do. Schema unchanged.
 enum Inner {
     Stderr,
     File {
@@ -221,9 +221,7 @@ pub fn now_ts() -> String {
     let secs = now.as_secs();
     let millis = now.subsec_millis();
     let (year, month, day, hour, minute, second) = epoch_to_ymdhms(secs);
-    format!(
-        "{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}.{millis:03}Z"
-    )
+    format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}.{millis:03}Z")
 }
 
 fn epoch_to_ymdhms(secs: u64) -> (u32, u32, u32, u32, u32, u32) {

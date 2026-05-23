@@ -20,7 +20,7 @@ use std::sync::Arc;
 
 use bytes::Bytes;
 use http::{Request, Response};
-use http_body_util::{BodyExt, combinators::BoxBody};
+use http_body_util::{combinators::BoxBody, BodyExt};
 use hyper::body::Incoming;
 use hyper::service::service_fn;
 use hyper_util::rt::{TokioExecutor, TokioIo};

@@ -189,11 +189,21 @@ impl Default for Budget {
     }
 }
 
-fn default_max_latency_ms() -> u64 { 100 }
-fn default_max_backends() -> u32 { 3 }
-fn default_max_results() -> u32 { 20 }
-fn default_max_rerank() -> u32 { 20 }
-fn default_risk() -> Risk { Risk::Medium }
+fn default_max_latency_ms() -> u64 {
+    100
+}
+fn default_max_backends() -> u32 {
+    3
+}
+fn default_max_results() -> u32 {
+    20
+}
+fn default_max_rerank() -> u32 {
+    20
+}
+fn default_risk() -> Risk {
+    Risk::Medium
+}
 
 #[derive(Debug, Deserialize, JsonSchema, Default)]
 pub struct Policy {
@@ -205,7 +215,9 @@ pub struct Policy {
     pub min_collections_hit: u32,
 }
 
-fn default_min_collections_hit() -> u32 { 1 }
+fn default_min_collections_hit() -> u32 {
+    1
+}
 
 // ─── Response (mirror ADR-004 §4a) ────────────────────────────────────
 
@@ -469,10 +481,13 @@ pub struct TracedQueryResponse {
 
 #[derive(Debug)]
 pub enum PlanError {
-    Refused(QueryResponse),
+    Refused(Box<QueryResponse>),
     /// Backpressure — the response shape is wrapped at the call site
     /// into the `_meta.rulake.degraded` block per ADR-004 §6.
-    Degraded { inflight: usize, cap: usize },
+    Degraded {
+        inflight: usize,
+        cap: usize,
+    },
     /// Internal — bubble up as a tool-level isError.
     Internal(String),
 }
@@ -531,7 +546,7 @@ impl Planner {
             Capability::Publish,
         ) {
             Ok(rs) => rs,
-            Err(PlanError::Refused(resp)) => return Ok(resp),
+            Err(PlanError::Refused(resp)) => return Ok(*resp),
             Err(e) => return Err(e),
         };
         if routes.is_empty() {
@@ -539,7 +554,10 @@ impl Planner {
                 "refresh",
                 "no allowed routes",
                 ReasonCode::PolicyRefusedAllowlist,
-                vec![], vec![], start, req.budget.max_latency_ms,
+                vec![],
+                vec![],
+                start,
+                req.budget.max_latency_ms,
             ));
         }
 
@@ -548,15 +566,17 @@ impl Planner {
         let dir = std::path::PathBuf::from(&r.bundle_dir);
         let submit = self
             .workers
-            .submit(move || -> Result<Vec<(String, rulake::RefreshResult)>, rulake::RuLakeError> {
-                let mut out = Vec::with_capacity(routes_for_run.len());
-                for (b, c) in &routes_for_run {
-                    let key = (b.clone(), c.clone());
-                    let res = lake.refresh_from_bundle_dir(&key, &dir)?;
-                    out.push((b.clone(), res));
-                }
-                Ok(out)
-            })
+            .submit(
+                move || -> Result<Vec<(String, rulake::RefreshResult)>, rulake::RuLakeError> {
+                    let mut out = Vec::with_capacity(routes_for_run.len());
+                    for (b, c) in &routes_for_run {
+                        let key = (b.clone(), c.clone());
+                        let res = lake.refresh_from_bundle_dir(&key, &dir)?;
+                        out.push((b.clone(), res));
+                    }
+                    Ok(out)
+                },
+            )
             .await;
 
         let outcomes = match submit {
@@ -574,7 +594,9 @@ impl Planner {
             .iter()
             .map(|(b, r)| format!("{b}={:?}", r))
             .collect();
-        let any_invalidated = outcomes.iter().any(|(_, r)| matches!(r, rulake::RefreshResult::Invalidated));
+        let any_invalidated = outcomes
+            .iter()
+            .any(|(_, r)| matches!(r, rulake::RefreshResult::Invalidated));
         let reason_code = if any_invalidated {
             ReasonCode::StaleCacheRemoteValid
         } else {
@@ -619,7 +641,7 @@ impl Planner {
             .ok_or_else(|| PlanError::Internal("intent=verify requires `verify` block".into()))?;
         let routes = match self.resolve_routes(&req.target, req.budget.max_backends as usize) {
             Ok(r) => r,
-            Err(PlanError::Refused(resp)) => return Ok(resp),
+            Err(PlanError::Refused(resp)) => return Ok(*resp),
             Err(e) => return Err(e),
         };
         if routes.is_empty() {
@@ -627,7 +649,10 @@ impl Planner {
                 "verify",
                 "no allowed routes",
                 ReasonCode::PolicyRefusedAllowlist,
-                vec![], vec![], start, req.budget.max_latency_ms,
+                vec![],
+                vec![],
+                start,
+                req.budget.max_latency_ms,
             ));
         }
 
@@ -669,9 +694,9 @@ impl Planner {
                     rulake::RuLakeBundle::read_from_dir(&dir)?
                 };
                 let recomputed_ok = bundle.verify_witness();
-                let cache_witness = routes_for_run.first().and_then(|(b, c)| {
-                    lake.cache_witness_of(&(b.clone(), c.clone()))
-                });
+                let cache_witness = routes_for_run
+                    .first()
+                    .and_then(|(b, c)| lake.cache_witness_of(&(b.clone(), c.clone())));
                 let matches_cache = cache_witness.as_deref() == Some(bundle.rvf_witness.as_str());
                 Ok(VerifyOutcome {
                     disk_witness: bundle.rvf_witness.clone(),
@@ -725,8 +750,7 @@ impl Planner {
         } else {
             ReasonCode::StaleCacheRemoteValid
         };
-        let backends_planned: Vec<String> =
-            routes.iter().map(|(b, _)| b.clone()).collect();
+        let backends_planned: Vec<String> = routes.iter().map(|(b, _)| b.clone()).collect();
         Ok(QueryResponse {
             data: vec![], // verify has no row data; only metadata
             provenance: Provenance {
@@ -744,7 +768,11 @@ impl Planner {
                 reason: format!(
                     "disk witness {} ({}); cache witness {}",
                     outcome.disk_witness,
-                    if outcome.recomputed_ok { "valid" } else { "INVALID" },
+                    if outcome.recomputed_ok {
+                        "valid"
+                    } else {
+                        "INVALID"
+                    },
                     outcome.cache_witness.as_deref().unwrap_or("absent"),
                 ),
                 backends_planned: backends_planned.clone(),
@@ -774,7 +802,7 @@ impl Planner {
         let entry_count = self.lake.cache_entry_count();
         let elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
 
-        let lines = vec![
+        let lines = [
             format!(
                 "cache: hits={} misses={} primes={} hit_rate={:.3}",
                 stats.hits,
@@ -820,6 +848,7 @@ impl Planner {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn build_refusal_intent(
         &self,
         intent: &str,
@@ -830,7 +859,14 @@ impl Planner {
         start: std::time::Instant,
         budget_cap_ms: u64,
     ) -> QueryResponse {
-        let mut r = self.build_refusal(reason, code, backends_planned, refusals, start, budget_cap_ms);
+        let mut r = self.build_refusal(
+            reason,
+            code,
+            backends_planned,
+            refusals,
+            start,
+            budget_cap_ms,
+        );
         r.decision.intent = intent.to_string();
         r
     }
@@ -864,11 +900,9 @@ impl Planner {
                 500,
                 vec!["wait".into(), "narrow_target".into()],
             ),
-            BackpressureReason::RateLimitProcess => (
-                "rate_limit_process".into(),
-                1000,
-                vec!["wait".into()],
-            ),
+            BackpressureReason::RateLimitProcess => {
+                ("rate_limit_process".into(), 1000, vec!["wait".into()])
+            }
             BackpressureReason::BudgetExceeded => (
                 "budget_exceeded".into(),
                 0,
@@ -926,7 +960,7 @@ impl Planner {
         // ADR-004 §4a, NOT an error.
         let routes = match self.resolve_routes(&req.target, req.budget.max_backends as usize) {
             Ok(r) => r,
-            Err(PlanError::Refused(resp)) => return Ok(resp),
+            Err(PlanError::Refused(resp)) => return Ok(*resp),
             Err(e) => return Err(e),
         };
         if routes.is_empty() {
@@ -976,22 +1010,17 @@ impl Planner {
             set.dedup();
             set
         };
-        let backends_planned: Vec<String> =
-            routes.iter().map(|(b, _)| b.clone()).collect();
+        let backends_planned: Vec<String> = routes.iter().map(|(b, _)| b.clone()).collect();
 
         // v0.1 doesn't actually verify witnesses on the search path —
         // that's plumbed via Consistency in the Rust crate. trust_level
         // therefore reflects what Consistency was configured to do.
         let witness = if let Some((b, c)) = routes.first() {
-            self.lake
-                .cache_witness_of(&(b.clone(), c.clone()))
+            self.lake.cache_witness_of(&(b.clone(), c.clone()))
         } else {
             None
         };
-        let witness_verified = matches!(
-            self.consistency_label.as_str(),
-            "Fresh" | "Frozen"
-        );
+        let witness_verified = matches!(self.consistency_label.as_str(), "Fresh" | "Frozen");
         let trust_level = if policy.witness_required && !witness_verified {
             // ADR-004 precedence: witness > freshness > budget. Refusal
             // is a successful planner outcome (Ok), not a PlanError.
@@ -1089,7 +1118,7 @@ impl Planner {
         // 1. Backend must be registered.
         for (b, _) in &routes {
             if !self.backend_ids.contains(b) {
-                return Err(PlanError::Refused(self.build_refusal(
+                return Err(PlanError::Refused(Box::new(self.build_refusal(
                     &format!("backend {b:?} not registered"),
                     ReasonCode::PolicyRefusedAllowlist,
                     vec![b.clone()],
@@ -1099,7 +1128,7 @@ impl Planner {
                     }],
                     std::time::Instant::now(),
                     100,
-                )));
+                ))));
             }
         }
 
@@ -1123,14 +1152,14 @@ impl Planner {
                     routes.len(),
                     required_cap.label(),
                 );
-                return Err(PlanError::Refused(self.build_refusal(
+                return Err(PlanError::Refused(Box::new(self.build_refusal(
                     &msg,
                     ReasonCode::PolicyRefusedAllowlist,
                     backends,
                     refusals,
                     std::time::Instant::now(),
                     100,
-                )));
+                ))));
             }
         }
         Ok(routes)

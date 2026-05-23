@@ -18,8 +18,8 @@ use std::time::Instant;
 use rand::SeedableRng;
 use rand_distr::{Distribution, Normal, Uniform};
 
-use ruvector_rabitq::{AnnIndex, RabitqPlusIndex, RandomRotationKind};
 use rulake::{cache::Consistency, LocalBackend, RuLake, SearchResult};
+use ruvector_rabitq::{AnnIndex, RabitqPlusIndex, RandomRotationKind};
 
 fn clustered(n: usize, d: usize, n_clusters: usize, seed: u64) -> Vec<Vec<f32>> {
     use rand::Rng as _;

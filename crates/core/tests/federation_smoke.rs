@@ -18,8 +18,8 @@ use std::time::Instant;
 use rand::{Rng, SeedableRng};
 use rand_distr::{Distribution, Normal, Uniform};
 
-use ruvector_rabitq::{AnnIndex, RabitqPlusIndex};
 use rulake::{cache::Consistency, FsBackend, LocalBackend, RuLake};
+use ruvector_rabitq::{AnnIndex, RabitqPlusIndex};
 
 fn clustered(n: usize, d: usize, n_clusters: usize, seed: u64) -> Vec<Vec<f32>> {
     let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
@@ -357,20 +357,14 @@ fn dimension_mismatch_returns_error() {
     lake.register_backend(backend).unwrap();
     let bad_query = vec![0.0; d + 1];
     let err = lake.search_one("tiny", "c", &bad_query, 1).unwrap_err();
-    assert!(matches!(
-        err,
-        rulake::RuLakeError::DimensionMismatch { .. }
-    ));
+    assert!(matches!(err, rulake::RuLakeError::DimensionMismatch { .. }));
 }
 
 #[test]
 fn unknown_backend_returns_error() {
     let lake = RuLake::new(20, 0);
     let err = lake.search_one("nope", "nope", &[0.0; 4], 1).unwrap_err();
-    assert!(matches!(
-        err,
-        rulake::RuLakeError::UnknownBackend(_)
-    ));
+    assert!(matches!(err, rulake::RuLakeError::UnknownBackend(_)));
 }
 
 #[test]
@@ -478,10 +472,7 @@ fn unknown_collection_returns_error() {
     lake.register_backend(backend).unwrap();
     let err = lake.search_one("b", "missing", &[0.0; 4], 1).unwrap_err();
     // Error surfaces via the backend's generation() call.
-    assert!(matches!(
-        err,
-        rulake::RuLakeError::UnknownCollection { .. }
-    ));
+    assert!(matches!(err, rulake::RuLakeError::UnknownCollection { .. }));
 }
 
 #[test]
@@ -1198,9 +1189,7 @@ fn warm_from_dir_skips_backend_and_returns_bit_exact_results() {
     let written = src.save_cache_to_dir(&key, &tmp).unwrap();
     assert_eq!(written.file_name().unwrap(), "index.rbpx");
     // Sidecar must exist alongside.
-    assert!(tmp
-        .join(rulake::RuLakeBundle::SIDECAR_FILENAME)
-        .exists());
+    assert!(tmp.join(rulake::RuLakeBundle::SIDECAR_FILENAME).exists());
 
     // Step 4: fresh RuLake, no backend. Same seed + rerank_factor so
     // the reconstructed RaBitQ codes are bit-identical to the source.

@@ -13,14 +13,14 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use http::{HeaderMap, StatusCode};
-use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
+use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
 use subtle::ConstantTimeEq;
 
 use crate::jwks::JwksKeys;
-use crate::policy::CapabilitySet;
 #[cfg(test)]
 use crate::policy::Capability;
+use crate::policy::CapabilitySet;
 
 /// Bearer-token verifier. Cheap to clone (Arc-wrapped state).
 #[derive(Clone)]
@@ -202,16 +202,15 @@ impl JwtAuth {
                     .unwrap_or_else(|e| panic!("invalid RSA PEM: {e}")),
             ),
             JwtKey::EcPem(bytes) => KeyMode::Static(
-                DecodingKey::from_ec_pem(&bytes)
-                    .unwrap_or_else(|e| panic!("invalid EC PEM: {e}")),
+                DecodingKey::from_ec_pem(&bytes).unwrap_or_else(|e| panic!("invalid EC PEM: {e}")),
             ),
             JwtKey::Jwks(keys) => KeyMode::Jwks(keys),
         };
         let mut validation =
             Validation::new(*config.algorithms.first().unwrap_or(&Algorithm::HS256));
         validation.algorithms = config.algorithms;
-        validation.set_issuer(&[config.issuer.clone()]);
-        validation.set_audience(&[config.audience.clone()]);
+        validation.set_issuer(std::slice::from_ref(&config.issuer));
+        validation.set_audience(std::slice::from_ref(&config.audience));
         Self {
             inner: Arc::new(JwtInner {
                 key_mode: mode,
@@ -320,11 +319,14 @@ pub fn scopes_to_caps(scopes: &HashSet<String>) -> CapabilitySet {
 #[cfg(test)]
 mod jwt_tests {
     use super::*;
-    use jsonwebtoken::{EncodingKey, Header, encode};
+    use jsonwebtoken::{encode, EncodingKey, Header};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn now_secs() -> u64 {
-        SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
     }
 
     fn sign(claims: &serde_json::Value, secret: &[u8]) -> String {
@@ -351,7 +353,10 @@ mod jwt_tests {
         });
         let token = sign(&claims, &secret);
         let mut h = HeaderMap::new();
-        h.insert(http::header::AUTHORIZATION, format!("Bearer {token}").parse().unwrap());
+        h.insert(
+            http::header::AUTHORIZATION,
+            format!("Bearer {token}").parse().unwrap(),
+        );
 
         let p = auth.verify(&h).expect("token must validate");
         assert_eq!(p.principal, "oauth:alice");
@@ -379,7 +384,10 @@ mod jwt_tests {
         });
         let token = sign(&claims, &secret);
         let mut h = HeaderMap::new();
-        h.insert(http::header::AUTHORIZATION, format!("Bearer {token}").parse().unwrap());
+        h.insert(
+            http::header::AUTHORIZATION,
+            format!("Bearer {token}").parse().unwrap(),
+        );
         assert_eq!(auth.verify(&h).unwrap_err(), StatusCode::UNAUTHORIZED);
     }
 
@@ -402,14 +410,17 @@ mod jwt_tests {
         });
         let token = sign(&claims, &secret);
         let mut h = HeaderMap::new();
-        h.insert(http::header::AUTHORIZATION, format!("Bearer {token}").parse().unwrap());
+        h.insert(
+            http::header::AUTHORIZATION,
+            format!("Bearer {token}").parse().unwrap(),
+        );
         assert_eq!(auth.verify(&h).unwrap_err(), StatusCode::UNAUTHORIZED);
     }
 
     #[test]
     fn jwt_rejects_wrong_signature() {
         let secret = b"test-secret-32-bytes-long-okay-pls!".to_vec();
-        let other  = b"WRONG-secret-32-bytes-long-okay-OK?".to_vec();
+        let other = b"WRONG-secret-32-bytes-long-okay-OK?".to_vec();
         let auth = JwtAuth::new(JwtConfig {
             key: JwtKey::Hmac(secret.clone()),
             issuer: "https://idp.example".into(),
@@ -423,9 +434,12 @@ mod jwt_tests {
             "exp": now_secs() + 60,
             "scope": "mcp:rulake:read",
         });
-        let token = sign(&claims, &other);   // signed with the wrong key
+        let token = sign(&claims, &other); // signed with the wrong key
         let mut h = HeaderMap::new();
-        h.insert(http::header::AUTHORIZATION, format!("Bearer {token}").parse().unwrap());
+        h.insert(
+            http::header::AUTHORIZATION,
+            format!("Bearer {token}").parse().unwrap(),
+        );
         assert_eq!(auth.verify(&h).unwrap_err(), StatusCode::UNAUTHORIZED);
     }
 
@@ -447,7 +461,10 @@ mod jwt_tests {
         });
         let token = sign(&claims, &secret);
         let mut h = HeaderMap::new();
-        h.insert(http::header::AUTHORIZATION, format!("Bearer {token}").parse().unwrap());
+        h.insert(
+            http::header::AUTHORIZATION,
+            format!("Bearer {token}").parse().unwrap(),
+        );
         let p = auth.verify(&h).unwrap();
         assert!(p.capabilities.has(Capability::Admin));
     }

@@ -15,8 +15,7 @@ use std::sync::Arc;
 use anyhow::Context;
 
 use ruvector_rulake_mcp_rvdna::{
-    AllowBearerOnPublic, AuditSink, AuthMode, CapabilitySet, InsecureAllowNoAuth,
-    RvdnaMcpServer,
+    AllowBearerOnPublic, AuditSink, AuthMode, CapabilitySet, InsecureAllowNoAuth, RvdnaMcpServer,
 };
 use ruvector_rulake_rvdna::{RvdnaCollection, RvdnaT0Backend};
 
@@ -68,7 +67,9 @@ async fn main() -> anyhow::Result<()> {
         };
         let coll = RvdnaCollection {
             ids: (0..64u64).collect(),
-            vectors: (0..64).map(|_| (0..8).map(|_| next_f32()).collect()).collect(),
+            vectors: (0..64)
+                .map(|_| (0..8).map(|_| next_f32()).collect())
+                .collect(),
             dim: 8,
             generation: 1,
         };
@@ -200,7 +201,7 @@ fn print_help() {
 }
 
 fn init_tracing() {
-    use tracing_subscriber::{EnvFilter, fmt, prelude::*};
+    use tracing_subscriber::{fmt, prelude::*, EnvFilter};
     let _ = tracing_subscriber::registry()
         .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
         .with(fmt::layer().json().with_writer(std::io::stderr))

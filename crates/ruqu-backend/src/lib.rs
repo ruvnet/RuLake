@@ -55,13 +55,9 @@ pub mod witness;
 pub use circuit::{Circuit, Gate};
 pub use hardware::{HardwareConfig, RuquHardwareStubBackend, HARDWARE_STUB_BACKEND_TAG};
 pub use qec::{plan_surface_code, QecError, QecPlan};
-pub use stabilizer::{
-    simulate as simulate_stabilizer, StabilizerError, StabilizerState, Tableau,
-};
+pub use stabilizer::{simulate as simulate_stabilizer, StabilizerError, StabilizerState, Tableau};
 pub use state_vector::{simulate, C};
-pub use tensor_network::{
-    simulate as simulate_tensor_network, Mps, MpsTensor, TensorNetworkError,
-};
+pub use tensor_network::{simulate as simulate_tensor_network, Mps, MpsTensor, TensorNetworkError};
 pub use witness::{inputs_for, ruqu_bundle, RuquWitnessInputs, RuquWitnessInputsOwned};
 
 /// One executed circuit's state, keyed by a "collection name" so it
@@ -91,11 +87,13 @@ impl RuquExecution {
     /// chain (the seed pins the simulation to the same `f64` result).
     pub fn from_state_vector(sv: &[C], generation: u64) -> Self {
         let ids: Vec<u64> = (0..sv.len() as u64).collect();
-        let vectors: Vec<Vec<f32>> = sv
-            .iter()
-            .map(|c| vec![c.re as f32, c.im as f32])
-            .collect();
-        Self { ids, vectors, dim: 2, generation }
+        let vectors: Vec<Vec<f32>> = sv.iter().map(|c| vec![c.re as f32, c.im as f32]).collect();
+        Self {
+            ids,
+            vectors,
+            dim: 2,
+            generation,
+        }
     }
 }
 
@@ -124,12 +122,19 @@ impl RuquStateVectorBackend {
     /// Simulate `circuit` and store the resulting state vector under
     /// `name`. Returns the bundle witness so callers can pin it (or
     /// hand it to a remote replica for byte-equality replay).
-    pub fn execute(&self, name: impl Into<String>, circuit: &Circuit) -> Result<rulake::RuLakeBundle> {
+    pub fn execute(
+        &self,
+        name: impl Into<String>,
+        circuit: &Circuit,
+    ) -> Result<rulake::RuLakeBundle> {
         let sv = state_vector::simulate(circuit);
         let exec = RuquExecution::from_state_vector(&sv, 1);
         let inputs = witness::inputs_for(circuit, "sv", 0, exec.generation);
         let bundle = witness::ruqu_bundle(&inputs.as_borrowed());
-        self.executions.write().expect("poisoned").insert(name.into(), exec);
+        self.executions
+            .write()
+            .expect("poisoned")
+            .insert(name.into(), exec);
         Ok(bundle)
     }
 
@@ -156,17 +161,23 @@ impl BackendAdapter for RuquStateVectorBackend {
     }
 
     fn list_collections(&self) -> Result<Vec<CollectionId>> {
-        Ok(self.executions.read().expect("poisoned").keys().cloned().collect())
+        Ok(self
+            .executions
+            .read()
+            .expect("poisoned")
+            .keys()
+            .cloned()
+            .collect())
     }
 
     fn pull_vectors(&self, collection: &str) -> Result<PulledBatch> {
         let g = self.executions.read().expect("poisoned");
-        let c = g.get(collection).ok_or_else(|| {
-            rulake::error::RuLakeError::UnknownCollection {
+        let c = g
+            .get(collection)
+            .ok_or_else(|| rulake::error::RuLakeError::UnknownCollection {
                 backend: self.id.clone(),
                 collection: collection.to_string(),
-            }
-        })?;
+            })?;
         Ok(PulledBatch {
             collection: collection.to_string(),
             ids: c.ids.clone(),
@@ -178,12 +189,12 @@ impl BackendAdapter for RuquStateVectorBackend {
 
     fn generation(&self, collection: &str) -> Result<u64> {
         let g = self.executions.read().expect("poisoned");
-        let c = g.get(collection).ok_or_else(|| {
-            rulake::error::RuLakeError::UnknownCollection {
+        let c = g
+            .get(collection)
+            .ok_or_else(|| rulake::error::RuLakeError::UnknownCollection {
                 backend: self.id.clone(),
                 collection: collection.to_string(),
-            }
-        })?;
+            })?;
         Ok(c.generation)
     }
 }
@@ -224,19 +235,26 @@ impl RuquStabilizerBackend {
         name: impl Into<String>,
         circuit: &Circuit,
     ) -> Result<rulake::RuLakeBundle> {
-        let state = stabilizer::simulate(circuit).map_err(|e| {
-            rulake::error::RuLakeError::Backend {
+        let state =
+            stabilizer::simulate(circuit).map_err(|e| rulake::error::RuLakeError::Backend {
                 backend: self.id.clone(),
                 detail: e.to_string(),
-            }
-        })?;
+            })?;
         let vectors = stabilizer::to_pulled_batch_form(&state);
         let dim = vectors.first().map(|v| v.len()).unwrap_or(0);
         let ids: Vec<u64> = (0..vectors.len() as u64).collect();
-        let exec = RuquExecution { ids, vectors, dim, generation: 1 };
+        let exec = RuquExecution {
+            ids,
+            vectors,
+            dim,
+            generation: 1,
+        };
         let inputs = witness::inputs_for(circuit, "stabilizer", 0, exec.generation);
         let bundle = witness::ruqu_bundle(&inputs.as_borrowed());
-        self.executions.write().expect("poisoned").insert(name.into(), exec);
+        self.executions
+            .write()
+            .expect("poisoned")
+            .insert(name.into(), exec);
         Ok(bundle)
     }
 
@@ -258,20 +276,28 @@ impl RuquStabilizerBackend {
 }
 
 impl BackendAdapter for RuquStabilizerBackend {
-    fn id(&self) -> &str { &self.id }
+    fn id(&self) -> &str {
+        &self.id
+    }
 
     fn list_collections(&self) -> Result<Vec<CollectionId>> {
-        Ok(self.executions.read().expect("poisoned").keys().cloned().collect())
+        Ok(self
+            .executions
+            .read()
+            .expect("poisoned")
+            .keys()
+            .cloned()
+            .collect())
     }
 
     fn pull_vectors(&self, collection: &str) -> Result<PulledBatch> {
         let g = self.executions.read().expect("poisoned");
-        let c = g.get(collection).ok_or_else(|| {
-            rulake::error::RuLakeError::UnknownCollection {
+        let c = g
+            .get(collection)
+            .ok_or_else(|| rulake::error::RuLakeError::UnknownCollection {
                 backend: self.id.clone(),
                 collection: collection.to_string(),
-            }
-        })?;
+            })?;
         Ok(PulledBatch {
             collection: collection.to_string(),
             ids: c.ids.clone(),
@@ -283,12 +309,12 @@ impl BackendAdapter for RuquStabilizerBackend {
 
     fn generation(&self, collection: &str) -> Result<u64> {
         let g = self.executions.read().expect("poisoned");
-        let c = g.get(collection).ok_or_else(|| {
-            rulake::error::RuLakeError::UnknownCollection {
+        let c = g
+            .get(collection)
+            .ok_or_else(|| rulake::error::RuLakeError::UnknownCollection {
                 backend: self.id.clone(),
                 collection: collection.to_string(),
-            }
-        })?;
+            })?;
         Ok(c.generation)
     }
 }
@@ -363,10 +389,18 @@ impl RuquTensorNetworkBackend {
         let vectors = tensor_network::to_pulled_batch_form(&mps);
         let dim = vectors.first().map(|v| v.len()).unwrap_or(0);
         let ids: Vec<u64> = (0..vectors.len() as u64).collect();
-        let exec = RuquExecution { ids, vectors, dim, generation: 1 };
+        let exec = RuquExecution {
+            ids,
+            vectors,
+            dim,
+            generation: 1,
+        };
         let inputs = witness::inputs_for(circuit, "tensor_network", 0, exec.generation);
         let bundle = witness::ruqu_bundle(&inputs.as_borrowed());
-        self.executions.write().expect("poisoned").insert(name.into(), exec);
+        self.executions
+            .write()
+            .expect("poisoned")
+            .insert(name.into(), exec);
         Ok(bundle)
     }
 
@@ -388,20 +422,28 @@ impl RuquTensorNetworkBackend {
 }
 
 impl BackendAdapter for RuquTensorNetworkBackend {
-    fn id(&self) -> &str { &self.id }
+    fn id(&self) -> &str {
+        &self.id
+    }
 
     fn list_collections(&self) -> Result<Vec<CollectionId>> {
-        Ok(self.executions.read().expect("poisoned").keys().cloned().collect())
+        Ok(self
+            .executions
+            .read()
+            .expect("poisoned")
+            .keys()
+            .cloned()
+            .collect())
     }
 
     fn pull_vectors(&self, collection: &str) -> Result<PulledBatch> {
         let g = self.executions.read().expect("poisoned");
-        let c = g.get(collection).ok_or_else(|| {
-            rulake::error::RuLakeError::UnknownCollection {
+        let c = g
+            .get(collection)
+            .ok_or_else(|| rulake::error::RuLakeError::UnknownCollection {
                 backend: self.id.clone(),
                 collection: collection.to_string(),
-            }
-        })?;
+            })?;
         Ok(PulledBatch {
             collection: collection.to_string(),
             ids: c.ids.clone(),
@@ -413,12 +455,12 @@ impl BackendAdapter for RuquTensorNetworkBackend {
 
     fn generation(&self, collection: &str) -> Result<u64> {
         let g = self.executions.read().expect("poisoned");
-        let c = g.get(collection).ok_or_else(|| {
-            rulake::error::RuLakeError::UnknownCollection {
+        let c = g
+            .get(collection)
+            .ok_or_else(|| rulake::error::RuLakeError::UnknownCollection {
                 backend: self.id.clone(),
                 collection: collection.to_string(),
-            }
-        })?;
+            })?;
         Ok(c.generation)
     }
 }

@@ -10,7 +10,7 @@
 
 use std::sync::Arc;
 
-use rulake::{LocalBackend, RuLake, BackendAdapter};
+use rulake::{BackendAdapter, LocalBackend, RuLake};
 use ruvector_rulake_mcp::RuLakeMcpServer;
 
 /// Build an in-memory ruLake with one collection of N×D vectors.
@@ -61,7 +61,7 @@ async fn search_one_returns_top_k_via_planner() {
     assert_eq!(resp.data[0].id, "42", "top-1 must be the self-vector");
     assert_eq!(resp.decision.chosen_action, "search_one");
     assert_eq!(resp.decision.backends_used, vec!["local".to_string()]);
-    assert_eq!(resp.decision.degraded, false);
+    assert!(!resp.decision.degraded);
     assert!(resp.decision.budget_used_ms >= 0.0);
 }
 
@@ -82,7 +82,11 @@ async fn refuses_on_unknown_backend_with_policy_refused_allowlist() {
         "search": { "vector": vectors[0], "k": 3 }
     });
     let req = serde_json::from_value(request).unwrap();
-    let resp = server.planner().handle(req).await.expect("planner returns refusal as Ok");
+    let resp = server
+        .planner()
+        .handle(req)
+        .await
+        .expect("planner returns refusal as Ok");
 
     // Refusal is a successful planner response with empty data + reason_code.
     assert!(resp.data.is_empty(), "refused → empty data");
@@ -137,7 +141,11 @@ async fn backpressure_response_carries_advice_block() {
     );
     assert!(resp.data.is_empty(), "degraded → empty data");
     assert!(resp.decision.degraded, "decision.degraded = true");
-    let advice = resp.decision.degraded_advice.as_ref().expect("advice block present");
+    let advice = resp
+        .decision
+        .degraded_advice
+        .as_ref()
+        .expect("advice block present");
     assert_eq!(advice.reason, "rate_limit_collection");
     assert!(advice.retry_after_ms > 0);
     assert!(
@@ -160,7 +168,10 @@ async fn backpressure_inflight_cap_carries_inflight_numbers() {
     .unwrap();
     let resp = server.planner().build_degraded_response(
         "search",
-        BackpressureReason::InflightCap { inflight: 64, cap: 64 },
+        BackpressureReason::InflightCap {
+            inflight: 64,
+            cap: 64,
+        },
         100,
     );
     assert!(resp.decision.degraded);
@@ -173,7 +184,7 @@ async fn backpressure_inflight_cap_carries_inflight_numbers() {
 
 #[tokio::test]
 async fn tools_list_filtered_by_capability_set() {
-    use rulake::{LocalBackend, RuLake, BackendAdapter};
+    use rulake::{BackendAdapter, LocalBackend, RuLake};
     use ruvector_rulake_mcp::CapabilitySet;
 
     let lake = RuLake::new(20, 42);
@@ -195,7 +206,11 @@ async fn tools_list_filtered_by_capability_set() {
     // v0.9 added rulake_list_collections — also a Read-tier tool.
     assert_eq!(
         names,
-        vec!["rulake_list_backends", "rulake_list_collections", "rulake_query"],
+        vec![
+            "rulake_list_backends",
+            "rulake_list_collections",
+            "rulake_query"
+        ],
     );
 
     // read,publish: + 2 publish tools.
@@ -210,7 +225,10 @@ async fn tools_list_filtered_by_capability_set() {
     let names = list_tool_names_via_handler(&publish).await;
     assert!(names.contains(&"rulake_publish_bundle".to_string()));
     assert!(names.contains(&"rulake_refresh_from_bundle_dir".to_string()));
-    assert!(!names.contains(&"rulake_invalidate_cache".to_string()), "admin tool must stay hidden");
+    assert!(
+        !names.contains(&"rulake_invalidate_cache".to_string()),
+        "admin tool must stay hidden"
+    );
 
     // read,publish,admin: all 7.
     let admin = RuLakeMcpServer::from_lake_with_caps(
@@ -224,9 +242,13 @@ async fn tools_list_filtered_by_capability_set() {
     let names = list_tool_names_via_handler(&admin).await;
     assert_eq!(names.len(), 8, "admin sees all 8 tools, got {names:?}");
     for required in &[
-        "rulake_query", "rulake_list_backends", "rulake_list_collections",
-        "rulake_publish_bundle", "rulake_refresh_from_bundle_dir",
-        "rulake_save_cache_to_dir", "rulake_warm_from_dir",
+        "rulake_query",
+        "rulake_list_backends",
+        "rulake_list_collections",
+        "rulake_publish_bundle",
+        "rulake_refresh_from_bundle_dir",
+        "rulake_save_cache_to_dir",
+        "rulake_warm_from_dir",
         "rulake_invalidate_cache",
     ] {
         assert!(names.iter().any(|n| n == required), "missing {required}");
@@ -244,16 +266,18 @@ async fn tools_list_filtered_by_capability_set() {
 
 #[tokio::test]
 async fn rbac_denies_unallowed_collection() {
-    use rulake::{LocalBackend, RuLake, BackendAdapter};
-    use ruvector_rulake_mcp::AllowList;
+    use rulake::{BackendAdapter, LocalBackend, RuLake};
     use ruvector_rulake_mcp::config::AllowBlock;
     use ruvector_rulake_mcp::planner::Planner;
+    use ruvector_rulake_mcp::AllowList;
     use ruvector_rulake_mcp::WorkerPool;
 
     let lake = RuLake::new(20, 42);
     let be = std::sync::Arc::new(LocalBackend::new("local"));
-    be.put_collection("docs", 8, vec![0u64], vec![vec![0.0_f32; 8]]).unwrap();
-    be.put_collection("secret", 8, vec![0u64], vec![vec![0.0_f32; 8]]).unwrap();
+    be.put_collection("docs", 8, vec![0u64], vec![vec![0.0_f32; 8]])
+        .unwrap();
+    be.put_collection("secret", 8, vec![0u64], vec![vec![0.0_f32; 8]])
+        .unwrap();
     let dyn_be: std::sync::Arc<dyn BackendAdapter> = be;
     lake.register_backend(dyn_be).unwrap();
 
@@ -292,7 +316,10 @@ async fn rbac_denies_unallowed_collection() {
         "search": { "vector": vec![0.0_f32; 8], "k": 1 }
     }))
     .unwrap();
-    let r2 = planner.handle(req_denied).await.expect("planner returns refusal as Ok");
+    let r2 = planner
+        .handle(req_denied)
+        .await
+        .expect("planner returns refusal as Ok");
     assert!(r2.data.is_empty(), "denied route → empty data");
     let code = format!("{:?}", r2.decision.reason_code);
     assert!(
@@ -300,7 +327,10 @@ async fn rbac_denies_unallowed_collection() {
         "expected PolicyRefusedAllowlist, got {code}"
     );
     assert!(
-        r2.decision.refusals.iter().any(|r| r.code.contains("ALLOWLIST_DENIED")),
+        r2.decision
+            .refusals
+            .iter()
+            .any(|r| r.code.contains("ALLOWLIST_DENIED")),
         "refusals must name the rule that denied"
     );
 }
@@ -315,7 +345,10 @@ async fn capability_intersect_keeps_only_both_grants() {
     let effective = server.intersect(&token);
     assert!(effective.has(Capability::Read));
     assert!(effective.has(Capability::Publish));
-    assert!(!effective.has(Capability::Admin), "admin not in token → not in intersection");
+    assert!(
+        !effective.has(Capability::Admin),
+        "admin not in token → not in intersection"
+    );
 }
 
 #[tokio::test]
@@ -330,8 +363,8 @@ async fn capability_intersect_empty_token_yields_empty() {
 
 #[tokio::test]
 async fn effective_caps_falls_through_to_server_wide_when_task_local_unset() {
-    use ruvector_rulake_mcp::{Capability, CapabilitySet};
     use ruvector_rulake_mcp::policy::effective_caps;
+    use ruvector_rulake_mcp::{Capability, CapabilitySet};
     let server = CapabilitySet::from_csv("read,publish").unwrap();
     // Outside any REQUEST_CAPS scope — fall through.
     let effective = effective_caps(&server);
@@ -341,15 +374,20 @@ async fn effective_caps_falls_through_to_server_wide_when_task_local_unset() {
 
 #[tokio::test]
 async fn effective_caps_intersects_inside_task_local_scope() {
+    use ruvector_rulake_mcp::policy::{effective_caps, REQUEST_CAPS};
     use ruvector_rulake_mcp::{Capability, CapabilitySet};
-    use ruvector_rulake_mcp::policy::{REQUEST_CAPS, effective_caps};
     let server = CapabilitySet::from_csv("read,publish,admin").unwrap();
     let token = CapabilitySet::from_csv("read").unwrap();
-    let result = REQUEST_CAPS.scope(token, async move {
-        let effective = effective_caps(&server);
-        effective.has(Capability::Admin)
-    }).await;
-    assert!(!result, "token-restricted scope must downgrade server's admin to read");
+    let result = REQUEST_CAPS
+        .scope(token, async move {
+            let effective = effective_caps(&server);
+            effective.has(Capability::Admin)
+        })
+        .await;
+    assert!(
+        !result,
+        "token-restricted scope must downgrade server's admin to read"
+    );
 }
 
 #[tokio::test]
@@ -366,7 +404,10 @@ async fn capability_set_default_excludes_publish_and_admin() {
 async fn capability_set_publish_implies_read() {
     use ruvector_rulake_mcp::{Capability, CapabilitySet};
     let cs = CapabilitySet::from_csv("publish").unwrap();
-    assert!(cs.has(Capability::Read), "publish must implicitly grant read");
+    assert!(
+        cs.has(Capability::Read),
+        "publish must implicitly grant read"
+    );
     assert!(cs.has(Capability::Publish));
     assert!(!cs.has(Capability::Admin));
 }
@@ -477,13 +518,7 @@ async fn verify_intent_succeeds_on_valid_bundle() {
 
     // Write a fresh bundle to a tempdir.
     let dir = TempDir::new().unwrap();
-    let bundle = RuLakeBundle::new(
-        "test://verify",
-        16,
-        42,
-        20,
-        rulake::Generation::Num(1),
-    );
+    let bundle = RuLakeBundle::new("test://verify", 16, 42, 20, rulake::Generation::Num(1));
     bundle.write_to_dir(dir.path()).unwrap();
 
     let req = serde_json::from_value(serde_json::json!({
@@ -494,10 +529,7 @@ async fn verify_intent_succeeds_on_valid_bundle() {
     .unwrap();
     let resp = server.planner().handle(req).await.expect("ok");
     assert_eq!(resp.decision.intent, "verify");
-    assert!(
-        resp.provenance.witness_verified,
-        "valid bundle must verify"
-    );
+    assert!(resp.provenance.witness_verified, "valid bundle must verify");
     assert_eq!(
         resp.provenance.witness.as_ref().unwrap(),
         &bundle.rvf_witness,

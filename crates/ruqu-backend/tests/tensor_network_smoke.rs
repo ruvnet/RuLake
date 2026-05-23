@@ -7,14 +7,15 @@ use std::sync::Arc;
 use rulake::backend::BackendAdapter;
 use rulake::cache::Consistency;
 use rulake::RuLake;
-use ruvector_rulake_ruqu::{
-    tensor_network, Circuit, Gate, RuquTensorNetworkBackend,
-};
+use ruvector_rulake_ruqu::{tensor_network, Circuit, Gate, RuquTensorNetworkBackend};
 
 fn bell_circuit() -> Circuit {
     let mut c = Circuit::new("bell-tn", 2);
     c.push(Gate::H { q: 0 });
-    c.push(Gate::Cx { control: 0, target: 1 });
+    c.push(Gate::Cx {
+        control: 0,
+        target: 1,
+    });
     c
 }
 
@@ -24,14 +25,21 @@ fn bell_pair_through_tensor_network_at_bond_2() {
     // non-trivial bond dimension. This is the load-bearing claim:
     // truncation at the cap loses zero amplitude on a state that
     // fits.
-    let mps = tensor_network::simulate(&bell_circuit(), 2)
-        .expect("MPS sim must succeed");
+    let mps = tensor_network::simulate(&bell_circuit(), 2).expect("MPS sim must succeed");
     let sv = mps.to_state_vector();
     let amp = std::f64::consts::FRAC_1_SQRT_2;
-    assert!((sv[0b00].re - amp).abs() < 1e-10, "|00⟩ amp = {}", sv[0b00].re);
+    assert!(
+        (sv[0b00].re - amp).abs() < 1e-10,
+        "|00⟩ amp = {}",
+        sv[0b00].re
+    );
     assert!(sv[0b01].re.abs() < 1e-10, "|01⟩ should be zero");
     assert!(sv[0b10].re.abs() < 1e-10, "|10⟩ should be zero");
-    assert!((sv[0b11].re - amp).abs() < 1e-10, "|11⟩ amp = {}", sv[0b11].re);
+    assert!(
+        (sv[0b11].re - amp).abs() < 1e-10,
+        "|11⟩ amp = {}",
+        sv[0b11].re
+    );
     assert!(
         mps.truncation_error < 1e-12,
         "Bell pair must fit at χ=2 with zero truncation, got {}",
@@ -41,10 +49,14 @@ fn bell_pair_through_tensor_network_at_bond_2() {
     // Round-trip the same circuit through the backend adapter to
     // confirm the witness path is wired.
     let be = RuquTensorNetworkBackend::new("ruqu-tn-fixture", 2);
-    let bundle = be.execute("bell-pair", &bell_circuit())
+    let bundle = be
+        .execute("bell-pair", &bell_circuit())
         .expect("TensorNetwork execute should succeed for the Bell circuit");
     assert_eq!(be.id(), "ruqu-tn-fixture");
-    assert_eq!(be.list_collections().unwrap(), vec!["bell-pair".to_string()]);
+    assert_eq!(
+        be.list_collections().unwrap(),
+        vec!["bell-pair".to_string()]
+    );
     assert_eq!(bundle.memory_class.as_deref(), Some("quantum"));
 }
 
@@ -59,7 +71,8 @@ fn tensor_network_handles_t_gate_unlike_stabilizer() {
     c.push(Gate::H { q: 0 });
 
     let be = RuquTensorNetworkBackend::new("ruqu-tn-non-clifford", 4);
-    let _bundle = be.execute("h-t-h", &c)
+    let _bundle = be
+        .execute("h-t-h", &c)
         .expect("TensorNetwork must accept a T gate (Stabilizer would refuse)");
 
     // Pull the cached state and check the analytic probabilities.
@@ -88,8 +101,7 @@ fn tensor_network_round_trips_through_rulake_cache() {
     });
     let be: Arc<dyn BackendAdapter> = Arc::clone(&raw) as Arc<dyn BackendAdapter>;
 
-    let lake = RuLake::new(20, 42)
-        .with_consistency(Consistency::Eventual { ttl_ms: 1_000 });
+    let lake = RuLake::new(20, 42).with_consistency(Consistency::Eventual { ttl_ms: 1_000 });
     lake.register_backend(be).unwrap();
 
     // Pull the packed batch shape so we can build a valid query
@@ -100,15 +112,22 @@ fn tensor_network_round_trips_through_rulake_cache() {
     let batch = raw.pull_vectors("bell-pair").unwrap();
     let q = vec![0.0_f32; batch.dim];
 
-    let hits1 = lake.search_one("ruqu-tn-fixture", "bell-pair", &q, 2).unwrap();
+    let hits1 = lake
+        .search_one("ruqu-tn-fixture", "bell-pair", &q, 2)
+        .unwrap();
     assert_eq!(hits1.len(), 2);
 
     // Cache hit on the second call.
-    let hits2 = lake.search_one("ruqu-tn-fixture", "bell-pair", &q, 2).unwrap();
+    let hits2 = lake
+        .search_one("ruqu-tn-fixture", "bell-pair", &q, 2)
+        .unwrap();
     assert_eq!(hits1, hits2);
 
     let stats = lake.cache_stats();
-    assert_eq!(stats.primes, 1, "second call must hit the cache, not re-prime");
+    assert_eq!(
+        stats.primes, 1,
+        "second call must hit the cache, not re-prime"
+    );
 }
 
 #[test]
@@ -124,16 +143,24 @@ fn tensor_network_truncation_error_grows_with_circuit_depth() {
     let depth = 20usize;
     let mut c = Circuit::new("clifford-depth-20", n);
     for layer in 0..depth {
-        for q in 0..n { c.push(Gate::H { q }); }
+        for q in 0..n {
+            c.push(Gate::H { q });
+        }
         // Alternate the CX sweep direction layer-by-layer so the
         // entanglement spreads in both directions.
         if layer % 2 == 0 {
             for q in 0..n.saturating_sub(1) {
-                c.push(Gate::Cx { control: q, target: q + 1 });
+                c.push(Gate::Cx {
+                    control: q,
+                    target: q + 1,
+                });
             }
         } else {
             for q in (1..n).rev() {
-                c.push(Gate::Cx { control: q, target: q - 1 });
+                c.push(Gate::Cx {
+                    control: q,
+                    target: q - 1,
+                });
             }
         }
     }
@@ -165,6 +192,7 @@ fn tensor_network_truncation_error_grows_with_circuit_depth() {
     assert!(
         mps_high.truncation_error <= mps_low.truncation_error + 1e-6,
         "wider bond ({}) should track at-or-below narrower bond ({})",
-        mps_high.truncation_error, mps_low.truncation_error,
+        mps_high.truncation_error,
+        mps_low.truncation_error,
     );
 }

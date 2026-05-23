@@ -103,7 +103,9 @@ impl WorkerPool {
     }
 
     pub fn inflight(&self) -> usize {
-        self.inner.inflight.load(std::sync::atomic::Ordering::Relaxed)
+        self.inner
+            .inflight
+            .load(std::sync::atomic::Ordering::Relaxed)
     }
 
     pub fn max_inflight(&self) -> usize {

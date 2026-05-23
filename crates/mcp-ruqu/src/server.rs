@@ -27,14 +27,12 @@
 use std::sync::Arc;
 
 use rmcp::{
-    ErrorData as McpError,
-    ServerHandler, ServiceExt,
     handler::server::{
         router::tool::ToolRouter,
         wrapper::{Json, Parameters},
     },
     model::{Implementation, ServerCapabilities, ServerInfo},
-    tool, tool_handler, tool_router,
+    tool, tool_handler, tool_router, ErrorData as McpError, ServerHandler, ServiceExt,
 };
 use serde::{Deserialize, Serialize};
 
@@ -42,12 +40,11 @@ use rulake::{BackendAdapter, RuLake};
 use ruvector_rulake_ruqu::{
     circuit::{Circuit, Gate},
     limits::enforce_qubit_cap,
-    state_vector,
     witness::{inputs_for, ruqu_bundle},
     RuquStateVectorBackend,
 };
 
-use crate::audit::{AuditEntry, AuditSink, PolicyDecision, now_ts};
+use crate::audit::{now_ts, AuditEntry, AuditSink, PolicyDecision};
 
 // ─── Security: R-1 mitigation constants ──────────────────────────────
 
@@ -94,10 +91,7 @@ impl RuquMcpServer {
     /// `RuLake` so `ruqu_replay` can short-circuit through the
     /// cache. The brief stipulates this path "uses ruLake's cache
     /// directly via `lake.search_one`".
-    pub fn with_lake(
-        backend: Arc<RuquStateVectorBackend>,
-        lake: Arc<RuLake>,
-    ) -> Self {
+    pub fn with_lake(backend: Arc<RuquStateVectorBackend>, lake: Arc<RuLake>) -> Self {
         Self {
             backend,
             lake: Some(lake),
@@ -129,46 +123,31 @@ impl RuquMcpServer {
     /// Direct-call helper for tests: invoke `ruqu_simulate` without
     /// going through the rmcp wire. Returns the tool's response.
     #[doc(hidden)]
-    pub async fn call_simulate(
-        &self,
-        req: SimulateRequest,
-    ) -> Result<SimulateResponse, McpError> {
+    pub async fn call_simulate(&self, req: SimulateRequest) -> Result<SimulateResponse, McpError> {
         self.ruqu_simulate(Parameters(req)).await.map(|j| j.0)
     }
 
     /// Direct-call helper for tests.
     #[doc(hidden)]
-    pub async fn call_verify(
-        &self,
-        req: VerifyRequest,
-    ) -> Result<VerifyResponse, McpError> {
+    pub async fn call_verify(&self, req: VerifyRequest) -> Result<VerifyResponse, McpError> {
         self.ruqu_verify(Parameters(req)).await.map(|j| j.0)
     }
 
     /// Direct-call helper for tests.
     #[doc(hidden)]
-    pub async fn call_replay(
-        &self,
-        req: VerifyRequest,
-    ) -> Result<ReplayResponse, McpError> {
+    pub async fn call_replay(&self, req: VerifyRequest) -> Result<ReplayResponse, McpError> {
         self.ruqu_replay(Parameters(req)).await.map(|j| j.0)
     }
 
     /// Direct-call helper for tests.
     #[doc(hidden)]
-    pub async fn call_optimize(
-        &self,
-        req: StubRequest,
-    ) -> Result<StubResponse, McpError> {
+    pub async fn call_optimize(&self, req: StubRequest) -> Result<StubResponse, McpError> {
         self.ruqu_optimize(Parameters(req)).await.map(|j| j.0)
     }
 
     /// Direct-call helper for tests.
     #[doc(hidden)]
-    pub async fn call_qec_schedule(
-        &self,
-        req: StubRequest,
-    ) -> Result<StubResponse, McpError> {
+    pub async fn call_qec_schedule(&self, req: StubRequest) -> Result<StubResponse, McpError> {
         self.ruqu_qec_schedule(Parameters(req)).await.map(|j| j.0)
     }
 }
@@ -256,7 +235,9 @@ pub struct WireCircuit {
 impl From<WireCircuit> for Circuit {
     fn from(c: WireCircuit) -> Self {
         let mut out = Circuit::new(c.id, c.n_qubits);
-        for g in c.gates { out.push(g.into()); }
+        for g in c.gates {
+            out.push(g.into());
+        }
         out
     }
 }
@@ -292,7 +273,9 @@ pub struct SimulateRequest {
     pub seed: u64,
 }
 
-fn default_backend_tag() -> String { "sv".to_string() }
+fn default_backend_tag() -> String {
+    "sv".to_string()
+}
 
 /// Response shape for `ruqu_simulate`. The brief: "DON'T return the
 /// full state vector — for n=14 that's 16384 amplitudes; cap at 32
@@ -476,7 +459,8 @@ impl RuquMcpServer {
 
         // ── live path ─────────────────────────────────────────────
         let circuit: Circuit = req.circuit.into();
-        let bundle = self.backend
+        let bundle = self
+            .backend
             .execute(circuit.id.clone(), &circuit)
             .map_err(|e| {
                 self.emit_refusal(
@@ -504,11 +488,7 @@ impl RuquMcpServer {
         let sv = crate::ruqu_core_engine::simulate(&circuit);
         let dim = sv.len();
         let head_n = dim.min(32);
-        let amplitudes_head: Vec<[f64; 2]> = sv
-            .iter()
-            .take(head_n)
-            .map(|c| [c.re, c.im])
-            .collect();
+        let amplitudes_head: Vec<[f64; 2]> = sv.iter().take(head_n).map(|c| [c.re, c.im]).collect();
 
         let resp = SimulateResponse {
             witness: witness.clone(),
@@ -600,20 +580,35 @@ impl RuquMcpServer {
             request_id: None,
             tool: "ruqu_verify".into(),
             intent: Some(format!("verify:{id_for_audit}")),
-            outcome: if matches { "ok".into() } else { "refused".into() },
+            outcome: if matches {
+                "ok".into()
+            } else {
+                "refused".into()
+            },
             result_size: Some(1),
-            trust_level: Some(if matches { "verified".into() } else { "rejected".into() }),
+            trust_level: Some(if matches {
+                "verified".into()
+            } else {
+                "rejected".into()
+            }),
             duration_ms: start.elapsed().as_secs_f64() * 1000.0,
             witness_in: Some(req.witness.clone()),
             witness_out: Some(computed.clone()),
-            code: if matches { None } else { Some("RUQU_WITNESS_MISMATCH".into()) },
+            code: if matches {
+                None
+            } else {
+                Some("RUQU_WITNESS_MISMATCH".into())
+            },
             policy_decision: Some(PolicyDecision {
                 capability_required: "read".into(),
                 capability_granted: vec!["read".into()],
             }),
         });
 
-        Ok(Json(VerifyResponse { matches, computed_witness: computed }))
+        Ok(Json(VerifyResponse {
+            matches,
+            computed_witness: computed,
+        }))
     }
 
     #[tool(
@@ -696,9 +691,17 @@ impl RuquMcpServer {
             request_id: None,
             tool: "ruqu_replay".into(),
             intent: Some(format!("replay:{id_for_audit}")),
-            outcome: if matches { "ok".into() } else { "refused".into() },
+            outcome: if matches {
+                "ok".into()
+            } else {
+                "refused".into()
+            },
             result_size: Some(1),
-            trust_level: Some(if matches { "verified".into() } else { "rejected".into() }),
+            trust_level: Some(if matches {
+                "verified".into()
+            } else {
+                "rejected".into()
+            }),
             duration_ms: start.elapsed().as_secs_f64() * 1000.0,
             witness_in: Some(req.witness.clone()),
             witness_out: Some(computed.clone()),
@@ -715,7 +718,11 @@ impl RuquMcpServer {
             }),
         });
 
-        Ok(Json(ReplayResponse { matches, computed_witness: computed, cache_hit }))
+        Ok(Json(ReplayResponse {
+            matches,
+            computed_witness: computed,
+            cache_hit,
+        }))
     }
 
     #[tool(
@@ -838,17 +845,16 @@ impl RuquMcpServer {
             noise_rate: 1e-3,
             seed: Some(0xCAFEBABE),
         };
-        let result = ruqu_algorithms::surface_code::run_surface_code(&cfg)
-            .map_err(|e| {
-                self.emit_refusal(
-                    "ruqu_qec_schedule",
-                    "read",
-                    "RUQU_QEC_INTERNAL",
-                    &id_for_audit,
-                    start.elapsed().as_secs_f64() * 1000.0,
-                );
-                McpError::internal_error(format!("RUQU_QEC_INTERNAL: {e}"), None)
-            })?;
+        let result = ruqu_algorithms::surface_code::run_surface_code(&cfg).map_err(|e| {
+            self.emit_refusal(
+                "ruqu_qec_schedule",
+                "read",
+                "RUQU_QEC_INTERNAL",
+                &id_for_audit,
+                start.elapsed().as_secs_f64() * 1000.0,
+            );
+            McpError::internal_error(format!("RUQU_QEC_INTERNAL: {e}"), None)
+        })?;
 
         let resp = StubResponse {
             status: "live".into(),
@@ -981,16 +987,11 @@ fn _gate_surface_witness(_g: &Gate) {}
 #[tool_handler(router = self.tool_router)]
 impl ServerHandler for RuquMcpServer {
     fn get_info(&self) -> ServerInfo {
-        let mut info = Implementation::new(
-            "ruvector-rulake-mcp-ruqu",
-            env!("CARGO_PKG_VERSION"),
-        );
+        let mut info = Implementation::new("ruvector-rulake-mcp-ruqu", env!("CARGO_PKG_VERSION"));
         info.title = Some("ruQu MCP companion server".into());
         info.website_url = Some("https://github.com/ruvnet/RuLake".into());
 
-        let mut init = ServerInfo::new(
-            ServerCapabilities::builder().enable_tools().build(),
-        );
+        let mut init = ServerInfo::new(ServerCapabilities::builder().enable_tools().build());
         init.server_info = info;
         init.instructions = Some(
             "ruQu MCP companion server (ADR-008 §6 v0.0.1). Five tools: \
@@ -1014,7 +1015,10 @@ mod tests {
             n_qubits: 2,
             gates: vec![
                 WireGate::H { q: 0 },
-                WireGate::Cx { control: 0, target: 1 },
+                WireGate::Cx {
+                    control: 0,
+                    target: 1,
+                },
             ],
             id: "bell-pair-v0".to_string(),
         }
@@ -1148,7 +1152,9 @@ mod tests {
         assert_eq!(resp.status, "live");
         assert!(!resp.v01_planned);
         assert!(!resp.v02_planned);
-        assert!(resp.note.contains("ruqu-algorithms::surface_code::run_surface_code"));
+        assert!(resp
+            .note
+            .contains("ruqu-algorithms::surface_code::run_surface_code"));
         assert_eq!(resp.code_distance, Some(3));
         assert_eq!(resp.total_cycles, Some(100));
         // logical_error_rate is empirical — bounded by [0, 1] but content varies.

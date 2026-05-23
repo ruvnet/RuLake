@@ -110,7 +110,10 @@ impl RuLake {
     /// Delegates to `BackendAdapter::list_collections`. Backed by
     /// the `rulake_list_collections` MCP tool (mcp-server v0.9 — closes
     /// ADR-006 server-gap #1 for the Console's Browse screen live mode).
-    pub fn list_collections(&self, id: &str) -> crate::error::Result<Vec<crate::backend::CollectionId>> {
+    pub fn list_collections(
+        &self,
+        id: &str,
+    ) -> crate::error::Result<Vec<crate::backend::CollectionId>> {
         self.get_backend(id)?.list_collections()
     }
 

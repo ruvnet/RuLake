@@ -32,6 +32,7 @@ fn try_kernel() -> Option<WgpuKernel> {
 /// Same LCG fixture `assert_kernel_conformant` uses, exposed here so we
 /// can drive the popcount path byte-for-byte and the L2 path
 /// set-equivalent under one helper.
+#[allow(clippy::type_complexity)]
 fn fixture(seed: u64) -> (Vec<f32>, Vec<Vec<f32>>, Vec<u64>, Vec<Vec<u64>>) {
     let dim = 16usize;
     let n = 10usize;
@@ -48,9 +49,13 @@ fn fixture(seed: u64) -> (Vec<f32>, Vec<Vec<f32>>, Vec<u64>, Vec<Vec<u64>>) {
         x * 2.0 - 1.0
     };
     let qf: Vec<f32> = (0..dim).map(|_| next_f32()).collect();
-    let cf: Vec<Vec<f32>> = (0..n).map(|_| (0..dim).map(|_| next_f32()).collect()).collect();
+    let cf: Vec<Vec<f32>> = (0..n)
+        .map(|_| (0..dim).map(|_| next_f32()).collect())
+        .collect();
     let qu: Vec<u64> = (0..dim).map(|_| next_u64()).collect();
-    let cu: Vec<Vec<u64>> = (0..n).map(|_| (0..dim).map(|_| next_u64()).collect()).collect();
+    let cu: Vec<Vec<u64>> = (0..n)
+        .map(|_| (0..dim).map(|_| next_u64()).collect())
+        .collect();
     (qf, cf, qu, cu)
 }
 

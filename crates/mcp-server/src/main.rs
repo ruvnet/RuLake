@@ -8,11 +8,11 @@ use std::path::PathBuf;
 
 use anyhow::Context;
 use jsonwebtoken::Algorithm;
+use ruvector_rulake_mcp::auth::JwtKey;
 use ruvector_rulake_mcp::{
     AllowBearerOnPublic, AuditSink, AuthMode, BearerAuth, CapabilitySet, InsecureAllowNoAuth,
     JwksKeys, JwtAuth, JwtConfig, McpConfig, MtlsConfig, RuLakeMcpServer,
 };
-use ruvector_rulake_mcp::auth::JwtKey;
 use std::sync::Arc;
 
 #[tokio::main(flavor = "multi_thread")]
@@ -105,7 +105,8 @@ async fn build_auth(http: &HttpArgs) -> anyhow::Result<AuthMode> {
             // (rotation set fetched in the background).
             let key = if let Some(p) = &http.jwt_secret_file {
                 JwtKey::Hmac(
-                    std::fs::read(p).with_context(|| format!("loading jwt secret: {}", p.display()))?,
+                    std::fs::read(p)
+                        .with_context(|| format!("loading jwt secret: {}", p.display()))?,
                 )
             } else if let Some(p) = &http.jwt_rsa_pem_file {
                 JwtKey::RsaPem(
@@ -184,7 +185,7 @@ struct Args {
 #[derive(Debug)]
 enum Transport {
     Stdio,
-    Http(HttpArgs),
+    Http(Box<HttpArgs>),
 }
 
 #[derive(Debug)]
@@ -208,10 +209,6 @@ struct HttpArgs {
 }
 
 fn parse_args() -> anyhow::Result<Args> {
-    // `transport` is assigned exactly once below from `transport_kind`
-    // after CLI parsing completes; declared without an initial value
-    // so the compiler doesn't warn about the dead `None`.
-    let transport: Option<Transport>;
     let mut config = None;
     let mut capabilities: Option<String> = None;
     let mut audit_file: Option<PathBuf> = None;
@@ -242,9 +239,7 @@ fn parse_args() -> anyhow::Result<Args> {
             "stdio" => transport_kind = Some("stdio"),
             "http" => transport_kind = Some("http"),
             "--config" => {
-                config = Some(PathBuf::from(
-                    it.next().context("--config expects a path")?,
-                ));
+                config = Some(PathBuf::from(it.next().context("--config expects a path")?));
             }
             "--capabilities" => {
                 capabilities = Some(it.next().context("--capabilities expects CSV")?);
@@ -281,10 +276,9 @@ fn parse_args() -> anyhow::Result<Args> {
                 http_jwt_audience = Some(it.next().context("--jwt-audience expects URL")?);
             }
             "--jwt-alg" => {
-                http_jwt_alg = Some(
-                    it.next()
-                        .context("--jwt-alg expects HS256|HS384|HS512|RS256|RS384|RS512|ES256|ES384")?,
-                );
+                http_jwt_alg = Some(it.next().context(
+                    "--jwt-alg expects HS256|HS384|HS512|RS256|RS384|RS512|ES256|ES384",
+                )?);
             }
             "--jwt-rsa-pem-file" => {
                 http_jwt_rsa_pem_file = Some(PathBuf::from(
@@ -301,8 +295,10 @@ fn parse_args() -> anyhow::Result<Args> {
             }
             "--jwt-jwks-refresh-secs" => {
                 let s = it.next().context("--jwt-jwks-refresh-secs expects N")?;
-                http_jwt_jwks_refresh_secs =
-                    Some(s.parse().with_context(|| format!("--jwt-jwks-refresh-secs {s:?}"))?);
+                http_jwt_jwks_refresh_secs = Some(
+                    s.parse()
+                        .with_context(|| format!("--jwt-jwks-refresh-secs {s:?}"))?,
+                );
             }
             "--tls-cert-file" => {
                 http_tls_cert_file = Some(PathBuf::from(
@@ -327,11 +323,11 @@ fn parse_args() -> anyhow::Result<Args> {
         }
     }
 
-    transport = match transport_kind.unwrap_or("stdio") {
+    let transport = match transport_kind.unwrap_or("stdio") {
         "stdio" => Some(Transport::Stdio),
         "http" => {
             let bind = http_bind.unwrap_or_else(|| "127.0.0.1:7440".parse().unwrap());
-            Some(Transport::Http(HttpArgs {
+            Some(Transport::Http(Box::new(HttpArgs {
                 bind,
                 auth: http_auth,
                 bearer_token_file: http_token_file,
@@ -348,7 +344,7 @@ fn parse_args() -> anyhow::Result<Args> {
                 tls_cert_file: http_tls_cert_file,
                 tls_key_file: http_tls_key_file,
                 client_ca_file: http_client_ca_file,
-            }))
+            })))
         }
         _ => unreachable!(),
     };
@@ -407,7 +403,7 @@ fn print_help() {
 }
 
 fn init_tracing() {
-    use tracing_subscriber::{EnvFilter, fmt, prelude::*};
+    use tracing_subscriber::{fmt, prelude::*, EnvFilter};
     let _ = tracing_subscriber::registry()
         .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
         .with(fmt::layer().json().with_writer(std::io::stderr))

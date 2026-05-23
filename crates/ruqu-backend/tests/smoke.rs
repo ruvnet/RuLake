@@ -12,7 +12,10 @@ use ruvector_rulake_ruqu::{Circuit, Gate, RuquStateVectorBackend};
 fn bell_circuit() -> Circuit {
     let mut c = Circuit::new("bell", 2);
     c.push(Gate::H { q: 0 });
-    c.push(Gate::Cx { control: 0, target: 1 });
+    c.push(Gate::Cx {
+        control: 0,
+        target: 1,
+    });
     c
 }
 
@@ -22,7 +25,10 @@ fn statevector_backend_adapter_contract_holds() {
     let bundle = be.execute("bell-pair", &bell_circuit()).unwrap();
 
     assert_eq!(be.id(), "ruqu-fixture");
-    assert_eq!(be.list_collections().unwrap(), vec!["bell-pair".to_string()]);
+    assert_eq!(
+        be.list_collections().unwrap(),
+        vec!["bell-pair".to_string()]
+    );
     assert_eq!(bundle.memory_class.as_deref(), Some("quantum"));
 
     let batch = be.pull_vectors("bell-pair").unwrap();
@@ -87,5 +93,8 @@ fn generation_bump_invalidates_cache() {
 
     let _ = lake.search_one("ruqu-fixture", "bell-pair", &q, 3).unwrap();
     let primes_after = lake.cache_stats().primes;
-    assert!(primes_after > primes_before, "Fresh + gen bump must invalidate");
+    assert!(
+        primes_after > primes_before,
+        "Fresh + gen bump must invalidate"
+    );
 }

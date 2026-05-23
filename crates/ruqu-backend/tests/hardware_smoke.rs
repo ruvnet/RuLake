@@ -11,18 +11,25 @@ use ruvector_rulake_ruqu::{Circuit, Gate, RuquHardwareStubBackend, RuquStateVect
 fn bell_circuit() -> Circuit {
     let mut c = Circuit::new("bell-hw", 2);
     c.push(Gate::H { q: 0 });
-    c.push(Gate::Cx { control: 0, target: 1 });
+    c.push(Gate::Cx {
+        control: 0,
+        target: 1,
+    });
     c
 }
 
 #[test]
 fn hardware_stub_runs_bell_pair() {
     let be = RuquHardwareStubBackend::new("ruqu-hw-fixture", 0.02, 1);
-    let bundle = be.execute("bell-pair", &bell_circuit())
+    let bundle = be
+        .execute("bell-pair", &bell_circuit())
         .expect("Hardware stub execute should succeed for Bell pair");
 
     assert_eq!(be.id(), "ruqu-hw-fixture");
-    assert_eq!(be.list_collections().unwrap(), vec!["bell-pair".to_string()]);
+    assert_eq!(
+        be.list_collections().unwrap(),
+        vec!["bell-pair".to_string()]
+    );
     assert_eq!(bundle.memory_class.as_deref(), Some("quantum"));
 
     let batch = be.pull_vectors("bell-pair").unwrap();
@@ -78,13 +85,20 @@ fn hardware_stub_round_trips_through_rulake_cache() {
     lake.register_backend(be).unwrap();
 
     let q = vec![1.0_f32, 0.0]; // dim=2 query
-    let hits1 = lake.search_one("ruqu-hw-fixture", "bell-pair", &q, 3).unwrap();
+    let hits1 = lake
+        .search_one("ruqu-hw-fixture", "bell-pair", &q, 3)
+        .unwrap();
     assert_eq!(hits1.len(), 3);
 
     // Cache hit on the second call.
-    let hits2 = lake.search_one("ruqu-hw-fixture", "bell-pair", &q, 3).unwrap();
+    let hits2 = lake
+        .search_one("ruqu-hw-fixture", "bell-pair", &q, 3)
+        .unwrap();
     assert_eq!(hits1, hits2);
 
     let stats = lake.cache_stats();
-    assert_eq!(stats.primes, 1, "second call must hit the cache, not re-prime");
+    assert_eq!(
+        stats.primes, 1,
+        "second call must hit the cache, not re-prime"
+    );
 }

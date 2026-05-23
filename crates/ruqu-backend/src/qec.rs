@@ -129,9 +129,7 @@ pub fn plan_surface_code(
     };
 
     // Total physical qubits needed for this logical circuit.
-    let total = footprint_per_logical
-        .checked_mul(logical.n_qubits.max(1) as usize)
-        .unwrap_or(usize::MAX);
+    let total = footprint_per_logical.saturating_mul(logical.n_qubits.max(1) as usize);
 
     if total > max_physical_qubits {
         return Err(QecError::DistanceTooLargeForFootprint {
@@ -181,8 +179,14 @@ fn build_encoding(logical: &Circuit, distance: u8, physical_qubits: usize) -> Ci
             for i in 0..n_logical {
                 let base = (3 * i) as u8;
                 if (base as usize) + 2 < physical_qubits {
-                    c.push(Gate::Cx { control: base, target: base + 1 });
-                    c.push(Gate::Cx { control: base, target: base + 2 });
+                    c.push(Gate::Cx {
+                        control: base,
+                        target: base + 1,
+                    });
+                    c.push(Gate::Cx {
+                        control: base,
+                        target: base + 2,
+                    });
                 }
             }
         }
@@ -212,7 +216,10 @@ fn build_encoding(logical: &Circuit, distance: u8, physical_qubits: usize) -> Ci
                         && (data as usize) < physical_qubits
                         && ancilla != data
                     {
-                        c.push(Gate::Cx { control: ancilla, target: data });
+                        c.push(Gate::Cx {
+                            control: ancilla,
+                            target: data,
+                        });
                     }
                 }
             }
@@ -237,8 +244,14 @@ fn build_syndrome_round(logical: &Circuit, distance: u8, physical_qubits: usize)
                     // Compare data[base] vs data[base+1] via a CX
                     // chain into a virtual ancilla — for v0.2 we re-
                     // use data[base+2] as the parity register.
-                    c.push(Gate::Cx { control: base, target: base + 2 });
-                    c.push(Gate::Cx { control: base + 1, target: base + 2 });
+                    c.push(Gate::Cx {
+                        control: base,
+                        target: base + 2,
+                    });
+                    c.push(Gate::Cx {
+                        control: base + 1,
+                        target: base + 2,
+                    });
                 }
             }
         }
@@ -255,7 +268,10 @@ fn build_syndrome_round(logical: &Circuit, distance: u8, physical_qubits: usize)
                         && (data as usize) < physical_qubits
                         && ancilla != data
                     {
-                        c.push(Gate::Cx { control: data, target: ancilla });
+                        c.push(Gate::Cx {
+                            control: data,
+                            target: ancilla,
+                        });
                     }
                 }
                 for j in 0..half {

@@ -110,18 +110,15 @@ pub struct AllowBlock {
     pub caps: Vec<String>,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize)]
 #[serde(tag = "mode", rename_all = "PascalCase")]
 pub enum ConsistencyConfig {
+    #[default]
     Fresh,
-    Eventual { ttl_ms: u64 },
+    Eventual {
+        ttl_ms: u64,
+    },
     Frozen,
-}
-
-impl Default for ConsistencyConfig {
-    fn default() -> Self {
-        Self::Fresh
-    }
 }
 
 impl ConsistencyConfig {

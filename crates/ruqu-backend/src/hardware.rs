@@ -112,13 +112,19 @@ impl RuquHardwareStubBackend {
     }
 
     /// Borrow the [`HardwareConfig`] currently attached.
-    pub fn config(&self) -> &HardwareConfig { &self.config }
+    pub fn config(&self) -> &HardwareConfig {
+        &self.config
+    }
 
     /// The per-gate depolarising probability the stub will apply.
-    pub fn noise_p(&self) -> f64 { self.noise_p }
+    pub fn noise_p(&self) -> f64 {
+        self.noise_p
+    }
 
     /// The seed pinned at construction.
-    pub fn seed(&self) -> u64 { self.seed }
+    pub fn seed(&self) -> u64 {
+        self.seed
+    }
 
     /// Simulate `circuit` through the exact StateVector kernel, apply
     /// the synthetic noise channel, store the (noisy) state under
@@ -168,20 +174,28 @@ impl RuquHardwareStubBackend {
 }
 
 impl BackendAdapter for RuquHardwareStubBackend {
-    fn id(&self) -> &str { &self.id }
+    fn id(&self) -> &str {
+        &self.id
+    }
 
     fn list_collections(&self) -> Result<Vec<CollectionId>> {
-        Ok(self.executions.read().expect("poisoned").keys().cloned().collect())
+        Ok(self
+            .executions
+            .read()
+            .expect("poisoned")
+            .keys()
+            .cloned()
+            .collect())
     }
 
     fn pull_vectors(&self, collection: &str) -> Result<PulledBatch> {
         let g = self.executions.read().expect("poisoned");
-        let c = g.get(collection).ok_or_else(|| {
-            rulake::error::RuLakeError::UnknownCollection {
+        let c = g
+            .get(collection)
+            .ok_or_else(|| rulake::error::RuLakeError::UnknownCollection {
                 backend: self.id.clone(),
                 collection: collection.to_string(),
-            }
-        })?;
+            })?;
         Ok(PulledBatch {
             collection: collection.to_string(),
             ids: c.ids.clone(),
@@ -193,12 +207,12 @@ impl BackendAdapter for RuquHardwareStubBackend {
 
     fn generation(&self, collection: &str) -> Result<u64> {
         let g = self.executions.read().expect("poisoned");
-        let c = g.get(collection).ok_or_else(|| {
-            rulake::error::RuLakeError::UnknownCollection {
+        let c = g
+            .get(collection)
+            .ok_or_else(|| rulake::error::RuLakeError::UnknownCollection {
                 backend: self.id.clone(),
                 collection: collection.to_string(),
-            }
-        })?;
+            })?;
         Ok(c.generation)
     }
 }
@@ -214,7 +228,9 @@ impl BackendAdapter for RuquHardwareStubBackend {
 /// n_gates)` so two replicas produce identical output.
 fn apply_synthetic_noise(state: &[C], noise_p: f64, seed: u64, n_gates: u64) -> Vec<C> {
     let p_total = 1.0 - (1.0 - noise_p).powi(n_gates as i32);
-    let mut prng = seed.wrapping_add(0x9E37_79B9_7F4A_7C15).wrapping_add(n_gates);
+    let mut prng = seed
+        .wrapping_add(0x9E37_79B9_7F4A_7C15)
+        .wrapping_add(n_gates);
     let mut out: Vec<C> = state
         .iter()
         .map(|amp| {
@@ -262,7 +278,10 @@ mod tests {
     fn noise_zero_keeps_unit_norm() {
         let mut c = Circuit::new("bell-hw", 2);
         c.push(Gate::H { q: 0 });
-        c.push(Gate::Cx { control: 0, target: 1 });
+        c.push(Gate::Cx {
+            control: 0,
+            target: 1,
+        });
         let exact = state_vector::simulate(&c);
         let noisy = apply_synthetic_noise(&exact, 0.0, 7, c.gates.len() as u64);
         let s: f64 = noisy.iter().map(|c| c.re * c.re + c.im * c.im).sum();
@@ -273,7 +292,10 @@ mod tests {
     fn noise_is_deterministic_for_same_seed() {
         let mut c = Circuit::new("bell-hw", 2);
         c.push(Gate::H { q: 0 });
-        c.push(Gate::Cx { control: 0, target: 1 });
+        c.push(Gate::Cx {
+            control: 0,
+            target: 1,
+        });
         let exact = state_vector::simulate(&c);
         let a = apply_synthetic_noise(&exact, 0.05, 42, c.gates.len() as u64);
         let b = apply_synthetic_noise(&exact, 0.05, 42, c.gates.len() as u64);
@@ -291,8 +313,7 @@ mod tests {
             calibration_tag: Some("2026-04-01".into()),
             runtime_class: Some("session".into()),
         };
-        let be = RuquHardwareStubBackend::new("hw", 0.01, 9)
-            .with_config(cfg);
+        let be = RuquHardwareStubBackend::new("hw", 0.01, 9).with_config(cfg);
         assert_eq!(be.config().provider.as_deref(), Some("ibmq"));
         assert_eq!(be.noise_p(), 0.01);
         assert_eq!(be.seed(), 9);

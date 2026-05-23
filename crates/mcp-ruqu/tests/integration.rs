@@ -6,10 +6,8 @@
 //!   2. R-2 cap enforcement: simulate with `n_qubits = 20` → assert
 //!      response (here: McpError) carries `RUQU_QUBIT_CAP_EXCEEDED`.
 
-use ruvector_rulake_mcp_ruqu::{
-    RuquMcpServer, SimulateRequest, VerifyRequest,
-};
 use ruvector_rulake_mcp_ruqu::server::{WireCircuit, WireGate};
+use ruvector_rulake_mcp_ruqu::{RuquMcpServer, SimulateRequest, VerifyRequest};
 
 /// 1. Bell-pair simulate → verify round-trip.
 #[tokio::test]
@@ -20,7 +18,10 @@ async fn bell_pair_simulate_then_verify_matches() {
         n_qubits: 2,
         gates: vec![
             WireGate::H { q: 0 },
-            WireGate::Cx { control: 0, target: 1 },
+            WireGate::Cx {
+                control: 0,
+                target: 1,
+            },
         ],
         id: "bell-pair-integration".to_string(),
     };

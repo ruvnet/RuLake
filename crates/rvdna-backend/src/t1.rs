@@ -129,17 +129,14 @@ impl RvdnaT1Backend {
                 "rvdna-t1: dim must be > 0".into(),
             ));
         }
-        if vectors_offset % std::mem::align_of::<f32>() != 0 {
+        if !vectors_offset.is_multiple_of(std::mem::align_of::<f32>()) {
             return Err(RuLakeError::InvalidParameter(format!(
                 "rvdna-t1: vectors_offset={vectors_offset} not f32-aligned"
             )));
         }
         let path_buf = path.as_ref().to_path_buf();
         let file = std::fs::File::open(&path_buf).map_err(|e| {
-            RuLakeError::InvalidParameter(format!(
-                "rvdna-t1: open {}: {e}",
-                path_buf.display()
-            ))
+            RuLakeError::InvalidParameter(format!("rvdna-t1: open {}: {e}", path_buf.display()))
         })?;
         // SAFETY: `memmap2::Mmap::map` is `unsafe` because the OS could
         // mutate the mapped pages out from under us if another process
@@ -151,10 +148,7 @@ impl RvdnaT1Backend {
         // this single line.
         #[allow(unsafe_code)]
         let mmap = unsafe { Mmap::map(&file) }.map_err(|e| {
-            RuLakeError::InvalidParameter(format!(
-                "rvdna-t1: mmap {}: {e}",
-                path_buf.display()
-            ))
+            RuLakeError::InvalidParameter(format!("rvdna-t1: mmap {}: {e}", path_buf.display()))
         })?;
 
         // Bounds-check the declared region against the mapped length.
@@ -167,9 +161,7 @@ impl RvdnaT1Backend {
                 ))
             })?;
         let vectors_end = vectors_offset.checked_add(vectors_bytes).ok_or_else(|| {
-            RuLakeError::InvalidParameter(
-                "rvdna-t1: vectors-region offset+size overflow".into(),
-            )
+            RuLakeError::InvalidParameter("rvdna-t1: vectors-region offset+size overflow".into())
         })?;
         if vectors_end > mmap.len() {
             return Err(RuLakeError::InvalidParameter(format!(
@@ -181,14 +173,10 @@ impl RvdnaT1Backend {
             let ids_bytes = n_vectors
                 .checked_mul(std::mem::size_of::<u64>())
                 .ok_or_else(|| {
-                    RuLakeError::InvalidParameter(
-                        "rvdna-t1: ids-region size overflow".into(),
-                    )
+                    RuLakeError::InvalidParameter("rvdna-t1: ids-region size overflow".into())
                 })?;
             let ids_end = ids_offset.checked_add(ids_bytes).ok_or_else(|| {
-                RuLakeError::InvalidParameter(
-                    "rvdna-t1: ids-region offset+size overflow".into(),
-                )
+                RuLakeError::InvalidParameter("rvdna-t1: ids-region offset+size overflow".into())
             })?;
             if ids_end > mmap.len() {
                 return Err(RuLakeError::InvalidParameter(format!(
@@ -196,7 +184,7 @@ impl RvdnaT1Backend {
                     mmap.len()
                 )));
             }
-            if ids_offset % std::mem::align_of::<u64>() != 0 {
+            if !ids_offset.is_multiple_of(std::mem::align_of::<u64>()) {
                 return Err(RuLakeError::InvalidParameter(format!(
                     "rvdna-t1: ids_offset={ids_offset} not u64-aligned"
                 )));
@@ -255,10 +243,12 @@ impl BackendAdapter for RvdnaT1Backend {
 
     fn pull_vectors(&self, collection: &str) -> Result<PulledBatch> {
         let g = self.mappings.read().expect("poisoned");
-        let m = g.get(collection).ok_or_else(|| RuLakeError::UnknownCollection {
-            backend: self.id.clone(),
-            collection: collection.to_string(),
-        })?;
+        let m = g
+            .get(collection)
+            .ok_or_else(|| RuLakeError::UnknownCollection {
+                backend: self.id.clone(),
+                collection: collection.to_string(),
+            })?;
 
         // Decode the f32 region. `bytemuck::try_cast_slice` returns an
         // error if the slice isn't aligned / sized correctly — we
@@ -302,10 +292,12 @@ impl BackendAdapter for RvdnaT1Backend {
 
     fn generation(&self, collection: &str) -> Result<u64> {
         let g = self.mappings.read().expect("poisoned");
-        let m = g.get(collection).ok_or_else(|| RuLakeError::UnknownCollection {
-            backend: self.id.clone(),
-            collection: collection.to_string(),
-        })?;
+        let m = g
+            .get(collection)
+            .ok_or_else(|| RuLakeError::UnknownCollection {
+                backend: self.id.clone(),
+                collection: collection.to_string(),
+            })?;
         Ok(m.generation)
     }
 }

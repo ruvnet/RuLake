@@ -29,7 +29,12 @@ fn fixture_collection(seed: u64, n: usize, dim: usize) -> RvdnaCollection {
     let vectors: Vec<Vec<f32>> = (0..n)
         .map(|_| (0..dim).map(|_| next() * 2.0 - 1.0).collect())
         .collect();
-    RvdnaCollection { ids, vectors, dim, generation: 1 }
+    RvdnaCollection {
+        ids,
+        vectors,
+        dim,
+        generation: 1,
+    }
 }
 
 fn bench_pull_vectors(c: &mut Criterion) {

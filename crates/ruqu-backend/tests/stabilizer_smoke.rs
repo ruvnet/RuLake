@@ -11,18 +11,25 @@ use ruvector_rulake_ruqu::{Circuit, Gate, RuquStabilizerBackend, RuquStateVector
 fn bell_circuit() -> Circuit {
     let mut c = Circuit::new("bell-stab", 2);
     c.push(Gate::H { q: 0 });
-    c.push(Gate::Cx { control: 0, target: 1 });
+    c.push(Gate::Cx {
+        control: 0,
+        target: 1,
+    });
     c
 }
 
 #[test]
 fn bell_pair_through_stabilizer() {
     let be = RuquStabilizerBackend::new("ruqu-stab-fixture");
-    let bundle = be.execute("bell-pair", &bell_circuit())
+    let bundle = be
+        .execute("bell-pair", &bell_circuit())
         .expect("Stabilizer execute should succeed for an all-Clifford circuit");
 
     assert_eq!(be.id(), "ruqu-stab-fixture");
-    assert_eq!(be.list_collections().unwrap(), vec!["bell-pair".to_string()]);
+    assert_eq!(
+        be.list_collections().unwrap(),
+        vec!["bell-pair".to_string()]
+    );
     assert_eq!(bundle.memory_class.as_deref(), Some("quantum"));
 
     let batch = be.pull_vectors("bell-pair").unwrap();
@@ -68,15 +75,22 @@ fn stabilizer_round_trips_through_rulake_cache() {
 
     // Query in the packed-row dim (7 for n=2): [coeff_re=1, coeff_im=0, X bits, Z bits, r].
     let q = vec![1.0_f32, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
-    let hits1 = lake.search_one("ruqu-stab-fixture", "bell-pair", &q, 3).unwrap();
+    let hits1 = lake
+        .search_one("ruqu-stab-fixture", "bell-pair", &q, 3)
+        .unwrap();
     assert_eq!(hits1.len(), 3);
 
     // Cache hit on the second call.
-    let hits2 = lake.search_one("ruqu-stab-fixture", "bell-pair", &q, 3).unwrap();
+    let hits2 = lake
+        .search_one("ruqu-stab-fixture", "bell-pair", &q, 3)
+        .unwrap();
     assert_eq!(hits1, hits2);
 
     let stats = lake.cache_stats();
-    assert_eq!(stats.primes, 1, "second call must hit the cache, not re-prime");
+    assert_eq!(
+        stats.primes, 1,
+        "second call must hit the cache, not re-prime"
+    );
 }
 
 /// Concordance test (ADR-008 §G4): the StateVector and Stabilizer

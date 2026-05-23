@@ -43,6 +43,6 @@ pub mod server;
 pub use audit::{AuditEntry, AuditSink, PolicyDecision};
 pub use http::{AllowBearerOnPublic, AuthMode, BearerAuth, InsecureAllowNoAuth};
 pub use server::{
-    ReplayResponse, RuquMcpServer, SimulateRequest, SimulateResponse, StubRequest,
-    StubResponse, VerifyRequest, VerifyResponse,
+    ReplayResponse, RuquMcpServer, SimulateRequest, SimulateResponse, StubRequest, StubResponse,
+    VerifyRequest, VerifyResponse,
 };

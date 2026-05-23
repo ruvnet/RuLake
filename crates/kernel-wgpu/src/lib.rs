@@ -263,7 +263,13 @@ impl WgpuKernel {
     /// distance buffer downloaded back to host memory.
     ///
     /// `dim` and `n` are passed as a uniform; both must fit in `u32`.
-    fn run_l2_dispatch(&self, query: &[f32], candidates_flat: &[f32], dim: u32, n: u32) -> Vec<f32> {
+    fn run_l2_dispatch(
+        &self,
+        query: &[f32],
+        candidates_flat: &[f32],
+        dim: u32,
+        n: u32,
+    ) -> Vec<f32> {
         let q_buf = self
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {

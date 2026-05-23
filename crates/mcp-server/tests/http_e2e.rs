@@ -14,7 +14,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use rulake::{LocalBackend, RuLake, BackendAdapter};
+use rulake::{BackendAdapter, LocalBackend, RuLake};
 use ruvector_rulake_mcp::{
     AllowBearerOnPublic, AuthMode, BearerAuth, InsecureAllowNoAuth, RuLakeMcpServer,
 };
@@ -31,13 +31,7 @@ fn make_server() -> RuLakeMcpServer {
     .unwrap();
     let dyn_be: Arc<dyn BackendAdapter> = be;
     lake.register_backend(dyn_be).unwrap();
-    RuLakeMcpServer::from_lake(
-        Arc::new(lake),
-        "Fresh".into(),
-        vec!["local".into()],
-        64,
-    )
-    .unwrap()
+    RuLakeMcpServer::from_lake(Arc::new(lake), "Fresh".into(), vec!["local".into()], 64).unwrap()
 }
 
 #[tokio::test]
@@ -69,7 +63,9 @@ async fn http_serve_starts_on_loopback_with_no_auth() {
     // listener accepting at all proves the transport is up.
     let mut conn = tokio::net::TcpStream::connect(bind).await.unwrap();
     use tokio::io::AsyncWriteExt;
-    conn.write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n").await.unwrap();
+    conn.write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+        .await
+        .unwrap();
     use tokio::io::AsyncReadExt;
     let mut buf = vec![0u8; 4096];
     let n = tokio::time::timeout(Duration::from_secs(2), conn.read(&mut buf))
@@ -152,10 +148,7 @@ async fn bearer_auth_rejects_wrong_token() {
     use http::HeaderMap;
     let bearer = BearerAuth::new("right");
     let mut headers = HeaderMap::new();
-    headers.insert(
-        http::header::AUTHORIZATION,
-        "Bearer wrong".parse().unwrap(),
-    );
+    headers.insert(http::header::AUTHORIZATION, "Bearer wrong".parse().unwrap());
     let err = bearer.verify(&headers).unwrap_err();
     assert_eq!(err, http::StatusCode::UNAUTHORIZED);
 }
@@ -200,7 +193,10 @@ async fn cors_preflight_returns_204_with_browser_friendly_headers() {
 
     let client = reqwest::Client::new();
     let resp = client
-        .request(reqwest::Method::OPTIONS, format!("http://127.0.0.1:{port}/"))
+        .request(
+            reqwest::Method::OPTIONS,
+            format!("http://127.0.0.1:{port}/"),
+        )
         .header("Origin", "http://127.0.0.1:4173")
         .header("Access-Control-Request-Method", "POST")
         .header(
@@ -277,7 +273,7 @@ async fn cors_preflight_returns_204_with_browser_friendly_headers() {
 #[ignore = "rmcp Streamable HTTP SSE response stays open on keepalives; needs a proper SSE consumer to read the tools/list result. Contract verified by tools_list_filtered_by_capability_set."]
 #[tokio::test(flavor = "multi_thread")]
 async fn jwt_scope_downgrade_filters_tools_list_on_the_wire() {
-    use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
+    use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
     use ruvector_rulake_mcp::auth::JwtKey;
     use ruvector_rulake_mcp::{
         AllowBearerOnPublic, CapabilitySet, InsecureAllowNoAuth, JwtAuth, JwtConfig,
@@ -440,8 +436,8 @@ async fn jwt_scope_downgrade_filters_tools_list_on_the_wire() {
                 .lines()
                 .find_map(|l| l.strip_prefix("data: "))
                 .unwrap_or(body.as_str());
-            let v: serde_json::Value = serde_json::from_str(json_str)
-                .unwrap_or_else(|_| serde_json::json!({}));
+            let v: serde_json::Value =
+                serde_json::from_str(json_str).unwrap_or_else(|_| serde_json::json!({}));
             v.get("result")
                 .and_then(|r| r.get("tools"))
                 .and_then(|t| t.as_array())
@@ -479,7 +475,7 @@ fn make_admin_server() -> ruvector_rulake_mcp::RuLakeMcpServer {
 }
 
 fn make_lake() -> rulake::RuLake {
-    use rulake::{LocalBackend, RuLake, BackendAdapter};
+    use rulake::{BackendAdapter, LocalBackend, RuLake};
     let lake = RuLake::new(20, 42);
     let be = std::sync::Arc::new(LocalBackend::new("local"));
     be.put_collection(

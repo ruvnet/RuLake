@@ -76,7 +76,7 @@ pub const MAX_QUBITS_TN: u8 = 128;
 /// shallow depth, etc.) without breaking the bank on 64-qubit states.
 pub const DEFAULT_BOND_DIM: usize = 16;
 
-const FRAC_1_SQRT_2: f64 = 0.7071067811865476;
+use std::f64::consts::FRAC_1_SQRT_2;
 
 /// One MPS site tensor — rank 3 with axes
 /// `[bond_left, physical (=2), bond_right]`.
@@ -189,8 +189,8 @@ impl Mps {
             for r in 0..cr {
                 let v0 = t[[l, 0, r]];
                 let v1 = t[[l, 1, r]];
-                out[[l, 0, r]] = gate[0][0].mul(v0).add(gate[0][1].mul(v1));
-                out[[l, 1, r]] = gate[1][0].mul(v0).add(gate[1][1].mul(v1));
+                out[[l, 0, r]] = gate[0][0] * v0 + gate[0][1] * v1;
+                out[[l, 1, r]] = gate[1][0] * v0 + gate[1][1] * v1;
             }
         }
         *t = out;
@@ -221,7 +221,7 @@ impl Mps {
                     for s2 in 0..2 {
                         let mut acc = C::zero();
                         for m in 0..cm {
-                            acc = acc.add(left[[l, s1, m]].mul(right[[m, s2, r]]));
+                            acc = acc + left[[l, s1, m]] * right[[m, s2, r]];
                         }
                         merged[[l, s1, s2, r]] = acc;
                     }
@@ -240,9 +240,11 @@ impl Mps {
                     merged[[l, 1, 0, r]],
                     merged[[l, 1, 1, r]],
                 ];
-                for i in 0..4 {
+                for (i, gate_row) in gate.iter().enumerate() {
                     let mut acc = C::zero();
-                    for j in 0..4 { acc = acc.add(gate[i][j].mul(v[j])); }
+                    for j in 0..4 {
+                        acc = acc + gate_row[j] * v[j];
+                    }
                     let s1 = i >> 1;
                     let s2 = i & 1;
                     after[[l, s1, s2, r]] = acc;
@@ -305,7 +307,9 @@ impl Mps {
     /// two-qubit gate that can grow the bond dimension; we rely on
     /// the bond cap to keep growth bounded.
     pub fn apply_2q(&mut self, q1: u8, q2: u8, gate: [[C; 4]; 4]) -> f64 {
-        if q1 == q2 { return 0.0; }
+        if q1 == q2 {
+            return 0.0;
+        }
         let (lo, hi, swap_orientation) = if q1 < q2 {
             (q1, q2, false)
         } else {
@@ -319,7 +323,11 @@ impl Mps {
         // Now the gate's two operands sit on (lo, lo+1). If the
         // caller's q1 > q2 we have to swap operands of the gate so
         // (s1, s2) means (q1, q2) the way the caller expects.
-        let final_gate = if swap_orientation { swap_gate_axes(&gate) } else { gate };
+        let final_gate = if swap_orientation {
+            swap_gate_axes(&gate)
+        } else {
+            gate
+        };
         err_acc += self.apply_2q_adjacent(lo, final_gate);
         // SWAP everything back.
         for k in lo + 1..hi {
@@ -352,7 +360,7 @@ impl Mps {
                     for j in 0..cr {
                         let mut acc = C::zero();
                         for k in 0..cl {
-                            acc = acc.add(row[[i, k]].mul(slice[[k, j]]));
+                            acc = acc + row[[i, k]] * slice[[k, j]];
                         }
                         next[[i, j]] = acc;
                     }
@@ -383,18 +391,26 @@ pub fn simulate(circuit: &Circuit, bond_dim_cap: usize) -> Result<Mps, TensorNet
 
     let in_range = |q: u8| -> Result<u8, TensorNetworkError> {
         if q >= n {
-            Err(TensorNetworkError::QubitIndexOutOfRange { qubit: q, n_qubits: n })
-        } else { Ok(q) }
+            Err(TensorNetworkError::QubitIndexOutOfRange {
+                qubit: q,
+                n_qubits: n,
+            })
+        } else {
+            Ok(q)
+        }
     };
 
     for g in &circuit.gates {
         match *g {
             Gate::H { q } => {
                 let _ = in_range(q)?;
-                mps.apply_1q(q, [
-                    [C::new(FRAC_1_SQRT_2, 0.0), C::new( FRAC_1_SQRT_2, 0.0)],
-                    [C::new(FRAC_1_SQRT_2, 0.0), C::new(-FRAC_1_SQRT_2, 0.0)],
-                ]);
+                mps.apply_1q(
+                    q,
+                    [
+                        [C::new(FRAC_1_SQRT_2, 0.0), C::new(FRAC_1_SQRT_2, 0.0)],
+                        [C::new(FRAC_1_SQRT_2, 0.0), C::new(-FRAC_1_SQRT_2, 0.0)],
+                    ],
+                );
             }
             Gate::X { q } => {
                 let _ = in_range(q)?;
@@ -402,10 +418,13 @@ pub fn simulate(circuit: &Circuit, bond_dim_cap: usize) -> Result<Mps, TensorNet
             }
             Gate::Y { q } => {
                 let _ = in_range(q)?;
-                mps.apply_1q(q, [
-                    [C::zero(),         C::new(0.0, -1.0)],
-                    [C::new(0.0, 1.0),  C::zero()],
-                ]);
+                mps.apply_1q(
+                    q,
+                    [
+                        [C::zero(), C::new(0.0, -1.0)],
+                        [C::new(0.0, 1.0), C::zero()],
+                    ],
+                );
             }
             Gate::Z { q } => {
                 let _ = in_range(q)?;
@@ -424,7 +443,7 @@ pub fn simulate(circuit: &Circuit, bond_dim_cap: usize) -> Result<Mps, TensorNet
                 let _ = in_range(q)?;
                 let half = theta / 2.0;
                 let neg = C::new(half.cos(), -half.sin());
-                let pos = C::new(half.cos(),  half.sin());
+                let pos = C::new(half.cos(), half.sin());
                 mps.apply_1q(q, [[neg, C::zero()], [C::zero(), pos]]);
             }
             Gate::Cx { control, target } => {
@@ -449,7 +468,9 @@ pub fn simulate(circuit: &Circuit, bond_dim_cap: usize) -> Result<Mps, TensorNet
 /// ruLake's RaBitQ layer sees a uniform `dim`.
 pub fn to_pulled_batch_form(mps: &Mps) -> Vec<Vec<f32>> {
     // Determine max payload size = 2 + 2 * max(χL · 2 · χR).
-    let max_elems = mps.tensors.iter()
+    let max_elems = mps
+        .tensors
+        .iter()
         .map(|t| t.dim().0 * t.dim().1 * t.dim().2)
         .max()
         .unwrap_or(0);
@@ -464,7 +485,9 @@ pub fn to_pulled_batch_form(mps: &Mps) -> Vec<Vec<f32>> {
             row.push(c.im as f32);
         }
         // Zero-pad to row_len.
-        while row.len() < row_len { row.push(0.0); }
+        while row.len() < row_len {
+            row.push(0.0);
+        }
         out.push(row);
     }
     out
@@ -477,18 +500,15 @@ fn scale_real(c: C, s: f64) -> C {
 }
 
 /// `Cᴴ` — complex-conjugate, no transpose.
-fn cconj(c: C) -> C { C::new(c.re, -c.im) }
+fn cconj(c: C) -> C {
+    C::new(c.re, -c.im)
+}
 
 /// 4×4 SWAP gate. Standard basis order |s1 s2⟩ ∈ {|00⟩, |01⟩, |10⟩, |11⟩}.
 fn swap_gate() -> [[C; 4]; 4] {
     let z = C::zero();
     let o = C::one();
-    [
-        [o, z, z, z],
-        [z, z, o, z],
-        [z, o, z, z],
-        [z, z, z, o],
-    ]
+    [[o, z, z, z], [z, z, o, z], [z, o, z, z], [z, z, z, o]]
 }
 
 /// CNOT in the basis order |s1 s2⟩ where the first index is the
@@ -501,21 +521,11 @@ fn cnot_gate(control_is_left: bool) -> [[C; 4]; 4] {
     if control_is_left {
         // CNOT with control on s1, target on s2:
         // |00⟩→|00⟩, |01⟩→|01⟩, |10⟩→|11⟩, |11⟩→|10⟩.
-        [
-            [o, z, z, z],
-            [z, o, z, z],
-            [z, z, z, o],
-            [z, z, o, z],
-        ]
+        [[o, z, z, z], [z, o, z, z], [z, z, z, o], [z, z, o, z]]
     } else {
         // CNOT with control on s2, target on s1:
         // |00⟩→|00⟩, |01⟩→|11⟩, |10⟩→|10⟩, |11⟩→|01⟩.
-        [
-            [o, z, z, z],
-            [z, z, z, o],
-            [z, z, o, z],
-            [z, o, z, z],
-        ]
+        [[o, z, z, z], [z, z, z, o], [z, z, o, z], [z, o, z, z]]
     }
 }
 
@@ -561,7 +571,7 @@ fn svd_complex(a: &Array2<C>) -> (Array2<C>, Vec<f64>, Array2<C>) {
             for j in 0..n {
                 let mut acc = C::zero();
                 for r in 0..m {
-                    acc = acc.add(cconj(a[[r, i]]).mul(a[[r, j]]));
+                    acc = acc + cconj(a[[r, i]]) * a[[r, j]];
                 }
                 b[[i, j]] = acc;
             }
@@ -569,7 +579,11 @@ fn svd_complex(a: &Array2<C>) -> (Array2<C>, Vec<f64>, Array2<C>) {
         let (eigvals, eigvecs) = jacobi_eigen_hermitian(&b);
         // Sort eigenpairs by descending eigenvalue.
         let mut order: Vec<usize> = (0..n).collect();
-        order.sort_by(|&a, &b| eigvals[b].partial_cmp(&eigvals[a]).unwrap_or(std::cmp::Ordering::Equal));
+        order.sort_by(|&a, &b| {
+            eigvals[b]
+                .partial_cmp(&eigvals[a])
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         let mut sigma = Vec::with_capacity(k);
         let mut v = Array2::<C>::default((n, k));
@@ -578,7 +592,9 @@ fn svd_complex(a: &Array2<C>) -> (Array2<C>, Vec<f64>, Array2<C>) {
             let lam = eigvals[idx].max(0.0);
             let s = lam.sqrt();
             sigma.push(s);
-            for i in 0..n { v[[i, slot]] = eigvecs[[i, idx]]; }
+            for i in 0..n {
+                v[[i, slot]] = eigvecs[[i, idx]];
+            }
             // u_slot = A v_slot / σ_slot (if σ ≈ 0, leave column as
             // zero; the corresponding singular direction has no
             // amplitude, so MPS contraction won't read it).
@@ -586,7 +602,7 @@ fn svd_complex(a: &Array2<C>) -> (Array2<C>, Vec<f64>, Array2<C>) {
                 for r in 0..m {
                     let mut acc = C::zero();
                     for i in 0..n {
-                        acc = acc.add(a[[r, i]].mul(v[[i, slot]]));
+                        acc = acc + a[[r, i]] * v[[i, slot]];
                     }
                     u[[r, slot]] = scale_real(acc, 1.0 / s);
                 }
@@ -594,7 +610,11 @@ fn svd_complex(a: &Array2<C>) -> (Array2<C>, Vec<f64>, Array2<C>) {
         }
         // Vᴴ has rows = conjugate-transpose of v's columns.
         let mut vt = Array2::<C>::default((k, n));
-        for i in 0..k { for j in 0..n { vt[[i, j]] = cconj(v[[j, i]]); } }
+        for i in 0..k {
+            for j in 0..n {
+                vt[[i, j]] = cconj(v[[j, i]]);
+            }
+        }
         (u, sigma, vt)
     } else {
         // m < n: diagonalise C = A Aᴴ (m × m). Eigenvectors give U;
@@ -604,14 +624,18 @@ fn svd_complex(a: &Array2<C>) -> (Array2<C>, Vec<f64>, Array2<C>) {
             for j in 0..m {
                 let mut acc = C::zero();
                 for r in 0..n {
-                    acc = acc.add(a[[i, r]].mul(cconj(a[[j, r]])));
+                    acc = acc + a[[i, r]] * cconj(a[[j, r]]);
                 }
                 c_mat[[i, j]] = acc;
             }
         }
         let (eigvals, eigvecs) = jacobi_eigen_hermitian(&c_mat);
         let mut order: Vec<usize> = (0..m).collect();
-        order.sort_by(|&a, &b| eigvals[b].partial_cmp(&eigvals[a]).unwrap_or(std::cmp::Ordering::Equal));
+        order.sort_by(|&a, &b| {
+            eigvals[b]
+                .partial_cmp(&eigvals[a])
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         let mut sigma = Vec::with_capacity(k);
         let mut u = Array2::<C>::default((m, k));
@@ -620,13 +644,15 @@ fn svd_complex(a: &Array2<C>) -> (Array2<C>, Vec<f64>, Array2<C>) {
             let lam = eigvals[idx].max(0.0);
             let s = lam.sqrt();
             sigma.push(s);
-            for i in 0..m { u[[i, slot]] = eigvecs[[i, idx]]; }
+            for i in 0..m {
+                u[[i, slot]] = eigvecs[[i, idx]];
+            }
             if s > 1e-14 {
                 // Row of Vᴴ at slot = (1/s) · uᴴ_slot · A.
                 for j in 0..n {
                     let mut acc = C::zero();
                     for i in 0..m {
-                        acc = acc.add(cconj(u[[i, slot]]).mul(a[[i, j]]));
+                        acc = acc + cconj(u[[i, slot]]) * a[[i, j]];
                     }
                     vt[[slot, j]] = scale_real(acc, 1.0 / s);
                 }
@@ -647,7 +673,9 @@ fn jacobi_eigen_hermitian(h: &Array2<C>) -> (Array1<f64>, Array2<C>) {
     let mut a = h.clone();
     // Initialise V = I.
     let mut v = Array2::<C>::default((n, n));
-    for i in 0..n { v[[i, i]] = C::one(); }
+    for i in 0..n {
+        v[[i, i]] = C::one();
+    }
 
     let max_sweeps = 80;
     let tol = 1e-14;
@@ -660,12 +688,16 @@ fn jacobi_eigen_hermitian(h: &Array2<C>) -> (Array1<f64>, Array2<C>) {
                 off += a[[i, j]].norm_sq();
             }
         }
-        if off < tol { break; }
+        if off < tol {
+            break;
+        }
 
         for p in 0..n {
             for q in (p + 1)..n {
                 let apq = a[[p, q]];
-                if apq.norm_sq() < 1e-30 { continue; }
+                if apq.norm_sq() < 1e-30 {
+                    continue;
+                }
                 let app = a[[p, p]].re; // diagonal of Hermitian is real.
                 let aqq = a[[q, q]].re;
                 let modulus = apq.norm_sq().sqrt();
@@ -693,13 +725,15 @@ fn jacobi_eigen_hermitian(h: &Array2<C>) -> (Array1<f64>, Array2<C>) {
 
                 // Update off-diagonal entries in rows/cols p and q.
                 for i in 0..n {
-                    if i == p || i == q { continue; }
+                    if i == p || i == q {
+                        continue;
+                    }
                     let aip = a[[i, p]];
                     let aiq = a[[i, q]];
                     // Rotation: aip' = c·aip + s·phase·aiq.
                     //           aiq' = -s·phase_conj·aip + c·aiq.
-                    let new_aip = scale_real(aip, c_t).add(scale_real(phase.mul(aiq), s_t));
-                    let new_aiq = scale_real(phase_conj.mul(aip), -s_t).add(scale_real(aiq, c_t));
+                    let new_aip = scale_real(aip, c_t) + scale_real(phase * aiq, s_t);
+                    let new_aiq = scale_real(phase_conj * aip, -s_t) + scale_real(aiq, c_t);
                     a[[i, p]] = new_aip;
                     a[[p, i]] = cconj(new_aip);
                     a[[i, q]] = new_aiq;
@@ -710,8 +744,8 @@ fn jacobi_eigen_hermitian(h: &Array2<C>) -> (Array1<f64>, Array2<C>) {
                 for i in 0..n {
                     let vip = v[[i, p]];
                     let viq = v[[i, q]];
-                    let new_vip = scale_real(vip, c_t).add(scale_real(phase.mul(viq), s_t));
-                    let new_viq = scale_real(phase_conj.mul(vip), -s_t).add(scale_real(viq, c_t));
+                    let new_vip = scale_real(vip, c_t) + scale_real(phase * viq, s_t);
+                    let new_viq = scale_real(phase_conj * vip, -s_t) + scale_real(viq, c_t);
                     v[[i, p]] = new_vip;
                     v[[i, q]] = new_viq;
                 }
@@ -720,7 +754,9 @@ fn jacobi_eigen_hermitian(h: &Array2<C>) -> (Array1<f64>, Array2<C>) {
     }
 
     let mut eigvals = Array1::<f64>::zeros(n);
-    for i in 0..n { eigvals[i] = a[[i, i]].re; }
+    for i in 0..n {
+        eigvals[i] = a[[i, i]].re;
+    }
     (eigvals, v)
 }
 
@@ -729,7 +765,9 @@ mod tests {
     use super::*;
     use crate::circuit::{Circuit, Gate};
 
-    fn approx(a: f64, b: f64, eps: f64) -> bool { (a - b).abs() < eps }
+    fn approx(a: f64, b: f64, eps: f64) -> bool {
+        (a - b).abs() < eps
+    }
 
     #[test]
     fn zero_state_has_unit_amplitude_on_basis_zero() {
@@ -738,9 +776,9 @@ mod tests {
         assert_eq!(sv.len(), 8);
         assert!(approx(sv[0].re, 1.0, 1e-12));
         assert!(approx(sv[0].im, 0.0, 1e-12));
-        for i in 1..8 {
-            assert!(approx(sv[i].re, 0.0, 1e-12));
-            assert!(approx(sv[i].im, 0.0, 1e-12));
+        for elem in sv.iter().take(8).skip(1) {
+            assert!(approx(elem.re, 0.0, 1e-12));
+            assert!(approx(elem.im, 0.0, 1e-12));
         }
     }
 
@@ -758,16 +796,30 @@ mod tests {
     #[test]
     fn bell_pair_at_bond_dim_two() {
         let mut c = Circuit::new("bell-mps", 2);
-        c.push(Gate::H  { q: 0 });
-        c.push(Gate::Cx { control: 0, target: 1 });
+        c.push(Gate::H { q: 0 });
+        c.push(Gate::Cx {
+            control: 0,
+            target: 1,
+        });
         let mps = simulate(&c, 2).unwrap();
         let sv = mps.to_state_vector();
         let amp = FRAC_1_SQRT_2;
-        assert!(approx(sv[0b00].re, amp, 1e-10), "|00⟩ amp = {}", sv[0b00].re);
+        assert!(
+            approx(sv[0b00].re, amp, 1e-10),
+            "|00⟩ amp = {}",
+            sv[0b00].re
+        );
         assert!(approx(sv[0b01].re, 0.0, 1e-10), "|01⟩ should be zero");
         assert!(approx(sv[0b10].re, 0.0, 1e-10), "|10⟩ should be zero");
-        assert!(approx(sv[0b11].re, amp, 1e-10), "|11⟩ amp = {}", sv[0b11].re);
-        assert!(mps.truncation_error < 1e-12, "Bell pair fits exactly at χ=2");
+        assert!(
+            approx(sv[0b11].re, amp, 1e-10),
+            "|11⟩ amp = {}",
+            sv[0b11].re
+        );
+        assert!(
+            mps.truncation_error < 1e-12,
+            "Bell pair fits exactly at χ=2"
+        );
     }
 
     #[test]
@@ -793,16 +845,19 @@ mod tests {
     fn nonadjacent_cnot_via_swap_decomp() {
         // CNOT(0, 2) on |+00⟩ should give (|000⟩ + |101⟩)/√2.
         let mut c = Circuit::new("non-adj-cnot", 3);
-        c.push(Gate::H  { q: 0 });
-        c.push(Gate::Cx { control: 0, target: 2 });
+        c.push(Gate::H { q: 0 });
+        c.push(Gate::Cx {
+            control: 0,
+            target: 2,
+        });
         let mps = simulate(&c, 4).unwrap();
         let sv = mps.to_state_vector();
         let amp = FRAC_1_SQRT_2;
         assert!(approx(sv[0b000].re, amp, 1e-10), "|000⟩ amp");
         assert!(approx(sv[0b101].re, amp, 1e-10), "|101⟩ amp");
-        for i in 0..8 {
+        for (i, elem) in sv.iter().enumerate().take(8) {
             if i != 0b000 && i != 0b101 {
-                assert!(sv[i].norm_sq() < 1e-18, "basis {i:03b} should be zero");
+                assert!(elem.norm_sq() < 1e-18, "basis {i:03b} should be zero");
             }
         }
     }
@@ -810,13 +865,19 @@ mod tests {
     #[test]
     fn rejects_zero_bond_dim() {
         let c = Circuit::new("zero-bond", 1);
-        assert!(matches!(simulate(&c, 0), Err(TensorNetworkError::ZeroBondDim)));
+        assert!(matches!(
+            simulate(&c, 0),
+            Err(TensorNetworkError::ZeroBondDim)
+        ));
     }
 
     #[test]
     fn rejects_too_many_qubits() {
         let c = Circuit::new("too-wide", MAX_QUBITS_TN + 1);
-        assert!(matches!(simulate(&c, 4), Err(TensorNetworkError::TooManyQubits { .. })));
+        assert!(matches!(
+            simulate(&c, 4),
+            Err(TensorNetworkError::TooManyQubits { .. })
+        ));
     }
 
     #[test]
@@ -826,7 +887,9 @@ mod tests {
         assert_eq!(v.len(), 4);
         // All rows same width (zero-padded).
         let w = v[0].len();
-        for row in &v { assert_eq!(row.len(), w); }
+        for row in &v {
+            assert_eq!(row.len(), w);
+        }
         // First two entries are χL, χR; for |0…0⟩ both are 1.
         for row in &v {
             assert_eq!(row[0], 1.0);
@@ -838,12 +901,12 @@ mod tests {
     fn svd_round_trips_small_complex_matrix() {
         // 3×2 matrix; check A ≈ U Σ Vᴴ.
         let mut a = Array2::<C>::default((3, 2));
-        a[[0, 0]] = C::new(1.0,  0.5);
+        a[[0, 0]] = C::new(1.0, 0.5);
         a[[0, 1]] = C::new(0.0, -1.0);
-        a[[1, 0]] = C::new(2.0,  0.0);
-        a[[1, 1]] = C::new(1.0,  1.0);
+        a[[1, 0]] = C::new(2.0, 0.0);
+        a[[1, 1]] = C::new(1.0, 1.0);
         a[[2, 0]] = C::new(0.5, -0.5);
-        a[[2, 1]] = C::new(1.5,  0.0);
+        a[[2, 1]] = C::new(1.5, 0.0);
         let (u, sigma, vt) = svd_complex(&a);
         // Reconstruct.
         let mut recon = Array2::<C>::default((3, 2));
@@ -852,7 +915,7 @@ mod tests {
                 let mut acc = C::zero();
                 for k in 0..sigma.len() {
                     let s = C::new(sigma[k], 0.0);
-                    acc = acc.add(u[[i, k]].mul(s).mul(vt[[k, j]]));
+                    acc = acc + u[[i, k]] * s * vt[[k, j]];
                 }
                 recon[[i, j]] = acc;
             }
@@ -860,9 +923,11 @@ mod tests {
         for i in 0..3 {
             for j in 0..2 {
                 assert!(
-                    (a[[i, j]].re - recon[[i, j]].re).abs() < 1e-8 &&
-                    (a[[i, j]].im - recon[[i, j]].im).abs() < 1e-8,
-                    "SVD mismatch at ({i}, {j}): {:?} vs {:?}", a[[i, j]], recon[[i, j]],
+                    (a[[i, j]].re - recon[[i, j]].re).abs() < 1e-8
+                        && (a[[i, j]].im - recon[[i, j]].im).abs() < 1e-8,
+                    "SVD mismatch at ({i}, {j}): {:?} vs {:?}",
+                    a[[i, j]],
+                    recon[[i, j]],
                 );
             }
         }

@@ -40,9 +40,7 @@ fn build_parquet(n: usize, dim: usize) -> Bytes {
     let ids: Vec<i64> = (0..n as i64).collect();
     let id_arr = Arc::new(Int64Array::from(ids)) as ArrayRef;
 
-    let total: Vec<f32> = (0..(n * dim))
-        .map(|i| ((i as f32) * 0.001).sin())
-        .collect();
+    let total: Vec<f32> = (0..(n * dim)).map(|i| ((i as f32) * 0.001).sin()).collect();
     let values = Float32Array::from(total);
     let offsets: Vec<i32> = (0..=n).map(|i| (i * dim) as i32).collect();
     let offset_buffer = OffsetBuffer::new(offsets.into());

@@ -25,9 +25,7 @@ use rulake::backend::BackendAdapter;
 use rulake::cache::Consistency;
 use rulake::RuLake;
 use ruvector_rulake_rvdna::witness::{rvdna_bundle, RvdnaWitnessInputs};
-use ruvector_rulake_rvdna::{
-    RvdnaCollection, RvdnaT0Backend, RvdnaT1Backend, RvdnaT2Backend,
-};
+use ruvector_rulake_rvdna::{RvdnaCollection, RvdnaT0Backend, RvdnaT1Backend, RvdnaT2Backend};
 
 /// Deterministic mulberry32-equivalent — mirrors `tests/smoke.rs` and
 /// `tests/t1_smoke.rs` so T0 / T1 / T2 fixtures with the same
@@ -67,7 +65,12 @@ fn t0_collection_from(seed: u64, n: usize, dim: usize) -> RvdnaCollection {
     let vectors: Vec<Vec<f32>> = (0..n)
         .map(|i| flat[i * dim..(i + 1) * dim].to_vec())
         .collect();
-    RvdnaCollection { ids, vectors, dim, generation: 1 }
+    RvdnaCollection {
+        ids,
+        vectors,
+        dim,
+        generation: 1,
+    }
 }
 
 #[test]
@@ -91,8 +94,7 @@ fn t2_backend_round_trips_through_rulake_cache() {
         .expect("register");
     let t2_be: Arc<dyn BackendAdapter> = Arc::clone(&t2_raw) as Arc<dyn BackendAdapter>;
 
-    let t2_lake =
-        RuLake::new(20, 42).with_consistency(Consistency::Eventual { ttl_ms: 1_000 });
+    let t2_lake = RuLake::new(20, 42).with_consistency(Consistency::Eventual { ttl_ms: 1_000 });
     t2_lake.register_backend(t2_be).unwrap();
 
     let q = vec![0.0_f32; dim];
@@ -112,8 +114,7 @@ fn t2_backend_round_trips_through_rulake_cache() {
     let t0 = RvdnaT0Backend::new("rvdna-t0-fixture");
     t0.put_collection("raw-dna-chr17", t0_collection_from(0xc0ffee, n, dim));
     let t0_be: Arc<dyn BackendAdapter> = Arc::new(t0);
-    let t0_lake =
-        RuLake::new(20, 42).with_consistency(Consistency::Eventual { ttl_ms: 1_000 });
+    let t0_lake = RuLake::new(20, 42).with_consistency(Consistency::Eventual { ttl_ms: 1_000 });
     t0_lake.register_backend(t0_be).unwrap();
     let t0_hits = t0_lake
         .search_one("rvdna-t0-fixture", "raw-dna-chr17", &q, 5)
@@ -213,7 +214,10 @@ fn t2_lru_warms_under_repeated_search() {
         stats_after_1.misses, n as u64,
         "first pull must fault every vector in (disk read)"
     );
-    assert_eq!(stats_after_1.hits, 0, "first pull must not have any LRU hits");
+    assert_eq!(
+        stats_after_1.hits, 0,
+        "first pull must not have any LRU hits"
+    );
     assert_eq!(stats_after_1.len, n, "first pull must populate the LRU");
 
     // Calls 2..10 hit the LRU.
@@ -234,7 +238,13 @@ fn t2_lru_warms_under_repeated_search() {
     // Generation bump invalidates the LRU and the stat counters.
     let _ = raw.bump_generation("raw-dna-chr17").expect("bump");
     let stats_after_bump = raw.lru_stats("raw-dna-chr17").expect("stats");
-    assert_eq!(stats_after_bump.hits, 0, "gen bump must reset LRU hit counter");
-    assert_eq!(stats_after_bump.misses, 0, "gen bump must reset LRU miss counter");
+    assert_eq!(
+        stats_after_bump.hits, 0,
+        "gen bump must reset LRU hit counter"
+    );
+    assert_eq!(
+        stats_after_bump.misses, 0,
+        "gen bump must reset LRU miss counter"
+    );
     assert_eq!(stats_after_bump.len, 0, "gen bump must clear LRU contents");
 }

@@ -16,7 +16,7 @@ use arrow::buffer::OffsetBuffer;
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
 use bytes::Bytes;
-use object_store::{ObjectStore, ObjectStoreExt, memory::InMemory, path::Path as OsPath};
+use object_store::{memory::InMemory, path::Path as OsPath, ObjectStore, ObjectStoreExt};
 use parquet::arrow::ArrowWriter;
 use parquet::file::properties::WriterProperties;
 
@@ -29,9 +29,7 @@ fn build_parquet(n: usize, dim: usize) -> Bytes {
     let id_arr = Arc::new(Int64Array::from(ids)) as ArrayRef;
 
     // Vector column: List<Float32> with N rows of `dim` floats each.
-    let total: Vec<f32> = (0..(n * dim))
-        .map(|i| ((i as f32) * 0.001).sin())
-        .collect();
+    let total: Vec<f32> = (0..(n * dim)).map(|i| ((i as f32) * 0.001).sin()).collect();
     let values = Float32Array::from(total);
     let offsets: Vec<i32> = (0..=n).map(|i| (i * dim) as i32).collect();
     let offset_buffer = OffsetBuffer::new(offsets.into());
@@ -46,8 +44,8 @@ fn build_parquet(n: usize, dim: usize) -> Bytes {
     let batch = RecordBatch::try_new(schema.clone(), vec![id_arr, vec_arr]).unwrap();
 
     let mut buf: Vec<u8> = Vec::new();
-    let mut writer = ArrowWriter::try_new(&mut buf, schema, Some(WriterProperties::builder().build()))
-        .unwrap();
+    let mut writer =
+        ArrowWriter::try_new(&mut buf, schema, Some(WriterProperties::builder().build())).unwrap();
     writer.write(&batch).unwrap();
     writer.close().unwrap();
     buf.into()
@@ -66,10 +64,7 @@ fn pull_vectors_round_trip_offline() {
     let object = "embeddings/docs.parquet";
     let body = build_parquet(100, 16);
     rt().block_on(async {
-        store
-            .put(&OsPath::from(object), body.into())
-            .await
-            .unwrap();
+        store.put(&OsPath::from(object), body.into()).await.unwrap();
     });
 
     let backend = GcsParquetBackend::with_store("test-gcs", "fake-bucket", store).unwrap();
@@ -80,17 +75,27 @@ fn pull_vectors_round_trip_offline() {
     });
 
     assert_eq!(backend.id(), "test-gcs");
-    assert_eq!(backend.list_collections().unwrap(), vec!["docs".to_string()]);
+    assert_eq!(
+        backend.list_collections().unwrap(),
+        vec!["docs".to_string()]
+    );
 
     let PulledBatch {
-        ids, vectors, dim, generation, ..
+        ids,
+        vectors,
+        dim,
+        generation,
+        ..
     } = backend.pull_vectors("docs").unwrap();
 
     assert_eq!(ids.len(), 100, "100 rows back");
     assert_eq!(dim, 16, "schema reports dim=16");
     assert_eq!(vectors.len(), 100);
     assert_eq!(vectors[0].len(), 16);
-    assert!(generation > 0, "InMemory store reports a non-zero last_modified-derived generation");
+    assert!(
+        generation > 0,
+        "InMemory store reports a non-zero last_modified-derived generation"
+    );
     assert_eq!(ids[42], 42);
 }
 
@@ -112,10 +117,7 @@ fn current_bundle_does_not_pull_vectors_offline() {
     let object = "embeddings/witness-only.parquet";
     let body = build_parquet(10, 32);
     rt().block_on(async {
-        store
-            .put(&OsPath::from(object), body.into())
-            .await
-            .unwrap();
+        store.put(&OsPath::from(object), body.into()).await.unwrap();
     });
 
     let backend = GcsParquetBackend::with_store("test-gcs", "fake-bucket", store).unwrap();
@@ -129,7 +131,10 @@ fn current_bundle_does_not_pull_vectors_offline() {
     assert_eq!(bundle.dim, 32);
     assert_eq!(bundle.rotation_seed, 42);
     assert_eq!(bundle.rerank_factor, 20);
-    assert_eq!(bundle.data_ref, "gs://fake-bucket/embeddings/witness-only.parquet");
+    assert_eq!(
+        bundle.data_ref,
+        "gs://fake-bucket/embeddings/witness-only.parquet"
+    );
     assert_eq!(bundle.rvf_witness.len(), 64, "SHAKE-256(32) hex");
     assert!(bundle.verify_witness(), "freshly built bundle must verify");
 }
@@ -142,7 +147,8 @@ fn generation_changes_on_reupload_offline() {
     // breaks.
     let store: Arc<dyn ObjectStore> = Arc::new(InMemory::new());
     let object = "embeddings/v.parquet";
-    let backend = GcsParquetBackend::with_store("test-gcs", "fake-bucket", Arc::clone(&store)).unwrap();
+    let backend =
+        GcsParquetBackend::with_store("test-gcs", "fake-bucket", Arc::clone(&store)).unwrap();
     backend.register(GcsParquetCollection {
         name: "v".into(),
         object: object.into(),
@@ -151,7 +157,10 @@ fn generation_changes_on_reupload_offline() {
 
     let body1 = build_parquet(5, 8);
     rt().block_on(async {
-        store.put(&OsPath::from(object), body1.into()).await.unwrap();
+        store
+            .put(&OsPath::from(object), body1.into())
+            .await
+            .unwrap();
     });
     let g1 = backend.generation("v").unwrap();
 
@@ -160,7 +169,10 @@ fn generation_changes_on_reupload_offline() {
 
     let body2 = build_parquet(5, 8);
     rt().block_on(async {
-        store.put(&OsPath::from(object), body2.into()).await.unwrap();
+        store
+            .put(&OsPath::from(object), body2.into())
+            .await
+            .unwrap();
     });
     let g2 = backend.generation("v").unwrap();
 
@@ -199,8 +211,8 @@ fn gcs_live_pull_vectors() {
         return;
     }
     let bucket = std::env::var("RULAKE_GCS_BUCKET").expect("RULAKE_GCS_BUCKET");
-    let object = std::env::var("RULAKE_GCS_OBJECT")
-        .unwrap_or_else(|_| "fixtures/docs-100k.parquet".into());
+    let object =
+        std::env::var("RULAKE_GCS_OBJECT").unwrap_or_else(|_| "fixtures/docs-100k.parquet".into());
 
     let backend = GcsParquetBackend::open_gcs("gcs-live", bucket).unwrap();
     backend.register(GcsParquetCollection {

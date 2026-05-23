@@ -16,7 +16,7 @@ use std::sync::Arc;
 
 use bytes::Bytes;
 use http::{Request, Response, StatusCode};
-use http_body_util::{BodyExt, Full, combinators::BoxBody};
+use http_body_util::{combinators::BoxBody, BodyExt, Full};
 use hyper::body::Incoming;
 use hyper::service::service_fn;
 use hyper_util::rt::{TokioExecutor, TokioIo};
@@ -27,7 +27,7 @@ use rmcp::transport::streamable_http_server::tower::{
 };
 
 use crate::auth::{BearerAuth, JwtAuth};
-use crate::mtls::{MtlsConfig, build_acceptor as build_mtls_acceptor};
+use crate::mtls::{build_acceptor as build_mtls_acceptor, MtlsConfig};
 use crate::policy::{CapabilitySet, REQUEST_CAPS};
 use crate::ratelimit::{LayeredRateLimiter, RateLimitDecision};
 use crate::replay::ReplayGuard;
@@ -89,6 +89,7 @@ pub async fn serve(
     .await
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn serve_with_guards(
     server: RuLakeMcpServer,
     bind: SocketAddr,
@@ -120,7 +121,10 @@ pub async fn serve_with_guards(
         _ => {}
     }
     tracing::info!(rate_limit = %rate_limit.config_summary(), "rate-limit policy");
-    tracing::info!(replay_window_used = replay.window_used(), "replay-guard initialized");
+    tracing::info!(
+        replay_window_used = replay.window_used(),
+        "replay-guard initialized"
+    );
 
     // Build the rmcp Streamable HTTP service. We hand it a service
     // factory so each session gets its own RuLakeMcpServer clone (the
@@ -230,8 +234,14 @@ pub async fn serve_with_guards(
                                 let mtls_fp = mtls_fp.clone();
                                 async move {
                                     handle(
-                                        req, mcp_service, auth, peer, replay, rate_limit,
-                                        sessions, mtls_fp,
+                                        req,
+                                        mcp_service,
+                                        auth,
+                                        peer,
+                                        replay,
+                                        rate_limit,
+                                        sessions,
+                                        mtls_fp,
                                     )
                                     .await
                                 }
@@ -264,7 +274,14 @@ pub async fn serve_with_guards(
                 let mtls_fp = mtls_fingerprint.clone();
                 async move {
                     handle(
-                        req, mcp_service, auth, peer, replay, rate_limit, sessions, mtls_fp,
+                        req,
+                        mcp_service,
+                        auth,
+                        peer,
+                        replay,
+                        rate_limit,
+                        sessions,
+                        mtls_fp,
                     )
                     .await
                 }
@@ -288,6 +305,7 @@ fn auth_label(a: &AuthMode) -> &'static str {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn handle(
     req: Request<Incoming>,
     mcp_service: StreamableHttpService<RuLakeMcpServer, LocalSessionManager>,
@@ -345,7 +363,10 @@ async fn handle(
             // (the same env var that loosens the DNS-rebinding guard
             // for proxied deployments) and fall back to a stable
             // pseudo-principal so sessions are usable.
-            principal = if std::env::var("RULAKE_ALLOWED_HOSTS").map(|v| !v.trim().is_empty()).unwrap_or(false) {
+            principal = if std::env::var("RULAKE_ALLOWED_HOSTS")
+                .map(|v| !v.trim().is_empty())
+                .unwrap_or(false)
+            {
                 "anon:proxied".to_string()
             } else {
                 format!("anon:{peer}")
@@ -419,7 +440,10 @@ async fn handle(
                 );
             }
         }
-        SessionDecision::Mismatch { expected_principal, presented_principal } => {
+        SessionDecision::Mismatch {
+            expected_principal,
+            presented_principal,
+        } => {
             tracing::warn!(
                 ?peer,
                 session = %session_id,
@@ -443,10 +467,7 @@ async fn handle(
         .to_string();
     if let Err(replay_err) = replay.check(&request_id) {
         tracing::warn!(?peer, principal = %principal, %replay_err, "replay rejected");
-        return Ok(error_response(
-            StatusCode::CONFLICT,
-            "replay",
-        ));
+        return Ok(error_response(StatusCode::CONFLICT, "replay"));
     }
 
     // 3. Per-process rate-limit gate. Per-(principal,backend,collection)
@@ -511,7 +532,9 @@ async fn handle(
 }
 
 fn error_response(status: StatusCode, msg: &str) -> Response<BoxBody<Bytes, Infallible>> {
-    let body = Full::new(Bytes::from(msg.to_string())).map_err(|e| match e {}).boxed();
+    let body = Full::new(Bytes::from(msg.to_string()))
+        .map_err(|e| match e {})
+        .boxed();
     Response::builder()
         .status(status)
         .header(http::header::CONTENT_TYPE, "text/plain")
@@ -527,7 +550,9 @@ fn degraded_response(
     retry_after_ms: u32,
     json_body: String,
 ) -> Response<BoxBody<Bytes, Infallible>> {
-    let body = Full::new(Bytes::from(json_body)).map_err(|e| match e {}).boxed();
+    let body = Full::new(Bytes::from(json_body))
+        .map_err(|e| match e {})
+        .boxed();
     let retry_after_secs = (retry_after_ms.div_ceil(1000)).max(1);
     Response::builder()
         .status(StatusCode::TOO_MANY_REQUESTS)

@@ -85,12 +85,18 @@ fn bench_capabilityset_from_csv(c: &mut Criterion) {
             "8",
             "read,publish,admin,internal,read,publish,admin,internal".into(),
         ),
-        ("64", (0..64).map(|i| {
-            // Mix in the four real labels at fixed slots, garbage
-            // labels would error out — instead repeat the four real
-            // ones to get a 64-token CSV that still parses.
-            ["read", "publish", "admin", "internal"][i % 4]
-        }).collect::<Vec<_>>().join(",")),
+        (
+            "64",
+            (0..64)
+                .map(|i| {
+                    // Mix in the four real labels at fixed slots, garbage
+                    // labels would error out — instead repeat the four real
+                    // ones to get a 64-token CSV that still parses.
+                    ["read", "publish", "admin", "internal"][i % 4]
+                })
+                .collect::<Vec<_>>()
+                .join(","),
+        ),
     ];
     for (label, csv) in &csvs {
         group.bench_with_input(BenchmarkId::from_parameter(label), csv, |b, csv| {
@@ -103,5 +109,9 @@ fn bench_capabilityset_from_csv(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_tools_list_filter, bench_capabilityset_from_csv);
+criterion_group!(
+    benches,
+    bench_tools_list_filter,
+    bench_capabilityset_from_csv
+);
 criterion_main!(benches);

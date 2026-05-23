@@ -62,7 +62,12 @@ fn bench_t1_vs_t0_pull_vectors(c: &mut Criterion) {
         let name = format!("col-{n}-{dim}");
         t0.put_collection(
             &name,
-            RvdnaCollection { ids, vectors, dim, generation: 1 },
+            RvdnaCollection {
+                ids,
+                vectors,
+                dim,
+                generation: 1,
+            },
         );
 
         let t0_id = BenchmarkId::new(format!("t0-dim{dim}"), n);
