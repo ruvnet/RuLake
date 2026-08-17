@@ -22,6 +22,8 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
+use ruvector_rabitq::RabitqPlusIndex;
+
 use crate::error::{Result, RuLakeError};
 
 /// Stable identifier for a registered backend.
@@ -107,6 +109,21 @@ pub(crate) fn validate_pulled_batch(batch: &PulledBatch) -> Result<()> {
     Ok(())
 }
 
+/// An already-compressed index a backend can hand the cache directly,
+/// bypassing the `pull_vectors` round-trip and the RaBitQ encode on prime.
+///
+/// Returned by [`BackendAdapter::pull_prebuilt_index`]. Installed verbatim
+/// via the cache's warm-install path — no compression runs.
+pub struct PrebuiltIndex {
+    /// The already-compressed index (e.g. built from an `.rvf`'s native
+    /// RaBitQ codes, or loaded from an `.rbpx` sidecar).
+    pub index: Arc<RabitqPlusIndex>,
+    /// Position→id mapping aligned to `index`; the cache would otherwise
+    /// derive this from `PulledBatch::ids`. Its length MUST equal
+    /// `index.len()` or the install is rejected.
+    pub pos_to_id: Arc<Vec<u64>>,
+}
+
 pub trait BackendAdapter: Send + Sync {
     fn id(&self) -> &str;
 
@@ -138,6 +155,20 @@ pub trait BackendAdapter: Send + Sync {
             rerank_factor,
             crate::Generation::Num(batch.generation),
         ))
+    }
+
+    /// Optionally hand the cache an already-compressed index for
+    /// `collection`, letting it skip the `pull_vectors` round-trip and the
+    /// RaBitQ encode on prime.
+    ///
+    /// Backends whose on-disk format already carries RaBitQ codes (e.g. RVF)
+    /// override this; the default returns `None`, so every existing backend
+    /// keeps falling back to `pull_vectors` + encode unchanged. When `Some`,
+    /// the [`PrebuiltIndex`] is installed via the cache's warm-install path
+    /// (`install_prebuilt`); its `pos_to_id` length must match the index
+    /// length or the install is rejected.
+    fn pull_prebuilt_index(&self, _collection: &str) -> Result<Option<PrebuiltIndex>> {
+        Ok(None)
     }
 
     fn supports_pushdown(&self) -> bool {
@@ -341,6 +372,15 @@ mod tests {
             dim,
             generation: 1,
         }
+    }
+
+    #[test]
+    fn default_pull_prebuilt_index_is_none() {
+        // Backends without pre-compressed codes must opt out via the
+        // default so the cache falls back to pull + encode. RVF (which
+        // carries native RaBitQ codes) is the backend expected to override.
+        let back = LocalBackend::new("b");
+        assert!(back.pull_prebuilt_index("any-collection").unwrap().is_none());
     }
 
     #[test]
