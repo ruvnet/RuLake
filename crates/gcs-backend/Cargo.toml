@@ -29,12 +29,12 @@ rulake = { path = "../core", version = "2.3.0-alpha.1" }
 # transport (which honours gcloud Application Default Credentials).
 # `tokio` feature lets us use the async API; we wrap it in a blocking
 # bridge so the BackendAdapter trait (sync) stays satisfied.
-object_store = { version = "0.13", default-features = false, features = ["gcp"] }
+object_store = { version = "0.14", default-features = false, features = ["gcp"] }
 
 # Apache Parquet reader. `arrow` feature gets us the RecordBatch API
 # we use for vector decoding.
-parquet = { version = "58", default-features = false, features = ["arrow", "snap", "zstd", "async", "object_store"] }
-arrow = { version = "58", default-features = false, features = ["prettyprint"] }
+parquet = { version = "60", default-features = false, features = ["arrow", "snap", "zstd", "async", "object_store"] }
+arrow = { version = "60", default-features = false, features = ["prettyprint"] }
 
 # Async runtime — only used inside the blocking bridge wrapping
 # object_store / parquet's async APIs. Single-threaded current-thread

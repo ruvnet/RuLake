@@ -31,7 +31,7 @@ use rmcp::{
         router::tool::ToolRouter,
         wrapper::{Json, Parameters},
     },
-    model::{Implementation, ServerCapabilities, ServerInfo},
+    model::{Implementation, ServerCapabilities, ServerConfig},
     tool, tool_handler, tool_router, ErrorData as McpError, ServerHandler, ServiceExt,
 };
 use serde::{Deserialize, Serialize};
@@ -986,12 +986,12 @@ fn _gate_surface_witness(_g: &Gate) {}
 
 #[tool_handler(router = self.tool_router)]
 impl ServerHandler for RuquMcpServer {
-    fn get_info(&self) -> ServerInfo {
+    fn get_info(&self) -> ServerConfig {
         let mut info = Implementation::new("ruvector-rulake-mcp-ruqu", env!("CARGO_PKG_VERSION"));
         info.title = Some("ruQu MCP companion server".into());
         info.website_url = Some("https://github.com/ruvnet/RuLake".into());
 
-        let mut init = ServerInfo::new(ServerCapabilities::builder().enable_tools().build());
+        let mut init = ServerConfig::new(ServerCapabilities::builder().enable_tools().build());
         init.server_info = info;
         init.instructions = Some(
             "ruQu MCP companion server (ADR-008 §6 v0.0.1). Five tools: \

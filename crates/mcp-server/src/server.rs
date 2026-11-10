@@ -14,9 +14,9 @@ use rmcp::{
         wrapper::{Json, Parameters},
     },
     model::{
-        Implementation, ListResourcesResult, ListToolsResult, PaginatedRequestParams, RawResource,
-        ReadResourceRequestParams, ReadResourceResult, ResourceContents, ServerCapabilities,
-        ServerInfo,
+        Implementation, ListResourcesResult, ListToolsResult, PaginatedRequestParams,
+        ReadResourceRequestParams, ReadResourceResult, Resource, ResourceContents,
+        ServerCapabilities, ServerConfig,
     },
     service::RequestContext,
     tool, tool_handler, tool_router, ErrorData as McpError, ServerHandler, ServiceExt,
@@ -794,12 +794,12 @@ pub struct ListCollectionsResponse {
 
 #[tool_handler(router = self.tool_router)]
 impl ServerHandler for RuLakeMcpServer {
-    fn get_info(&self) -> ServerInfo {
+    fn get_info(&self) -> ServerConfig {
         let mut info = Implementation::new("ruvector-rulake-mcp", env!("CARGO_PKG_VERSION"));
         info.title = Some("ruLake MCP server".into());
         info.website_url = Some("https://github.com/ruvnet/RuLake".into());
 
-        let mut init = ServerInfo::new(
+        let mut init = ServerConfig::new(
             ServerCapabilities::builder()
                 .enable_tools()
                 .enable_resources()
@@ -860,32 +860,31 @@ impl ServerHandler for RuLakeMcpServer {
     ) -> Result<ListResourcesResult, McpError> {
         let mut resources = vec![
             {
-                let mut r = RawResource::new("rulake://stats", "cache stats (rollup)");
+                let mut r = Resource::new("rulake://stats", "cache stats (rollup)");
                 r.description = Some(
                     "Roll-up cache stats: hits, misses, primes, hit_rate, avg_prime_ms.".into(),
                 );
                 r.mime_type = Some("application/json".into());
-                rmcp::model::Annotated::new(r, None)
+                r
             },
             {
-                let mut r =
-                    RawResource::new("rulake://stats/by-backend", "cache stats per backend");
+                let mut r = Resource::new("rulake://stats/by-backend", "cache stats per backend");
                 r.description =
                     Some("Per-backend cache stats: hits/misses/primes per backend id.".into());
                 r.mime_type = Some("application/json".into());
-                rmcp::model::Annotated::new(r, None)
+                r
             },
             {
                 // v0.10: bounded ring buffer of recent audit lines.
                 // Closes ADR-006 server-gap §V #2.
-                let mut r = RawResource::new("rulake://audit/tail", "audit tail (jsonl)");
+                let mut r = Resource::new("rulake://audit/tail", "audit tail (jsonl)");
                 r.description = Some(
                     "Last ≤256 audit lines (newest last) as a JSON array of the JSONL emit \
                      records. Backs the ruLake Console's Audit screen live mode."
                         .into(),
                 );
                 r.mime_type = Some("application/json".into());
-                rmcp::model::Annotated::new(r, None)
+                r
             },
         ];
         // Per-(backend, collection) bundle resources for every cached
@@ -893,12 +892,12 @@ impl ServerHandler for RuLakeMcpServer {
         for (k, _) in self.planner.lake.cache_stats_by_collection() {
             let (b, c) = (k.0.clone(), k.1.clone());
             let uri = format!("rulake://bundle/{b}/{c}");
-            let mut r = RawResource::new(uri, format!("bundle witness: {b}/{c}"));
+            let mut r = Resource::new(uri, format!("bundle witness: {b}/{c}"));
             r.description = Some(format!(
                 "Witness + provenance for {b}/{c}. Reads the cache pointer; no full pull."
             ));
             r.mime_type = Some("application/json".into());
-            resources.push(rmcp::model::Annotated::new(r, None));
+            resources.push(r);
         }
         Ok(ListResourcesResult::with_all_items(resources))
     }
@@ -908,12 +907,12 @@ impl ServerHandler for RuLakeMcpServer {
         &self,
         params: ReadResourceRequestParams,
         _context: RequestContext<rmcp::service::RoleServer>,
-    ) -> Result<ReadResourceResult, McpError> {
+    ) -> Result<rmcp::model::ReadResourceResponse, McpError> {
         let body = self
             .read_resource_json(&params.uri)
             .map_err(|e| McpError::invalid_params(format!("RULAKE_RESOURCE: {e}"), None))?;
         let contents = ResourceContents::text(body, params.uri);
-        Ok(ReadResourceResult::new(vec![contents]))
+        Ok(ReadResourceResult::new(vec![contents]).into())
     }
 }
 

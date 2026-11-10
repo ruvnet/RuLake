@@ -12,7 +12,7 @@
 //!
 //! 2. **GIL release on every hot path.** Search, prime, save, warm,
 //!    publish, refresh — anything that takes more than ~50 µs runs
-//!    inside `py.allow_threads(...)`. Borrowed slices are converted
+//!    inside `py.detach(...)`. Borrowed slices are converted
 //!    to owned `Vec<f32>` *only when the borrow can't outlive the
 //!    closure* (rare); the common case borrows directly into the
 //!    GIL-released closure because `&[f32]` from a NumPy array is
@@ -31,6 +31,7 @@ use numpy::{PyArray1, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::create_exception;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use pyo3::IntoPyObjectExt;
 use pyo3::types::{PyDict, PyType};
 
 use rulake::cache::Consistency as RsConsistency;
@@ -79,7 +80,7 @@ fn map_err(e: RsErr) -> PyErr {
 /// `Consistency.frozen()`. Rust's tagged enum doesn't translate to a
 /// clean Python class, so we expose factory classmethods + a tag/ttl
 /// pair internally.
-#[pyclass(name = "Consistency", module = "rulake._rulake", frozen)]
+#[pyclass(name = "Consistency", module = "rulake._rulake", frozen, from_py_object)]
 #[derive(Clone, Copy)]
 struct PyConsistency {
     inner: RsConsistency,
@@ -301,10 +302,10 @@ impl PyBundle {
 
     /// Generation as `int` (Num variant) or `str` (Opaque variant).
     #[getter]
-    fn generation(&self, py: Python<'_>) -> PyObject {
+    fn generation(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         match &self.inner.generation {
-            RsGeneration::Num(n) => n.into_py(py),
-            RsGeneration::Opaque(s) => s.clone().into_py(py),
+            RsGeneration::Num(n) => n.into_py_any(py),
+            RsGeneration::Opaque(s) => s.clone().into_py_any(py),
         }
     }
 
@@ -323,13 +324,13 @@ impl PyBundle {
 
     /// Atomic write to `dir/table.rulake.json` (temp + rename).
     fn write_to_dir(&self, py: Python<'_>, dir: PathBuf) -> PyResult<PathBuf> {
-        py.allow_threads(|| self.inner.write_to_dir(&dir).map_err(map_err))
+        py.detach(|| self.inner.write_to_dir(&dir).map_err(map_err))
     }
 
     /// Read `dir/table.rulake.json` and verify its witness.
     #[classmethod]
     fn read_from_dir(_cls: &Bound<'_, PyType>, py: Python<'_>, dir: PathBuf) -> PyResult<Self> {
-        py.allow_threads(|| Ok(Self { inner: RsBundle::read_from_dir(&dir).map_err(map_err)? }))
+        py.detach(|| Ok(Self { inner: RsBundle::read_from_dir(&dir).map_err(map_err)? }))
     }
 
     /// Tag with a PII policy handle. Returns a new bundle (the witness
@@ -414,7 +415,7 @@ impl PyLocalBackend {
         let owned_ids: Vec<u64> = ids_slice.to_vec();
         let backend = Arc::clone(&self.inner);
         let name = name.to_string();
-        py.allow_threads(|| backend.put_collection(name, dim, owned_ids, owned).map_err(map_err))
+        py.detach(|| backend.put_collection(name, dim, owned_ids, owned).map_err(map_err))
     }
 
     /// Append a single vector. Bumps the backend generation.
@@ -431,7 +432,7 @@ impl PyLocalBackend {
             .to_vec();
         let backend = Arc::clone(&self.inner);
         let collection = collection.to_string();
-        py.allow_threads(|| backend.append(collection, id, v).map_err(map_err))
+        py.detach(|| backend.append(collection, id, v).map_err(map_err))
     }
 }
 
@@ -491,7 +492,7 @@ impl PyFsBackend {
         let backend = Arc::clone(&self.inner);
         let collection = collection.to_string();
         let filename = filename.to_string();
-        py.allow_threads(|| {
+        py.detach(|| {
             backend
                 .write(collection, filename, dim, &owned_ids, &owned)
                 .map_err(map_err)
@@ -550,10 +551,10 @@ impl PyRuLake {
         // explicit conversion (CoerceUnsized only works in let-bindings,
         // not match arms across types).
         let dyn_arc: Arc<dyn BackendAdapter> =
-            if let Ok(b) = backend.downcast::<PyLocalBackend>() {
+            if let Ok(b) = backend.cast::<PyLocalBackend>() {
                 let local: Arc<RsLocal> = Arc::clone(&b.borrow().inner);
                 local
-            } else if let Ok(b) = backend.downcast::<PyFsBackend>() {
+            } else if let Ok(b) = backend.cast::<PyFsBackend>() {
                 let fs: Arc<RsFs> = Arc::clone(&b.borrow().inner);
                 fs
             } else {
@@ -572,10 +573,10 @@ impl PyRuLake {
 
     fn cache_stats_by_backend<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let stats = self.inner.cache_stats_by_backend();
-        let d = PyDict::new_bound(py);
+        let d = PyDict::new(py);
         for (k, v) in stats {
             // #[pyclass] types don't implement ToPyObject directly in
-            // PyO3 0.22 — wrap in Py<T> to get a PyObject.
+            // PyO3 — wrap in Py<T> to get a Py<PyAny>.
             let py_v = Py::new(py, PyPerBackendStats::from(v))?;
             d.set_item(k, py_v)?;
         }
@@ -614,7 +615,7 @@ impl PyRuLake {
         let backend = backend.to_string();
         let collection = collection.to_string();
         let lake = Arc::clone(&self.inner);
-        let hits = py.allow_threads(|| {
+        let hits = py.detach(|| {
             lake.search_one(&backend, &collection, &q, k).map_err(map_err)
         })?;
         Ok(hits.into_iter().map(PySearchResult::from).collect())
@@ -637,7 +638,7 @@ impl PyRuLake {
             ))?
             .to_vec();
         let lake = Arc::clone(&self.inner);
-        let hits = py.allow_threads(|| {
+        let hits = py.detach(|| {
             let refs: Vec<(&str, &str)> = targets
                 .iter()
                 .map(|(b, c)| (b.as_str(), c.as_str()))
@@ -675,7 +676,7 @@ impl PyRuLake {
         let backend = backend.to_string();
         let collection = collection.to_string();
         let lake = Arc::clone(&self.inner);
-        let raw = py.allow_threads(|| {
+        let raw = py.detach(|| {
             lake.search_batch(&backend, &collection, &owned, k).map_err(map_err)
         })?;
         Ok(raw
@@ -703,14 +704,14 @@ impl PyRuLake {
         let backend = backend.to_string();
         let collection = collection.to_string();
         let lake = Arc::clone(&self.inner);
-        let hits = py.allow_threads(|| {
+        let hits = py.detach(|| {
             lake.search_one(&backend, &collection, &q, k).map_err(map_err)
         })?;
         let ids: Vec<u64> = hits.iter().map(|h| h.id).collect();
         let scores: Vec<f32> = hits.iter().map(|h| h.score).collect();
         Ok((
-            PyArray1::from_vec_bound(py, ids),
-            PyArray1::from_vec_bound(py, scores),
+            PyArray1::from_vec(py, ids),
+            PyArray1::from_vec(py, scores),
         ))
     }
 
@@ -725,7 +726,7 @@ impl PyRuLake {
     ) -> PyResult<PathBuf> {
         let key = (backend.to_string(), collection.to_string());
         let lake = Arc::clone(&self.inner);
-        py.allow_threads(|| lake.publish_bundle(&key, &dir).map_err(map_err))
+        py.detach(|| lake.publish_bundle(&key, &dir).map_err(map_err))
     }
 
     /// Refresh from `dir/table.rulake.json`. Returns a string tag:
@@ -739,7 +740,7 @@ impl PyRuLake {
     ) -> PyResult<&'static str> {
         let key = (backend.to_string(), collection.to_string());
         let lake = Arc::clone(&self.inner);
-        let r = py.allow_threads(|| lake.refresh_from_bundle_dir(&key, &dir).map_err(map_err))?;
+        let r = py.detach(|| lake.refresh_from_bundle_dir(&key, &dir).map_err(map_err))?;
         Ok(match r {
             RsRefreshResult::UpToDate => "up_to_date",
             RsRefreshResult::Invalidated => "invalidated",
@@ -760,7 +761,7 @@ impl PyRuLake {
     ) -> PyResult<PathBuf> {
         let key = (backend.to_string(), collection.to_string());
         let lake = Arc::clone(&self.inner);
-        py.allow_threads(|| lake.save_cache_to_dir(&key, &dir).map_err(map_err))
+        py.detach(|| lake.save_cache_to_dir(&key, &dir).map_err(map_err))
     }
 
     /// Warm the cache from a previously-saved snapshot directory. Returns
@@ -774,7 +775,7 @@ impl PyRuLake {
     ) -> PyResult<usize> {
         let key = (backend.to_string(), collection.to_string());
         let lake = Arc::clone(&self.inner);
-        py.allow_threads(|| lake.warm_from_dir(&key, &dir).map_err(map_err))
+        py.detach(|| lake.warm_from_dir(&key, &dir).map_err(map_err))
     }
 }
 
@@ -793,21 +794,21 @@ fn _rulake(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyFsBackend>()?;
     m.add_class::<PyRuLake>()?;
 
-    m.add("RuLakeError", py.get_type_bound::<RuLakeError>())?;
-    m.add("BackendNotFoundError", py.get_type_bound::<BackendNotFoundError>())?;
+    m.add("RuLakeError", py.get_type::<RuLakeError>())?;
+    m.add("BackendNotFoundError", py.get_type::<BackendNotFoundError>())?;
     m.add(
         "CollectionNotFoundError",
-        py.get_type_bound::<CollectionNotFoundError>(),
+        py.get_type::<CollectionNotFoundError>(),
     )?;
     m.add(
         "DimensionMismatchError",
-        py.get_type_bound::<DimensionMismatchError>(),
+        py.get_type::<DimensionMismatchError>(),
     )?;
     m.add(
         "InvalidParameterError",
-        py.get_type_bound::<InvalidParameterError>(),
+        py.get_type::<InvalidParameterError>(),
     )?;
-    m.add("BackendError", py.get_type_bound::<BackendError>())?;
+    m.add("BackendError", py.get_type::<BackendError>())?;
 
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())

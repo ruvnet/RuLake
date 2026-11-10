@@ -32,20 +32,12 @@ rulake = { path = "../../crates/core", version = "2.3.0-alpha.1" }
 # The `extension-module` feature is required when building a Python
 # extension (otherwise we'd link libpython at build time, breaking
 # manylinux wheels).
-pyo3 = { version = "0.22", features = ["abi3-py39", "extension-module"] }
-# numpy — PyArray + .as_slice()? for zero-copy borrows. Tracks pyo3 0.22.
-numpy = "0.22"
+pyo3 = { version = "0.30", features = ["abi3-py39", "extension-module"] }
+# numpy — PyArray + .as_slice()? for zero-copy borrows. Tracks pyo3 0.30.
+numpy = "0.30"
 
 [profile.release]
 opt-level = 3
 lto = "thin"
 codegen-units = 1
 strip = true
-
-# Quiet PyO3 0.22's `create_exception!` macro hygiene noise. The macro
-# internally tests `cfg(gil-refs)` to support both 0.21 (gil-refs default)
-# and 0.22 (bound default); rustc 1.80+ flags any cfg name it doesn't see
-# in build.rs's `cargo:rustc-check-cfg`. The cfg is real — we just
-# don't have it set, which is fine. Drop this when we move to PyO3 0.23+.
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("gil-refs"))'] }
