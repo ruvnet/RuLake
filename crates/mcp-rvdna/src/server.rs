@@ -25,9 +25,9 @@ use rmcp::{
         wrapper::{Json, Parameters},
     },
     model::{
-        Implementation, ListResourcesResult, ListToolsResult, PaginatedRequestParams, RawResource,
-        ReadResourceRequestParams, ReadResourceResult, ResourceContents, ServerCapabilities,
-        ServerInfo,
+        Implementation, ListResourcesResult, ListToolsResult, PaginatedRequestParams,
+        ReadResourceRequestParams, ReadResourceResult, Resource, ResourceContents,
+        ServerCapabilities, ServerConfig,
     },
     service::RequestContext,
     tool, tool_handler, tool_router, ErrorData as McpError, ServerHandler, ServiceExt,
@@ -549,12 +549,12 @@ fn required_cap_for_tool(name: &str) -> Capability {
 
 #[tool_handler(router = self.tool_router)]
 impl ServerHandler for RvdnaMcpServer {
-    fn get_info(&self) -> ServerInfo {
+    fn get_info(&self) -> ServerConfig {
         let mut info = Implementation::new("ruvector-rulake-mcp-rvdna", env!("CARGO_PKG_VERSION"));
         info.title = Some("rvDNA MCP server".into());
         info.website_url = Some("https://github.com/ruvnet/RuLake".into());
 
-        let mut init = ServerInfo::new(
+        let mut init = ServerConfig::new(
             ServerCapabilities::builder()
                 .enable_tools()
                 .enable_resources()
@@ -601,26 +601,26 @@ impl ServerHandler for RvdnaMcpServer {
         let mut resources = vec![{
             // Bounded ring of recent audit lines — same shape as
             // mcp-server's rulake://audit/tail.
-            let mut r = RawResource::new("rvdna://audit/tail", "audit tail (jsonl)");
+            let mut r = Resource::new("rvdna://audit/tail", "audit tail (jsonl)");
             r.description = Some(
                 "Last <=256 audit lines (newest last) as a JSON array of the JSONL emit \
                  records. Backs the Console's Audit screen live mode."
                     .into(),
             );
             r.mime_type = Some("application/json".into());
-            rmcp::model::Annotated::new(r, None)
+            r
         }];
         // Per-(backend, collection) lineage resources for everything in
         // the registry. Cheap — reads pinned witness only, no backend
         // round-trip (use rvdna_lineage for the live re-derive).
         for (backend, collection) in self.registry.list() {
             let uri = format!("rvdna://lineage/{backend}/{collection}");
-            let mut r = RawResource::new(uri, format!("lineage: {backend}/{collection}"));
+            let mut r = Resource::new(uri, format!("lineage: {backend}/{collection}"));
             r.description = Some(format!(
                 "Pinned bundle witness for {backend}/{collection}. Cheap — no backend call."
             ));
             r.mime_type = Some("application/json".into());
-            resources.push(rmcp::model::Annotated::new(r, None));
+            resources.push(r);
         }
         Ok(ListResourcesResult::with_all_items(resources))
     }
@@ -629,12 +629,12 @@ impl ServerHandler for RvdnaMcpServer {
         &self,
         params: ReadResourceRequestParams,
         _context: RequestContext<rmcp::service::RoleServer>,
-    ) -> Result<ReadResourceResult, McpError> {
+    ) -> Result<rmcp::model::ReadResourceResponse, McpError> {
         let body = self
             .read_resource_json(&params.uri)
             .map_err(|e| McpError::invalid_params(format!("RVDNA_RESOURCE: {e}"), None))?;
         let contents = ResourceContents::text(body, params.uri);
-        Ok(ReadResourceResult::new(vec![contents]))
+        Ok(ReadResourceResult::new(vec![contents]).into())
     }
 }
 
@@ -746,7 +746,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn rvdna_translate_returns_stub() {
+    async fn rvdna_translate_returns_witnessed_result() {
         let server = make_server();
         let resp = server
             .rvdna_translate(Parameters(RegionArgs {
@@ -756,12 +756,13 @@ mod tests {
             }))
             .await
             .expect("translate ok");
-        assert!(resp.0.stub);
-        assert!(resp.0.protein.is_empty());
+        // Phase B (ae92be3) replaced the stub with real codon translation.
+        assert!(!resp.0.stub);
+        assert!(!resp.0.witness.is_empty());
     }
 
     #[tokio::test]
-    async fn rvdna_score_returns_stub() {
+    async fn rvdna_score_returns_witnessed_result() {
         let server = make_server();
         let resp = server
             .rvdna_score(Parameters(RegionArgs {
@@ -771,8 +772,9 @@ mod tests {
             }))
             .await
             .expect("score ok");
-        assert!(resp.0.stub);
-        assert_eq!(resp.0.score, 0.0);
+        // Phase B (ae92be3) replaced the stub with a deterministic FNV-1a score in [0, 1).
+        assert!(!resp.0.stub);
+        assert!((0.0..1.0).contains(&resp.0.score));
     }
 
     #[tokio::test]

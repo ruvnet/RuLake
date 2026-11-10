@@ -38,7 +38,7 @@ rulake = { path = "../core", version = "2.3.0-alpha.1" }
 # `server` feature enables the request/response handler scaffolding;
 # `transport-io` enables the stdio transport. Streamable HTTP comes
 # later via the `transport-streamable-http-server` feature.
-rmcp = { version = "1.5", default-features = false, features = [
+rmcp = { version = "3.9", default-features = false, features = [
     "server",
     "transport-io",
     "transport-streamable-http-server",
@@ -93,7 +93,7 @@ tokio = { version = "1.39", features = ["rt-multi-thread", "macros", "io-std", "
 # the JSON Schema rmcp serves to clients on tools/list.
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-schemars = "1.0"      # match rmcp 1.5's resolved schemars major (avoid two copies)
+schemars = "1.0"      # match rmcp 3.9's resolved schemars major (avoid two copies)
 
 # Bounded worker pool: flume = MPMC channel, rayon = thread pool.
 flume = "0.11"

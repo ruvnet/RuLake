@@ -72,7 +72,7 @@ rulake = { path = "../core", version = "2.3.0-alpha.1" }
 # Official Rust MCP SDK. Same feature set mcp-server / mcp-rvdna use,
 # now including `transport-streamable-http-server` for the v0.1 HTTP
 # transport.
-rmcp = { version = "1.5", default-features = false, features = [
+rmcp = { version = "3.9", default-features = false, features = [
     "server",
     "transport-io",
     "transport-streamable-http-server",
@@ -93,7 +93,7 @@ bytes = "1"
 # Async runtime — matches mcp-server's pinned set.
 tokio = { version = "1.39", features = ["rt-multi-thread", "macros", "io-std", "signal", "sync", "net", "time"] }
 
-# Serialization — matches mcp-server (and rmcp 1.5's resolved schemars).
+# Serialization — matches mcp-server (and rmcp 3.9's resolved schemars).
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 schemars = "1.0"

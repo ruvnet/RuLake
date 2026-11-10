@@ -132,11 +132,11 @@ for tool in "${EXPECTED[@]}"; do
   fi
 done
 
-hdr "tools/call ruqu_optimize (stub → expect RUQU_OPTIMIZE_STUB in note)"
-# `ruqu_optimize` is a v0.0.1 stub (planner ships in v0.2). The
-# response envelope MUST carry `RUQU_OPTIMIZE_STUB` in the `note`
-# field — same string the audit row carries — so the wire and audit
-# stories agree. This proves the live tool path over HTTP without
+hdr "tools/call ruqu_optimize (expect a real optimizer report)"
+# Phase B (ae92be3) replaced the v0.0.1 stub with the ruqu-core
+# optimizer: the response now carries gate_count_before/after and the
+# audit row carries RUQU_OPTIMIZE_OK instead of RUQU_OPTIMIZE_STUB.
+# This proves the live tool path over HTTP without
 # requiring a backend / lake to be wired in.
 OPT_RAW=$(curl -fsS -X POST "${URL}" \
   -H 'Content-Type: application/json' \
@@ -147,15 +147,15 @@ OPT_JSON=$(echo "${OPT_RAW}" | grep -E '^data: ' | grep -v '^data: $' | head -1 
 if [[ -z "${OPT_JSON}" ]]; then
   err "ruqu_optimize returned no SSE data line"
   echo "${OPT_RAW}" | head -10 >&2
-elif echo "${OPT_JSON}" | grep -q 'RUQU_OPTIMIZE_STUB'; then
-  ok "stub envelope carries RUQU_OPTIMIZE_STUB"
+elif echo "${OPT_JSON}" | grep -q 'gate_count_after'; then
+  ok "optimizer report carries gate_count_after"
 else
-  err "expected RUQU_OPTIMIZE_STUB in response, got: ${OPT_JSON:0:200}..."
+  err "expected gate_count_after in response, got: ${OPT_JSON:0:200}..."
 fi
 
 if [[ "${FAILED}" -eq 0 ]]; then
   echo
-  printf '\033[32m\033[1m✓ mcp-ruqu http smoke green\033[0m — all 5 tools served, RUQU_OPTIMIZE_STUB path verified\n'
+  printf '\033[32m\033[1m✓ mcp-ruqu http smoke green\033[0m — all 5 tools served, ruqu_optimize path verified\n'
   exit 0
 else
   echo
