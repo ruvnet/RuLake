@@ -1596,6 +1596,11 @@ function AuditScreen({ envTab = 'prod' }) {
 // in-browser substrate sources data and renders. Settings persist to
 // IndexedDB via the existing kv store; embedding API keys are kept in JS
 // memory only (never persisted).
+// Public "is IPFS reachable?" canary (CIDv1 raw, sha256
+// c7d01489…4bbace, ~117 KB). Also probed daily by
+// .github/workflows/ipfs-gateway-probe.yml.
+const IPFS_CANARY_CID = 'bafkreigh2akiscaildcqabsyg3dfr6chu3fgpregiymsck7e7aqa4s52zy';
+
 function StorageSettingsCard() {
   const [, kvOps] = (window.useRuStore || (() => [[], { put: () => {} }]))('kv');
   const [settings, setSettings] = React.useState({
@@ -1605,6 +1610,10 @@ function StorageSettingsCard() {
     ipfsEnabled: false,
     ipfsMode: 'gateway',
     ipfsGateway: 'https://w3s.link',
+    // CID fetched by "Probe IPFS gateway". Defaults to a public canary;
+    // point it at your own pinned bundle CID (the smoke suite points it
+    // at the CID of ui/public/sample-bundle.json on a local gateway).
+    ipfsProbeCid: IPFS_CANARY_CID,
     ipfsKuboUrl: 'http://127.0.0.1:5001',
     webglEnabled: typeof WebGL2RenderingContext !== 'undefined',
     workersEnabled: typeof Worker !== 'undefined',
@@ -1731,7 +1740,13 @@ function StorageSettingsCard() {
         {settings.ipfsEnabled && (settings.ipfsMode === 'gateway' || settings.ipfsMode === 'hybrid') && (
           <label className="connect-field">
             <span className="connect-field-l"><span>Gateway URL</span></span>
-            <input className="input" type="text" value={settings.ipfsGateway} onChange={e=>update({ipfsGateway:e.target.value})} />
+            <input className="input" type="text" aria-label="IPFS gateway URL" value={settings.ipfsGateway} onChange={e=>update({ipfsGateway:e.target.value})} />
+          </label>
+        )}
+        {settings.ipfsEnabled && (settings.ipfsMode === 'gateway' || settings.ipfsMode === 'hybrid') && (
+          <label className="connect-field">
+            <span className="connect-field-l"><span>Probe CID</span></span>
+            <input className="input mono" type="text" aria-label="IPFS probe CID" value={settings.ipfsProbeCid} onChange={e=>update({ipfsProbeCid:e.target.value})} />
           </label>
         )}
         {settings.ipfsEnabled && (settings.ipfsMode === 'kubo' || settings.ipfsMode === 'hybrid') && (
@@ -1773,12 +1788,11 @@ function StorageSettingsCard() {
         <button
           className="btn"
           onClick={async () => {
-            // Quick connectivity probe: fetch a known-good CID via the configured gateway.
-            // The bundle of node-wasm/fixtures has CID we don't pin yet; use a random text fixture instead.
-            // Known-good CIDv1 — small text file pinned indefinitely on
-            // multiple public gateways (used as a "is IPFS reachable?"
-            // canary). Swap with your bundle CID once you've published one.
-            const cid = 'bafkreigh2akiscaildcqabsyg3dfr6chu3fgpregiymsck7e7aqa4s52zy';
+            // Quick connectivity probe: fetch the configured probe CID
+            // (default: the public canary IPFS_CANARY_CID) via the
+            // configured gateway. Swap in your bundle CID once you've
+            // published one.
+            const cid = (settings.ipfsProbeCid || '').trim() || IPFS_CANARY_CID;
             const url = `${settings.ipfsGateway.replace(/\/$/,'')}/ipfs/${cid}`;
             const t0 = performance.now();
             try {

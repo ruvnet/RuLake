@@ -40,7 +40,6 @@ cleanup() {
     sleep 0.3
     kill -9 "$MCP_PID" 2>/dev/null || true
   fi
-  pkill -9 -f rvdna-mcp 2>/dev/null || true
 }
 trap cleanup EXIT
 

@@ -1,0 +1,35 @@
+# Live public IPFS gateway reachability — scheduled, non-blocking.
+#
+# Tracking issue: https://github.com/ruvnet/RuLake/issues/21
+#
+# Public gateways rate-limit GitHub runners (issue #19: w3s.link → dweb.link
+# answered 429 and turned every PR's smoke check red). The PR-path smoke
+# now uses a hermetic fixture gateway (ui/scripts/ipfs-fixture-gateway.mjs);
+# this workflow keeps the live signal by probing several public gateways
+# with retry + exponential backoff and verifying the served bytes against
+# the CID's sha256. It never runs on pull_request, so it cannot block a
+# merge. A red run here means "public IPFS unreachable from runners", not
+# a ruLake regression — see #21.
+
+name: ipfs-gateway-probe
+
+on:
+  schedule:
+    - cron: '37 6 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: Probe public IPFS gateways
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Fetch canary CID via public gateways (retry + backoff, sha256-verified)
+        run: ./scripts/ipfs-gateway-probe.sh
