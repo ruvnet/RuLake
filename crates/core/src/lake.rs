@@ -696,10 +696,25 @@ impl RuLake {
         // existing entry for the target witness if present, or builds
         // a new one.
         self.cache.mark_miss(key);
-        let batch = backend.pull_vectors(&key.1)?;
         // Clone the Arcs (refcount bumps) to hand the cache an owned
         // InternedKey — no String allocation.
         let owned_key: InternedKey = (Arc::clone(&key.0), Arc::clone(&key.1));
+
+        // Path C: if the backend can hand us an already-compressed index
+        // (e.g. RVF, whose on-disk format already carries RaBitQ codes),
+        // install it directly — no pull round-trip and no re-encode. Falls
+        // through to pull + prime for backends that opt out (the default).
+        if let Some(prebuilt) = backend.pull_prebuilt_index(&key.1)? {
+            self.cache.install_prebuilt_interned(
+                owned_key,
+                target_witness,
+                prebuilt.index,
+                prebuilt.pos_to_id,
+            )?;
+            return Ok(());
+        }
+
+        let batch = backend.pull_vectors(&key.1)?;
         self.cache
             .prime_interned(owned_key, target_witness, batch)?;
         Ok(())
