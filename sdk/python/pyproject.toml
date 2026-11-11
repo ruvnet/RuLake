@@ -71,14 +71,8 @@ features = ["pyo3/extension-module"]
 # user-facing __init__.py, type stubs, and py.typed marker.
 python-source = "python_src"
 
-# sdist must include the parent crate sources (path-dep) and the
-# vendored rabitq submodule the parent depends on. Without these
-# `pip install <sdist>` cannot build in an air-gapped environment.
-include = [
-    { path = "../../crates/core/src/**/*.rs",                      format = "sdist" },
-    { path = "../../crates/core/Cargo.toml",                       format = "sdist" },
-    { path = "../../crates/core/Cargo.lock",                       format = "sdist" },
-    { path = "../../vendor/ruvector/Cargo.toml",                   format = "sdist" },
-    { path = "../../vendor/ruvector/Cargo.lock",                   format = "sdist" },
-    { path = "../../vendor/ruvector/crates/ruvector-rabitq/**/*",  format = "sdist" },
-]
+# The sdist must carry the parent crate (crates/core) and the vendored
+# rabitq crate it depends on, so `pip install <sdist>` builds offline.
+# maturin packages path dependencies into the sdist on its own (via
+# `cargo package --list` per crate), so no explicit `include` is needed;
+# maturin >= 1.x also rejects `..` include patterns outright.

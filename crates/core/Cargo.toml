@@ -9,7 +9,7 @@ license = "MIT OR Apache-2.0"
 authors = ["Ruvector Team"]
 repository = "https://github.com/ruvnet/RuLake"
 description = "ruLake — vector-native federation intermediary over heterogeneous backends (ADR-155)"
-readme = "README.md"
+readme = "../../README.md"
 
 [[bin]]
 name = "rulake-demo"
