@@ -53,38 +53,84 @@ ok "vite build clean ($(grep -E 'built in' /tmp/rulake-smoke-build.log | head -1
 
 hdr "preview"
 PREVIEW_LOG=/tmp/rulake-smoke-preview.log
-PORT=4173
+# Ports are overridable so the smoke can run beside other dev servers.
+# --strictPort makes vite fail loudly instead of silently moving ports.
+PORT="${SMOKE_PREVIEW_PORT:-4173}"
 URL="http://127.0.0.1:${PORT}/RuLake/"
 
-pkill -f "vite preview" 2>/dev/null || true
-sleep 0.4
-
-(npm run preview > "$PREVIEW_LOG" 2>&1 &)
-sleep 2.0
-
-if ! curl -fsS -o /dev/null "$URL"; then
-  err "preview did not respond at $URL"
-  cat "$PREVIEW_LOG" | tail -20
-  exit 1
-fi
-ok "preview live at $URL"
-
+# Every background process is tracked by PID and only those PIDs are
+# stopped — never kill by pattern (other vite/mcp processes on the host
+# are not ours).
+PREVIEW_PID=""
 MCP_PID=""
+IPFS_PID=""
 cleanup() {
-  if [[ "$KEEP_SERVER" -eq 0 ]]; then
-    pkill -f "vite preview" 2>/dev/null || true
-    info "preview server stopped"
+  if [[ "$KEEP_SERVER" -eq 0 ]] && [[ -n "$PREVIEW_PID" ]] && kill -0 "$PREVIEW_PID" 2>/dev/null; then
+    kill "$PREVIEW_PID" 2>/dev/null || true
+    info "preview server stopped (pid $PREVIEW_PID)"
   fi
   if [[ -n "$MCP_PID" ]] && kill -0 "$MCP_PID" 2>/dev/null; then
     kill "$MCP_PID" 2>/dev/null || true
     info "mcp-server stopped (pid $MCP_PID)"
   fi
+  if [[ -n "$IPFS_PID" ]] && kill -0 "$IPFS_PID" 2>/dev/null; then
+    kill "$IPFS_PID" 2>/dev/null || true
+    info "ipfs fixture gateway stopped (pid $IPFS_PID)"
+  fi
 }
 trap cleanup EXIT
 
+"$UI_DIR/node_modules/.bin/vite" preview --host 127.0.0.1 --port "$PORT" --strictPort \
+  > "$PREVIEW_LOG" 2>&1 &
+PREVIEW_PID=$!
+
+for _ in $(seq 1 30); do
+  curl -fsS -o /dev/null "$URL" 2>/dev/null && break
+  kill -0 "$PREVIEW_PID" 2>/dev/null || break
+  sleep 0.5
+done
+if ! curl -fsS -o /dev/null "$URL"; then
+  err "preview did not respond at $URL"
+  tail -20 "$PREVIEW_LOG"
+  exit 1
+fi
+ok "preview live at $URL (pid $PREVIEW_PID)"
+
+# Hermetic IPFS gateway (issue #19). The Connect.ipfs-probe step used to
+# hit a public gateway (w3s.link → dweb.link), which rate-limits CI
+# runners, so IPFS_OK flaked red. The fixture serves
+# ui/public/sample-bundle.json under its real CIDv1 and re-hashes every
+# response. The live public-gateway check runs on a schedule in
+# .github/workflows/ipfs-gateway-probe.yml. Set SMOKE_IPFS_GATEWAY to
+# probe a real gateway from here instead.
+IPFS_FIXTURE="$UI_DIR/public/sample-bundle.json"
+IPFS_PROBE_CID="$(node "$UI_DIR/scripts/ipfs-fixture-gateway.mjs" --cid-of "$IPFS_FIXTURE")"
+if [[ -n "${SMOKE_IPFS_GATEWAY:-}" ]]; then
+  IPFS_GATEWAY="$SMOKE_IPFS_GATEWAY"
+  IPFS_PROBE_CID="${SMOKE_IPFS_CID:-bafkreigh2akiscaildcqabsyg3dfr6chu3fgpregiymsck7e7aqa4s52zy}"
+  info "ipfs: probing external gateway $IPFS_GATEWAY (SMOKE_IPFS_GATEWAY)"
+else
+  IPFS_PORT="${SMOKE_IPFS_PORT:-4190}"
+  IPFS_GATEWAY="http://127.0.0.1:${IPFS_PORT}"
+  node "$UI_DIR/scripts/ipfs-fixture-gateway.mjs" --port "$IPFS_PORT" "$IPFS_FIXTURE" \
+    > /tmp/rulake-smoke-ipfs.log 2>&1 &
+  IPFS_PID=$!
+  for _ in $(seq 1 20); do
+    curl -fsS -o /dev/null "$IPFS_GATEWAY/ipfs/$IPFS_PROBE_CID" 2>/dev/null && break
+    kill -0 "$IPFS_PID" 2>/dev/null || break
+    sleep 0.25
+  done
+  if curl -fsS -o /dev/null "$IPFS_GATEWAY/ipfs/$IPFS_PROBE_CID"; then
+    ok "ipfs fixture gateway at $IPFS_GATEWAY (pid $IPFS_PID, cid $IPFS_PROBE_CID)"
+  else
+    err "ipfs fixture gateway did not come up — see /tmp/rulake-smoke-ipfs.log"
+    exit 1
+  fi
+fi
+
 # Optionally boot a local mcp-server for the live-MCP path. Best-effort:
 # if the binary isn't built we skip the live phase silently.
-MCP_PORT=9099
+MCP_PORT="${SMOKE_MCP_PORT:-9099}"
 MCP_URL="http://127.0.0.1:${MCP_PORT}/"
 MCP_BIN="$UI_DIR/../crates/mcp-server/target/release/rulake-mcp"
 if [[ "$RUN_LIVE" -eq 1 ]]; then
@@ -94,8 +140,6 @@ if [[ "$RUN_LIVE" -eq 1 ]]; then
     info "(build with: cd mcp-server && cargo build --release)"
     RUN_LIVE=0
   else
-    pkill -f "rulake-mcp http" 2>/dev/null || true
-    sleep 0.4
     # --capabilities read,publish,admin → tools/list exposes all 8
     # #[tool] handlers (3 read + 2 publish + 3 admin). Smoke asserts
     # the Console reads exactly 8 to prove the SSE parser fix from
@@ -189,19 +233,36 @@ npx --yes agent-browser eval "
 })()" > /dev/null 2>&1
 ok "Playground.send fired"
 
-npx --yes agent-browser eval "
+IPFS_SET=$(npx --yes agent-browser eval "
 (async () => {
   const item = Array.from(document.querySelectorAll('aside *')).find(el => el.textContent === 'Connect');
   item && item.click();
   await new Promise(r => setTimeout(r, 500));
-  const seg = Array.from(document.querySelectorAll('.seg-item')).find(b => /gateway only/i.test(b.textContent));
+  const seg =Array.from(document.querySelectorAll('.seg-item')).find(b => /gateway only/i.test(b.textContent));
   seg && seg.click();
   await new Promise(r => setTimeout(r, 600));
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+  const setInput = (label, v) => {
+    const el = document.querySelector('input[aria-label=\"' + label + '\"]');
+    if (!el) return false;
+    setter.call(el, v);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    return true;
+  };
+  const gw = setInput('IPFS gateway URL', '${IPFS_GATEWAY}');
+  await new Promise(r => setTimeout(r, 200));
+  const cid = setInput('IPFS probe CID', '${IPFS_PROBE_CID}');
+  await new Promise(r => setTimeout(r, 300));
   const probe = Array.from(document.querySelectorAll('button')).find(b => /Probe IPFS gateway/i.test(b.textContent));
   probe && probe.click();
   await new Promise(r => setTimeout(r, 5000));
-})()" > /dev/null 2>&1
-ok "Connect.ipfs-probe fired"
+  return 'ipfs-inputs gw=' + gw + ' cid=' + cid + ' probe=' + !!probe;
+})()" 2>&1 | tail -1 | tr -d '"')
+if [[ "$IPFS_SET" == *"gw=true cid=true probe=true"* ]]; then
+  ok "Connect.ipfs-probe fired against $IPFS_GATEWAY"
+else
+  err "Connect.ipfs-probe could not target $IPFS_GATEWAY ($IPFS_SET)"
+fi
 
 npx --yes agent-browser eval "
 (async () => {
@@ -338,6 +399,15 @@ expect_substr IPFS_BUNDLE_VERIFIED
 expect_substr OK_VERIFIED
 expect_substr IPFS_OK
 expect_substr CONNECT_FAILED
+# The probe must have succeeded outright — a refused probe row next to
+# a stale IPFS_OK would otherwise pass the substring check above.
+for refused in IPFS_HTTP_ERROR IPFS_NETWORK_ERROR; do
+  if echo "$AUDIT_CODES" | grep -q "$refused"; then
+    err "audit row present but should not be: $refused"
+  else
+    ok "no $refused row"
+  fi
+done
 if [[ "$RUN_LIVE" -eq 1 ]]; then
   expect_substr INIT_OK
   expect_substr LIST_COLLECTIONS_OK

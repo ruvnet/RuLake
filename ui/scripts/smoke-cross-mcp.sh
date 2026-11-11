@@ -31,7 +31,7 @@ UI_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO_DIR="$(cd "${UI_DIR}/.." && pwd)"
 RVDNA_DIR="${REPO_DIR}/crates/mcp-rvdna"
 
-PREVIEW_PORT=4173
+PREVIEW_PORT="${SMOKE_PREVIEW_PORT:-4173}"
 RVDNA_PORT=17441
 PREVIEW_URL="http://localhost:${PREVIEW_PORT}/"
 RVDNA_URL="http://127.0.0.1:${RVDNA_PORT}/mcp"
@@ -43,8 +43,6 @@ info() { printf '    %s\n' "$*"; }
 FAILED=0
 
 cleanup() {
-  pkill -9 -f 'vite preview' 2>/dev/null || true
-  pkill -9 -f rvdna-mcp 2>/dev/null || true
   if [[ -n "${PREVIEW_PID:-}" ]]; then kill -9 "$PREVIEW_PID" 2>/dev/null || true; fi
   if [[ -n "${RVDNA_PID:-}" ]];   then kill -9 "$RVDNA_PID"   2>/dev/null || true; fi
 }
@@ -73,7 +71,7 @@ fi
 ok "rvdna-mcp listening on 127.0.0.1:${RVDNA_PORT} (pid ${RVDNA_PID})"
 
 hdr "launch vite preview"
-npx --yes vite preview --port "${PREVIEW_PORT}" > /tmp/vite-preview-cross.log 2>&1 &
+"${UI_DIR}/node_modules/.bin/vite" preview --port "${PREVIEW_PORT}" --strictPort > /tmp/vite-preview-cross.log 2>&1 &
 PREVIEW_PID=$!
 sleep 3
 if ! curl -sf "${PREVIEW_URL}" -o /dev/null; then
