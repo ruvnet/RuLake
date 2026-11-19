@@ -16,7 +16,9 @@
 
 ### Self-learning memory for your AI agents — without standing up a vector database.
 
-ruLake gives your AI agents **memory that gets faster the more it's used.** Point it at the storage you already have (S3, BigQuery, Snowflake, Parquet, files), and every agent — on every host — shares the same fast, trustworthy recall. It **learns what gets asked** (so the next ask returns in about a millisecond), **pins each answer to a cryptographic receipt** (so two agents on two machines see the byte-identical result), and **refuses to guess** when the underlying data has changed (an honest "I don't know" beats a confident lie). Roughly **1 ms per lookup** at 100,000 things to remember, **32× less RAM** than the raw embeddings, **zero per-query cost**.
+ruLake caches vector snapshots and attaches a witness to each generation. The stock MCP server serves in-memory collections and local `ruvec1` files. Export embeddings from BigQuery, Snowflake, Athena on S3, Delta Lake, Iceberg or Microsoft Fabric and prepare them locally. Rust applications can also register Parquet on Google Cloud Storage through the GCS adapter. Cached searches run on the host. Warehouse exports, storage and transfer have their usual provider costs.
+
+[**Try a sample search or import your lake →**](https://ruvnet.github.io/RuLake/lakes/) · [BigQuery export recipe](https://ruvnet.github.io/RuLake/lakes/#bigquery) · [Measured cache performance](BENCHMARK.md)
 
 > Created by [rUv](https://ruv.io). Part of the [RuVector](https://github.com/ruvnet/ruvector) ecosystem alongside [`ruvector-rabitq`](https://github.com/ruvnet/ruvector/tree/main/crates/ruvector-rabitq) (1-bit compression kernel) and RVF (durable segment format). Powered by [Cognitum](https://cognitum.one).
 

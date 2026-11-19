@@ -55,20 +55,9 @@ const HELP = {
     title: 'Backends — collections & federation',
     body: () => (
       <div className="help-doc">
-        <p>The Backends screen lists every collection across the lakes you've connected, with cache pressure, witness, and federation health.</p>
-        <h4>Columns</h4>
-        <ul>
-          <li><strong>state</strong> — <span className="tag tag-verified">VERIFIED</span> healthy · <span className="tag tag-warm">WARM</span> serving from cache · <span className="tag tag-cold">COLD</span> needs publish · <span className="tag tag-degraded">DEGRADED</span> partial quorum</li>
-          <li><strong>gen</strong> — bundle generation; bumps on every publish</li>
-          <li><strong>witness</strong> — first 12 hex chars of the SHAKE-256 witness for this generation</li>
-        </ul>
-        <h4>Actions</h4>
-        <ul>
-          <li><strong>Refresh</strong> — re-runs <code>rulake_list_backends</code> + per-backend <code>list_collections</code></li>
-          <li><strong>Publish</strong> — queues a publish for the selected collection (requires <code>publish</code> capability)</li>
-          <li><strong>Open</strong> — drills into the bundle viewer for a witness diff</li>
-        </ul>
-        <p className="help-note">The environment tabs (lake-prod / lake-eu / lake-edge) filter this view to one lake at a time.</p>
+        <p>In live mode this screen shows the backend and collection IDs reported by your MCP server. Refresh reloads that inventory. Read bundle requests the selected collection’s bundle from the server.</p>
+        <p>The demo shows sample cache pressure, federation topology and a simulated publish action. Use the environment tabs to explore its collections.</p>
+        <p><a href={import.meta.env.BASE_URL + 'lakes/'}>Import a warehouse or lake snapshot</a></p>
       </div>
     ),
   },

@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { fileURLToPath } from 'node:url';
 
 // GitHub Pages serves the project at /RuLake/ — set base accordingly.
 // Override with VITE_BASE for custom-domain deploys.
@@ -13,6 +14,12 @@ export default defineConfig({
     host: '127.0.0.1',
   },
   build: {
+    rollupOptions: {
+      input: {
+        console: fileURLToPath(new URL('./index.html', import.meta.url)),
+        lakes: fileURLToPath(new URL('./lakes/index.html', import.meta.url)),
+      },
+    },
     outDir: 'dist',
     emptyOutDir: true,
     target: 'es2020',

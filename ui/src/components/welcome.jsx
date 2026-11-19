@@ -239,7 +239,8 @@ function WelcomeModal({ open, onClose, onJump }) {
         <div className="welcome-step">
           <IntroSlideshow />
           <div className="welcome-hint" style={{marginTop:14, textAlign:'center'}}>
-            This console is the operator's lens — watch queries flow, inspect witnesses, audit refusals, and tune cache across every lake you've connected.
+            Browse collections and inspect query receipts. Bring your own embeddings from a warehouse or lake.
+            <div style={{marginTop:10}}><a className="btn" href={import.meta.env.BASE_URL + 'lakes/'}>Explore BigQuery and data lakes →</a></div>
           </div>
         </div>
       ),

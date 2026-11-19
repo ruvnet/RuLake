@@ -894,6 +894,7 @@ html, body {
 /* Rich sidebar nav */
 .nav-list { display: flex; flex-direction: column; padding: 4px 0; }
 .nav-item-rich {
+  appearance: none; width: 100%; background: none; border: 0; color: inherit; text-align: left; font: inherit; text-decoration: none;
   position: relative;
   display: grid;
   grid-template-columns: 22px 1fr auto;
@@ -1594,3 +1595,11 @@ html, body {
 .glyph-square { width: 6px; height: 6px; background: currentColor; display: inline-block; }
 .glyph-ring { width: 6px; height: 6px; border: 1px solid currentColor; border-radius: 50%; display: inline-block; }
 .glyph-fill { width: 6px; height: 6px; background: currentColor; border-radius: 50%; display: inline-block; }
+
+.live-inventory .pane-header { flex-wrap: wrap; height: auto; min-height: 40px; }
+.inventory-body { padding: 18px; overflow-wrap: anywhere; }
+.inventory-body section { margin-top: 16px; border-top: 1px solid var(--rule); padding-top: 12px; }
+.inventory-body h2 { font-size: 15px; }
+.inventory-body ul { list-style: none; padding: 0; }
+.inventory-body li { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; }
+.live-bundle { white-space: pre-wrap; }

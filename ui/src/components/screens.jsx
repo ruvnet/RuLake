@@ -1,4 +1,5 @@
 /* global React, RULAKE, RuComp, RuModals */
+import { LiveBackends } from './live-backends.jsx';
 const { useState, useEffect, useMemo, useRef } = React;
 const { Sparkline, Histogram, LineChart, VectorField, ReceiptPrint, Hex, Bar } = RuComp;
 const { SaveQueryModal, LoadQueryModal, PinBundleModal, BundlesListModal, ConnectionsModal } = RuModals;
@@ -20,12 +21,11 @@ function Sidebar({ route, setRoute, currentWitness, currentBundle, className = '
   // actually persisted, not fixture numbers.
   const [auditRows] = (window.useRuStore || (() => [[]]))('audit');
   const [connRows]  = (window.useRuStore || (() => [[]]))('connections');
-  const [bundleRows] = (window.useRuStore || (() => [[]]))('bundles');
   const auditTotal = (auditRows.length + (window.RULAKE?.AUDIT?.length || 0));
   const items = [
-    { id: 'stats',      label: 'Stats',      sub: 'live · qps 28.4',   glyph: NAV_GLYPHS.stats,      badge: 'live',                  badgeKind: 'live' },
+    { id: 'stats',      label: 'Stats',      sub: 'sample telemetry',   glyph: NAV_GLYPHS.stats,      badge: '',                      badgeKind: '' },
     { id: 'playground', label: 'Playground', sub: 'rulake_query',      glyph: NAV_GLYPHS.playground, badge: '',                      badgeKind: '' },
-    { id: 'browse',     label: 'Backends',   sub: '3 lakes · 7 colls', glyph: NAV_GLYPHS.browse,     badge: String(3 + bundleRows.length), badgeKind: 'count' },
+    { id: 'browse',     label: 'Backends',   sub: 'registered collections', glyph: NAV_GLYPHS.browse, badge: '', badgeKind: 'count' },
     { id: 'bundle',     label: 'Bundle',     sub: 'witness · gen-7741',glyph: NAV_GLYPHS.bundle,     badge: 'WARM',                  badgeKind: 'warm' },
     { id: 'audit',      label: 'Audit',      sub: 'jsonl · tail',      glyph: NAV_GLYPHS.audit,      badge: String(auditTotal),      badgeKind: 'count' },
     { id: 'connect',    label: 'Connect',    sub: connRows.length > 0 ? `mcp · ${connRows.length} saved` : 'mcp · 2025-03-26', glyph: NAV_GLYPHS.connect, badge: 'JWT', badgeKind: 'auth' },
@@ -48,7 +48,7 @@ function Sidebar({ route, setRoute, currentWitness, currentBundle, className = '
       </div>
       <div className="nav-list">
         {items.map(it => (
-          <div key={it.id} className={'nav-item-rich' + (route === it.id ? ' active' : '')} onClick={() => setRoute(it.id)}>
+          <button type="button" key={it.id} className={'nav-item-rich' + (route === it.id ? ' active' : '')} aria-current={route === it.id ? 'page' : undefined} onClick={() => setRoute(it.id)}>
             <span className="nav-rail"></span>
             <span className="nav-glyph-svg">{it.glyph}</span>
             <span className="nav-text">
@@ -56,8 +56,12 @@ function Sidebar({ route, setRoute, currentWitness, currentBundle, className = '
               <span className="nav-sub">{it.sub}</span>
             </span>
             {it.badge && <span className={'nav-badge nav-badge-' + (it.badgeKind || '')}>{it.badge}</span>}
-          </div>
+          </button>
         ))}
+        <a className="nav-item-rich" href={import.meta.env.BASE_URL + 'lakes/'}>
+          <span className="nav-glyph-svg" aria-hidden="true">{NAV_GLYPHS.browse}</span>
+          <span className="nav-text"><span className="nav-label">Data sources</span><span className="nav-sub">BigQuery and lake imports</span></span>
+        </a>
       </div>
 
       <div className="sec-h" style={{marginTop: 14}}>
@@ -133,7 +137,7 @@ function Topbar({ envTab, setEnvTab, onMenu }) {
         if (!window.RuLakeHttp) return;
         const client = new window.RuLakeHttp(url, { token: null });
         await client.connect();
-        if (cancelled) return;
+        if (cancelled || window.RULakeActiveClient) return;
         window.RULakeActiveClient = { endpoint: url, mode: 'none', token: null, sessionId: client.sessionId, client };
         window.dispatchEvent(new CustomEvent('rulake:live-connected', {
           detail: { endpoint: url, sessionId: client.sessionId, toolsCount: 0 },
@@ -853,71 +857,22 @@ function PlaygroundScreen() {
 }
 
 // ─── BACKENDS BROWSER ───────────────────────────────────────────────
-function BrowseScreen({ onOpenBundle, envTab = 'prod' }) {
+function BrowseScreen(props) {
+  const [live, setLive] = useState(() => window.RULakeActiveClient);
+  useEffect(() => {
+    const sync = () => setLive(window.RULakeActiveClient);
+    window.addEventListener('rulake:live-connected', sync);
+    sync();
+    return () => window.removeEventListener('rulake:live-connected', sync);
+  }, []);
+  return live?.client ? <LiveBackends key={live.endpoint + (live.sessionId || '')} client={live.client} /> : <DemoBackends {...props} />;
+}
+
+function DemoBackends({ onOpenBundle, envTab = 'prod' }) {
   const [selected, setSelected] = useState(['lake-prod','memories']);
   const [refreshing, setRefreshing] = useState(false);
   const refresh = async () => {
     setRefreshing(true);
-    const live = window.RULakeActiveClient;
-    if (live && live.endpoint) {
-      // Live path — call rulake_list_backends, then per-backend
-      // rulake_list_collections via the Streamable HTTP transport.
-      window.toast && window.toast.info('Refreshing collections…', `${live.endpoint} · rulake_list_collections`, { duration: 700 });
-      const t0 = performance.now();
-      try {
-        const callTool = async (name, args) => {
-          const headers = {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json, text/event-stream',
-            'mcp-session-id': live.sessionId || '',
-            'MCP-Request-Id': Math.random().toString(36).slice(2) + Date.now().toString(36),
-          };
-          if (live.token) headers.Authorization = live.token.startsWith('Bearer ') ? live.token : `Bearer ${live.token}`;
-          const resp = await fetch(live.endpoint, {
-            method: 'POST', headers,
-            body: JSON.stringify({ jsonrpc: '2.0', id: Date.now() & 0xffff, method: 'tools/call', params: { name, arguments: args || {} } }),
-          });
-          if (!resp.ok) throw new Error(`${resp.status} ${resp.statusText}`);
-          const txt = await resp.text();
-          // Drain SSE — find the 'data: ' line carrying the result envelope.
-          const data = txt.split('\n').find(l => l.startsWith('data: ') && l.includes('"result"'));
-          if (!data) throw new Error('no result in response');
-          const env = JSON.parse(data.slice(6));
-          if (env.error) throw new Error(env.error.message || 'tool error');
-          // tools/call result wraps content; structuredContent (if present) carries the typed JSON.
-          return env.result?.structuredContent ?? env.result;
-        };
-        const backendsResp = await callTool('rulake_list_backends');
-        const backends = backendsResp?.backends || [];
-        let totalCollections = 0;
-        const collectionsByBackend = {};
-        for (const b of backends) {
-          const r = await callTool('rulake_list_collections', { backend: b });
-          const colls = (r?.collections || []).map(c => c.id || c);
-          collectionsByBackend[b] = colls;
-          totalCollections += colls.length;
-        }
-        const ms = Math.round(performance.now() - t0);
-        window.RULakeLiveCollections = collectionsByBackend;
-        setRefreshing(false);
-        window.toast && window.toast.ok('Collections refreshed (live)', `${totalCollections} collections · ${backends.length} backends · ${ms}ms`);
-        if (window.RuStore) await window.RuStore.appendAudit({
-          ts: new Date().toISOString().slice(11,19),
-          principal: 'jules@ruv', tool: 'rulake_list_collections', target: live.endpoint,
-          k: totalCollections, ms, code: 'LIST_COLLECTIONS_OK', outcome: 'ok',
-        });
-      } catch (e) {
-        const ms = Math.round(performance.now() - t0);
-        setRefreshing(false);
-        window.toast && window.toast.warn('Refresh failed', String(e.message || e));
-        if (window.RuStore) await window.RuStore.appendAudit({
-          ts: new Date().toISOString().slice(11,19),
-          principal: 'jules@ruv', tool: 'rulake_list_collections', target: live.endpoint,
-          k: 0, ms, code: 'LIST_COLLECTIONS_FAILED', outcome: 'refused',
-        });
-      }
-      return;
-    }
     // Fallback: demo mode — fixture refresh.
     window.toast && window.toast.info('Refreshing collections…', 'rulake_list_backends · rulake_list_collections', { duration: 700 });
     setTimeout(() => {
@@ -939,37 +894,16 @@ function BrowseScreen({ onOpenBundle, envTab = 'prod' }) {
   };
   const ENV_TO_BACKEND = { prod: 'lake-prod', eu: 'lake-eu', edge: 'lake-edge' };
   const filterId = ENV_TO_BACKEND[envTab];
-  // Live mode: when window.RULakeLiveCollections is populated by a
-  // successful Browse.refresh against a real mcp-server, render those
-  // server-reported backends + collections instead of the fixture.
-  const [liveTick, setLiveTick] = React.useState(0);
-  React.useEffect(() => {
-    const onAudit = () => setLiveTick(t => t + 1);
-    window.addEventListener('rulake:store', onAudit);
-    return () => window.removeEventListener('rulake:store', onAudit);
-  }, []);
-  const liveCollections = (typeof window !== 'undefined' ? window.RULakeLiveCollections : null);
-  const liveBackendIds = liveCollections ? Object.keys(liveCollections) : null;
-  const visibleBackends = liveBackendIds && liveBackendIds.length
-    ? liveBackendIds.map((bid) => ({
-        id: bid,
-        kind: 'live',
-        region: 'mcp',
-        collections: (liveCollections[bid] || []).map((cid) => ({
-          id: cid, dim: 0, gen: '—', entries: 0,
-          hits: 0, misses: 0, primes: 0, lastPrimeMs: 0,
-          state: 'warm', witness: '—',
-        })),
-      }))
-    : RULAKE.BACKENDS.filter(b => b.id === filterId);
+  const visibleBackends = RULAKE.BACKENDS.filter(b => b.id === filterId);
   return (
     <div>
       <div className="pane-header">
         <span>backends</span>
         <span className="crumb-sep">/</span>
-        <span className="crumb-active">{liveBackendIds ? 'live · ' + visibleBackends.length + ' backends' : 'all collections'}</span>
+        <span className="crumb-active">Demo collections</span>
         <HelpIcon topic="browse" label="About the Backends browser" />
         <div className="header-actions">
+          <a className="btn" href={import.meta.env.BASE_URL + 'lakes/'}>Import a lake</a>
           <button className="btn" onClick={refresh} disabled={refreshing}>{refreshing ? 'Refreshing…' : 'Refresh'}</button>
           <button className="btn" onClick={publish}>Publish</button>
         </div>

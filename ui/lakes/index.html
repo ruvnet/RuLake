@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'">
+  <meta name="theme-color" content="#0b1218">
+  <meta name="description" content="Search vector snapshots from BigQuery, Snowflake, Amazon Athena, Delta Lake, Apache Iceberg, Microsoft Fabric and Parquet with RuLake. Try a local search or import your own export.">
+  <title>Data sources · RuLake Console</title>
+  <link rel="canonical" href="https://ruvnet.github.io/RuLake/lakes/">
+  <link rel="stylesheet" href="./guide.css">
+  <script type="module" src="./guide.js"></script>
+</head>
+<body>
+  <a href="#main" class="skip">Skip to content</a>
+  <header class="top"><div class="wrap top-inner">
+    <a class="brand" href="../"><span class="mark" aria-hidden="true"></span> RuLake</a>
+    <span class="breadcrumb">/ Data sources</span>
+    <a class="back" href="../">Open console <span aria-hidden="true">↗</span></a>
+  </div></header>
+  <main id="main" class="wrap">
+    <div class="hero">
+      <div class="intro">
+        <h1>Search your<br><em>lake snapshots.</em></h1>
+        <p>Turn warehouse embeddings into a RuLake collection. Search an export on your own machine and choose when to refresh it.</p>
+        <div class="actions"><a class="button primary" href="#sources">Choose a source <span aria-hidden="true">↓</span></a><a class="button secondary" href="#import">Import a snapshot</a></div>
+      </div>
+      <section class="sample" aria-labelledby="sample-title">
+        <div class="sample-head"><h2 id="sample-title">Try a vector search</h2><span class="local"><i></i> Local WASM</span></div>
+        <p>Search eight sample vectors or open a <code>.ruvec1</code> file up to 16 MiB. Your file stays in this browser.</p>
+        <form id="search" hidden>
+          <label class="field-label" for="query">Query vector</label>
+          <input id="query" type="text" value="1, 0, 0, 0" required autocomplete="off" spellcheck="false" aria-describedby="query-help">
+          <small id="query-help">Enter each component, separated by a comma.</small>
+          <div class="sample-actions"><button class="button primary" type="submit">Run search <span aria-hidden="true">→</span></button><label class="file-label">Open snapshot<input type="file" id="snapshot" accept=".ruvec1"></label><button type="button" class="text-button" id="reset" hidden>Use sample</button></div>
+          <p class="result" id="result" role="status">Sample ready · 8 vectors · 4 dimensions</p>
+        </form>
+        <noscript><p>Use the downloads below to run the sample locally.</p></noscript>
+      </section>
+    </div>
+    <div class="layout">
+      <nav class="rail" aria-label="Lake guide">
+        <div class="rail-title">Data sources</div>
+        <a href="#bigquery">Google BigQuery</a><a href="#snowflake">Snowflake</a><a href="#athena">Amazon Athena / S3</a><a href="#delta">Databricks / Delta Lake</a><a href="#iceberg">Apache Iceberg</a><a href="#fabric">Microsoft Fabric / OneLake</a><a href="#parquet">Parquet / GCS</a>
+        <div class="rail-title tools">Local setup</div><a href="#import">Prepare the file</a><a href="#serve">Serve it with MCP</a>
+      </nav>
+      <div class="guide">
+        <section id="sources">
+          <h2>Choose a source</h2>
+          <p>Export a stable integer <code>id</code> and a fixed width <code>vector</code> from one completed run. The stock MCP server reads the prepared filesystem snapshot. Warehouse scan, storage and transfer charges apply when you export.</p>
+          <article id="bigquery">
+            <div class="article-title"><h3>Google BigQuery</h3><span>Parquet export</span></div>
+            <p>In GoogleSQL, project the ID and embedding from a partitioned table. Substitute your table, bucket, partition column and date. Use a fresh path in a bucket compatible with the dataset location. Download every output shard.</p>
+            <pre><code>EXPORT DATA OPTIONS (
+  uri='gs://YOUR_BUCKET/rulake/run_001/part-*.parquet',
+  format='PARQUET', overwrite=false
+) AS
+SELECT id, embedding AS vector
+FROM `YOUR_PROJECT.YOUR_DATASET.embeddings`
+WHERE event_date = DATE '2026-11-01';</code></pre>
+            <p>The importer converts BigQuery <code>ARRAY&lt;FLOAT64&gt;</code> to float32. Estimate the SELECT scan before running the export. <a href="https://docs.cloud.google.com/bigquery/docs/reference/standard-sql/export-statements">Google export reference ↗</a></p>
+          </article>
+          <article id="snowflake">
+            <div class="article-title"><h3>Snowflake</h3><span>JSON export</span></div>
+            <p>On a warehouse, unload a VECTOR as an array in a JSON object. This preserves numeric components and explicit lowercase field names. Substitute a writable stage, fresh prefix and authorized table.</p>
+            <pre><code>COPY INTO @YOUR_STAGE/rulake/run_001/
+FROM (SELECT OBJECT_CONSTRUCT(
+  'id', id, 'vector', TO_ARRAY(embedding)
+) FROM YOUR_DB.YOUR_SCHEMA.EMBEDDINGS)
+FILE_FORMAT=(TYPE=JSON COMPRESSION=NONE);</code></pre>
+            <p>Download the data shards and pass the newline delimited <code>.json</code> files to the importer. <a href="https://docs.snowflake.com/en/sql-reference/data-types-vector#loading-and-unloading-vector-data">Snowflake vector unloading ↗</a></p>
+          </article>
+          <article id="athena">
+            <div class="article-title"><h3>Amazon Athena / S3</h3><span>Parquet export</span></div>
+            <p>Run UNLOAD into a new, empty S3 prefix. Apply the partition predicate for your table. Use the job’s data manifest to download exactly the data files it wrote.</p>
+            <pre><code>UNLOAD (
+  SELECT id, embedding AS vector
+  FROM analytics.embeddings
+  WHERE event_date = DATE '2026-11-01'
+) TO 's3://YOUR_BUCKET/rulake/run_001/'
+WITH (format = 'PARQUET', compression = 'SNAPPY');</code></pre>
+            <p>If the data objects have no extension, give their local copies a <code>.parquet</code> suffix. <a href="https://docs.aws.amazon.com/athena/latest/ug/unload.html">Athena UNLOAD reference ↗</a></p>
+          </article>
+          <article id="delta">
+            <div class="article-title"><h3>Databricks / Delta Lake</h3><span>Table version</span></div>
+            <p>Read a retained Delta version through Spark so updates and deletions are applied. Replace version 42 and the output location for each refresh.</p>
+            <pre><code>rows = (spark.read.format("delta").option("versionAsOf", 42)
+        .table("catalog.schema.embeddings"))
+(rows.selectExpr("id", "embedding AS vector").write
+ .mode("errorifexists").parquet("s3://YOUR_BUCKET/rulake/run_001"))</code></pre>
+            <p>Download the resulting Parquet parts. Keep the source version with the export. <a href="https://docs.databricks.com/aws/en/tables/history">Databricks table history ↗</a></p>
+          </article>
+          <article id="iceberg">
+            <div class="article-title"><h3>Apache Iceberg</h3><span>Snapshot ID</span></div>
+            <p>Choose a retained snapshot ID from the catalog. The Iceberg reader applies its manifest and delete files before writing the export.</p>
+            <pre><code>rows = (spark.read.format("iceberg")
+        .option("snapshot-id", "10963874102873")
+        .load("catalog.db.embeddings"))
+(rows.selectExpr("id", "embedding AS vector").write
+ .mode("errorifexists").parquet("s3://YOUR_BUCKET/rulake/run_001"))</code></pre>
+            <p>Download only the parts from that export. <a href="https://iceberg.apache.org/docs/latest/spark-queries/#time-travel">Iceberg time travel ↗</a></p>
+          </article>
+          <article id="fabric">
+            <div class="article-title"><h3>Microsoft Fabric / OneLake</h3><span>Lakehouse export</span></div>
+            <p>In a Spark notebook attached to your lakehouse, read a retained Delta version and write the projected columns under Files. Download the resulting parts from that directory.</p>
+            <pre><code>rows = (spark.read.format("delta").option("versionAsOf", 42)
+        .load("Tables/embeddings"))
+(rows.selectExpr("id", "embedding AS vector").write
+ .mode("errorifexists").parquet("Files/rulake/run_001"))</code></pre>
+            <p>For a schema enabled lakehouse, use its full table path. <a href="https://learn.microsoft.com/en-us/fabric/data-engineering/lakehouse-and-delta-tables">Fabric lakehouse tables ↗</a></p>
+          </article>
+          <article id="parquet">
+            <div class="article-title"><h3>Parquet / Google Cloud Storage</h3><span>File or Rust adapter</span></div>
+            <p>Local Parquet parts from the same completed export can go straight to the importer. It reads only <code>id</code> and <code>vector</code>. Signed nonnegative or unsigned integer IDs and float32 or float64 lists are supported.</p>
+            <p>Rust applications can also register one GCS Parquet object directly with <code>GcsParquetBackend</code>. That adapter takes INT64 IDs and float32 lists. Set the dimension explicitly for variable length lists. <a href="https://github.com/ruvnet/RuLake/tree/main/crates/gcs-backend">GCS adapter contract ↗</a></p>
+          </article>
+        </section>
+        <section id="import" class="setup">
+          <h2>Prepare the file</h2>
+          <p>Download the importer and sample to the same directory. The sample uses the same INT64 and float64 list types as the BigQuery example.</p>
+          <div class="downloads"><a download href="prepare_snapshot.py">Download importer ↓</a><a download href="sample.parquet">Sample Parquet ↓</a></div>
+          <pre><code>python -m pip install "pyarrow&gt;=20" numpy
+python prepare_snapshot.py sample.parquet -o sample.ruvec1</code></pre>
+          <p>Expected output: <code>8 vectors, 4 dimensions, 216 bytes</code>. For a warehouse export, pass all shards to one invocation. Use a new filename for each snapshot.</p>
+          <pre><code>python prepare_snapshot.py run_001/*.parquet -o run_001.ruvec1</code></pre>
+          <p>IDs must be unique across shards. The importer checks dimensions, nulls and finite float32 values before publishing the file. For Snowflake JSON use <code>run_001/*.json</code> and nonnegative signed 64 bit IDs.</p>
+        </section>
+        <section id="serve" class="setup">
+          <h2>Serve it with MCP</h2>
+          <p>Place the sample config beside <code>sample.ruvec1</code> and start the RuLake MCP binary from that directory. For another snapshot, update <code>filename</code> in the config and restart the server. Keep the prior file and config for rollback.</p>
+          <div class="downloads"><a download href="mcp.toml">Sample MCP config ↓</a><a href="https://github.com/ruvnet/RuLake/tree/main/crates/mcp-server">Build the MCP server ↗</a></div>
+          <pre><code>rulake-mcp stdio --config mcp.toml</code></pre>
+          <p>Use your MCP client to call <code>rulake_query</code> with these arguments. For the sample, expect ID <strong>101</strong> first. The snapshot stays current through the export you selected. Repeat the export and import to include newer source rows.</p>
+          <pre><code>{
+  "intent": "search",
+  "target": {"routes": [["lake", "embeddings"]]},
+  "search": {"vector": [1, 0, 0, 0], "k": 1}
+}</code></pre>
+        </section>
+      </div>
+    </div>
+  </main>
+  <footer class="wrap footer"><a class="brand" href="../">RuLake</a><a href="#main">Back to top ↑</a></footer>
+</body>
+</html>
