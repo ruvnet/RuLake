@@ -1,6 +1,11 @@
 # ruLake — A Memory Lake for Agentic AI
 
-<a href="https://ruvnet.github.io/RuLake/lakes/"><img src="assets/lake-snapshot-flow.svg" alt="Export Parquet or JSON from your lake, prepare a ruvec1 snapshot, then search locally. Open the data source guides." width="100%" /></a>
+<a href="https://ruvnet.github.io/RuLake/lakes/">
+  <picture>
+    <source media="(prefers-reduced-motion: reduce)" srcset="assets/lake-snapshot-flow.svg#still" />
+    <img src="assets/lake-snapshot-flow.svg" alt="Export Parquet or JSON from your lake, prepare a ruvec1 snapshot, then search locally. Open the data source guides." width="100%" />
+  </picture>
+</a>
 
 > **[Try the live Console →](https://ruvnet.github.io/RuLake/)** — boots in DEMO, auto-probes the hosted MCP at [`rulake-mcp.ruv.io`](https://rulake-mcp.ruv.io/), flips to `● LIVE` when the wire's up. Eight tools served, zero install.
 
@@ -55,7 +60,12 @@ npm   install rulake-wasm             # Browsers, Cloudflare Workers, Deno, Bun
 
 ### Console startup
 
-<a href="https://github.com/ruvnet/RuLake/pull/25"><img src="assets/console-startup.svg" alt="Median cold startup fell from 1.63 s to 0.42 s. Initial JavaScript requests fell from 17 to 3." width="100%" /></a>
+<a href="https://github.com/ruvnet/RuLake/pull/25">
+  <picture>
+    <source media="(prefers-reduced-motion: reduce)" srcset="assets/console-startup.svg#still" />
+    <img src="assets/console-startup.svg" alt="Median cold startup fell from 1.63 s to 0.42 s. Initial JavaScript requests fell from 17 to 3." width="100%" />
+  </picture>
+</a>
 
 Measured across five cold loads per build in Chrome on ruOS with 80 ms simulated latency and 10 Mbps throughput. [Benchmark details](https://github.com/ruvnet/RuLake/pull/25)
 
