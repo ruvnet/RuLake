@@ -17,12 +17,18 @@ const hexToRgb = (hex) => {
   return `${(n>>16)&255}, ${(n>>8)&255}, ${n&255}`;
 };
 
-// Generate live data — animated, evolving each tick
-function useLiveStats() {
+// The dashboard uses sample telemetry. Build charts only while they are visible.
+function useLiveStats(showCharts) {
   const [tick, setTick] = useState(0);
   useEffect(() => {
-    const id = setInterval(() => setTick(t => t + 1), 1100);
-    return () => clearInterval(id);
+    let id;
+    const visibility = () => {
+      clearInterval(id);
+      if (!document.hidden) id = setInterval(() => setTick(t => t + 1), 1100);
+    };
+    visibility();
+    document.addEventListener('visibilitychange', visibility);
+    return () => { clearInterval(id); document.removeEventListener('visibilitychange', visibility); };
   }, []);
 
   return useMemo(() => {
@@ -35,7 +41,7 @@ function useLiveStats() {
     const hitRate = ((hits / (hits + misses)) * 100).toFixed(2);
     const verified = hits;
 
-    return {
+    const summary = {
       hits, misses, hitRate,
       primes: 642 + Math.floor(tick/3),
       avgPrime: 8.4,
@@ -45,6 +51,10 @@ function useLiveStats() {
       qps: (28 + r() * 6).toFixed(1),
       p50: (8 + r()*2).toFixed(1),
       p99: (24 + r()*8).toFixed(1),
+    };
+    if (!showCharts) return summary;
+    return {
+      ...summary,
       spark: {
         hits:    wave(40, 30, 8, 0),
         misses:  wave(40, 4, 3, 1),
@@ -60,7 +70,15 @@ function useLiveStats() {
       },
       histo: [3, 14, 38, 62, 84, 96, 88, 64, 42, 28, 18, 12, 8, 5, 4, 3, 2, 2, 1, 1],
     };
-  }, [tick]);
+  }, [tick, showCharts]);
+}
+
+function ConsoleContent({ showStats, envTab, children }) {
+  const sample = useLiveStats(showStats);
+  return <>
+    <main className="main">{showStats ? <StatsScreen liveData={sample} envTab={envTab} /> : children}</main>
+    <Statusbar stats={sample} />
+  </>;
 }
 
 function App() {
@@ -71,7 +89,6 @@ function App() {
   const [welcomeOpen, setWelcomeOpen] = useState(false);
   const [helpIndexOpen, setHelpIndexOpen] = useState(false);
   const [helpTopic, setHelpTopic] = useState(null); // routed help topic
-  const liveData = useLiveStats();
 
   // Global help dispatcher — any HelpIcon dispatches 'rulake:open-help' { topic }
   useEffect(() => {
@@ -203,16 +220,14 @@ function App() {
       <Topbar envTab={envTab} setEnvTab={setEnvTab} onMenu={() => setMobileNav(true)} />
       <div className={'mobile-overlay' + (mobileNav ? ' open' : '')} style={{display: mobileNav ? 'block' : 'none', position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:50}} onClick={() => setMobileNav(false)}></div>
       <Sidebar className={mobileNav ? 'open' : ''} route={route} setRoute={(r) => { setRoute(r); setMobileNav(false); }} currentWitness={currentWitness} currentBundle={currentBundle} />
-      <main className="main">
-        {route === 'stats'      && <StatsScreen liveData={liveData} envTab={envTab} />}
+      <ConsoleContent showStats={route === 'stats'} envTab={envTab}>
         {route === 'playground' && <PlaygroundScreen />}
         {route === 'browse'     && <BrowseScreen onOpenBundle={openBundle} envTab={envTab} />}
         {route === 'bundle'     && <BundleScreen bundle={bundleSelection} />}
         {route === 'audit'      && <AuditScreen envTab={envTab} />}
         {route === 'connect'    && <ConnectScreen />}
         {route === 'appstore'   && <AppStoreScreen />}
-      </main>
-      <Statusbar stats={liveData} />
+      </ConsoleContent>
       <DebugConsole visible={tweaks.showConsole} onClose={() => setTweak('showConsole', false)} />
       <ToastHost />
 

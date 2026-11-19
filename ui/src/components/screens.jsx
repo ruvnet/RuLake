@@ -197,7 +197,7 @@ function Statusbar({ stats }) {
   return (
     <footer className="statusbar">
       <span style={{color:'var(--verifier-bright)'}}>● MCP 2025-03-26</span>
-      <span>session 7f3c2…91d</span>
+      <span>Sample session</span>
       <span>principal jules@ruv</span>
       <span>caps read·publish</span>
       <span style={{marginLeft:'auto'}}>q/s {stats.qps}</span>
@@ -354,7 +354,7 @@ function StatsScreen({ liveData, envTab = 'prod' }) {
         <div className="env-header-l">
           <span className="env-header-dot" style={{background: env.color, boxShadow: `0 0 10px ${env.color}`}}></span>
           <span className="env-header-name">{env.label}</span>
-          <span className="env-header-region">{env.region}</span>
+          <span className="env-header-region">{env.region} · Sample telemetry</span>
         </div>
         <div className="env-header-r">
           <span>load <strong style={{color: env.color}}>{(env.mul * 100).toFixed(0)}%</strong></span>

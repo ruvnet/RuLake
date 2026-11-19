@@ -94,7 +94,7 @@ function IntroSlideshow() {
     {
       tag: 'the missing middle',
       head: 'ruLake is the layer in between.',
-      body: <>Your data <strong>stays where it lives</strong>. ruLake keeps a compressed copy in RAM, returns matches in <strong>~1 ms</strong>, and refreshes from the source when it changes.</>,
+      body: <>Export a collection from your warehouse. ruLake caches that <strong>snapshot</strong> in memory for repeated searches. Import a new export when you want newer rows.</>,
       art: (
         <svg viewBox="0 0 360 130" width="100%" height="130">
           <defs>
@@ -115,13 +115,13 @@ function IntroSlideshow() {
           <g transform="translate(144,28)" className="intro-anim-pop" style={{animationDelay:'200ms'}}>
             <rect width="92" height="64" fill="none" stroke="url(#ig-arr)" strokeWidth="1.4"/>
             <text x="46" y="22" textAnchor="middle" fill="#2d8c5d" fontSize="13" fontWeight="600" fontFamily="JetBrains Mono">ruLake</text>
-            <text x="46" y="38" textAnchor="middle" fill="#7a8190" fontSize="8.5" fontFamily="Inter">~1 ms · in RAM</text>
-            <text x="46" y="52" textAnchor="middle" fill="#7a8190" fontSize="8.5" fontFamily="Inter">32× compressed</text>
+            <text x="46" y="38" textAnchor="middle" fill="#7a8190" fontSize="8.5" fontFamily="Inter">cached in RAM</text>
+            <text x="46" y="52" textAnchor="middle" fill="#7a8190" fontSize="8.5" fontFamily="Inter">vector index</text>
           </g>
           <g className="intro-anim-flow" style={{animationDelay:'400ms'}}>
             <line x1="238" y1="60" x2="294" y2="60" stroke="#4a9eb5" strokeWidth="1.4" strokeDasharray="3 2"/>
             <polygon points="294,60 290,57 290,63" fill="#4a9eb5"/>
-            <text x="266" y="54" textAnchor="middle" fill="#7a8190" fontSize="9" fontFamily="JetBrains Mono">refresh</text>
+            <text x="266" y="54" textAnchor="middle" fill="#7a8190" fontSize="9" fontFamily="JetBrains Mono">import</text>
           </g>
           <g transform="translate(296,18)" className="intro-anim-pop" style={{animationDelay:'400ms'}} fill="#7a8190" fontFamily="JetBrains Mono" fontSize="8.5">
             <rect width="56" height="14" fill="none" stroke="#7a8190" strokeWidth="0.6"/>
@@ -140,7 +140,7 @@ function IntroSlideshow() {
     {
       tag: 'why agents trust it',
       head: 'Every answer carries a fingerprint.',
-      body: <>A small SHAKE-256 hash of the data the answer came from. Two agents on two machines querying the same data get the <strong>same fingerprint</strong> — and the same answer, byte for byte. If the local copy is stale and the source is unreachable, ruLake <strong>refuses</strong> instead of guessing.</>,
+      body: <>A SHAKE256 witness identifies the registered bundle’s source reference, generation and index settings. Agents can check that they queried the same bundle. Refresh a warehouse export to include later changes.</>,
       art: (
         <svg viewBox="0 0 360 130" width="100%" height="130">
           <g className="intro-anim-pop" style={{animationDelay:'0ms'}}>
@@ -365,7 +365,7 @@ function WelcomeModal({ open, onClose, onJump }) {
           <div className="welcome-grid">
             <div className="welcome-card" onClick={()=>{onJump('stats'); onClose();}}>
               <div className="welcome-card-h">▦ Stats</div>
-              <div className="welcome-card-b">Live throughput, hit-rate, latency. Per-lake rollup.</div>
+              <div className="welcome-card-b">Explore sample throughput, cache hits and latency.</div>
             </div>
             <div className="welcome-card" onClick={()=>{onJump('playground'); onClose();}}>
               <div className="welcome-card-h">▶ Playground</div>

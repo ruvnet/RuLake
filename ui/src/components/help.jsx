@@ -8,7 +8,7 @@ const HELP = {
     title: 'Stats — receipt-printer dashboard',
     body: () => (
       <div className="help-doc">
-        <p>The Stats screen prints a continuous receipt of system health. Every tile, sparkline, and refusal row is sourced from the running session — no aggregations older than the live window.</p>
+        <p>The Stats screen uses sample telemetry to illustrate cache activity and latency. The top bar shows the MCP connection status. Open Backends to read the connected server’s inventory.</p>
         <h4>Tiles</h4>
         <ul>
           <li><strong>req/s</strong> — ingoing <code>rulake_query</code> rate (1Hz sample)</li>
