@@ -2,8 +2,8 @@
 
 <a href="https://ruvnet.github.io/RuLake/lakes/">
   <picture>
-    <source media="(prefers-reduced-motion: reduce)" srcset="assets/lake-snapshot-flow.svg#still" />
-    <img src="assets/lake-snapshot-flow.svg" alt="Export Parquet or JSON from your lake, prepare a ruvec1 snapshot, then search locally. Open the data source guides." width="100%" />
+    <source media="(prefers-reduced-motion: no-preference)" srcset="assets/lake-snapshot-flow.svg" />
+    <img src="assets/lake-snapshot-flow-still.svg" alt="Export Parquet or JSON from your lake, prepare a ruvec1 snapshot, then search locally. Open the data source guides." width="100%" />
   </picture>
 </a>
 
@@ -62,8 +62,8 @@ npm   install rulake-wasm             # Browsers, Cloudflare Workers, Deno, Bun
 
 <a href="https://github.com/ruvnet/RuLake/pull/25">
   <picture>
-    <source media="(prefers-reduced-motion: reduce)" srcset="assets/console-startup.svg#still" />
-    <img src="assets/console-startup.svg" alt="Median cold startup fell from 1.63 s to 0.42 s. Initial JavaScript requests fell from 17 to 3." width="100%" />
+    <source media="(prefers-reduced-motion: no-preference)" srcset="assets/console-startup.svg" />
+    <img src="assets/console-startup-still.svg" alt="Median cold startup fell from 1.63 s to 0.42 s. Initial JavaScript requests fell from 17 to 3." width="100%" />
   </picture>
 </a>
 
