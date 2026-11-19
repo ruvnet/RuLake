@@ -1,6 +1,11 @@
 # ruLake — A Memory Lake for Agentic AI
 
-<a href="https://ruvnet.github.io/RuLake/"><img src="assets/console-hero.png" alt="ruLake Console — live demo at ruvnet.github.io/RuLake/" width="100%" /></a>
+<a href="https://ruvnet.github.io/RuLake/lakes/">
+  <picture>
+    <source media="(prefers-reduced-motion: no-preference)" srcset="assets/lake-snapshot-flow.svg" />
+    <img src="assets/lake-snapshot-flow-still.svg" alt="Export Parquet or JSON from your lake, prepare a ruvec1 snapshot, then search locally. Open the data source guides." width="100%" />
+  </picture>
+</a>
 
 > **[Try the live Console →](https://ruvnet.github.io/RuLake/)** — boots in DEMO, auto-probes the hosted MCP at [`rulake-mcp.ruv.io`](https://rulake-mcp.ruv.io/), flips to `● LIVE` when the wire's up. Eight tools served, zero install.
 
@@ -13,6 +18,13 @@
 [![rulake-mcp](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/ruvnet/RuLake/main/badges/rulake-mcp.json)](https://rulake-mcp.ruv.io/)
 [![rvdna-mcp](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/ruvnet/RuLake/main/badges/rvdna-mcp.json)](https://rvdna-mcp.ruv.io/)
 [![ruqu-mcp](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/ruvnet/RuLake/main/badges/ruqu-mcp.json)](https://ruqu-mcp.ruv.io/)
+
+<details>
+<summary>Preview the RuLake console</summary>
+
+<a href="https://ruvnet.github.io/RuLake/"><img src="assets/console-hero.png" alt="ruLake Console — live demo at ruvnet.github.io/RuLake/" width="100%" /></a>
+
+</details>
 
 ### Self-learning memory for your AI agents — without standing up a vector database.
 
@@ -45,6 +57,17 @@ npm   install rulake-wasm             # Browsers, Cloudflare Workers, Deno, Bun
 ```
 
 `rulake-stack` is the killer-path install. To use the namespaced form `/rulake-core:*`, `/rulake-witness:*`, or `/rulake-kernels:*`, install those plugins separately (`/plugin install <name>@rulake-marketplace`).
+
+### Console startup
+
+<a href="https://github.com/ruvnet/RuLake/pull/25">
+  <picture>
+    <source media="(prefers-reduced-motion: no-preference)" srcset="assets/console-startup.svg" />
+    <img src="assets/console-startup-still.svg" alt="Median cold startup fell from 1.63 s to 0.42 s. Initial JavaScript requests fell from 17 to 3." width="100%" />
+  </picture>
+</a>
+
+Measured across five cold loads per build in Chrome on ruOS with 80 ms simulated latency and 10 Mbps throughput. [Benchmark details](https://github.com/ruvnet/RuLake/pull/25)
 
 ### Claude Code integration — at a glance
 

@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="768" height="348" viewBox="0 0 640 290" role="img" aria-labelledby="title description">
+  <title id="title">Time to a visible RuLake console</title>
+  <desc id="description">Median cold startup fell from 1.63 seconds to 0.42 seconds, a 74 percent reduction. Initial JavaScript requests fell from 17 to 3. Five cold loads per build in Chrome on ruOS with 80 milliseconds of simulated latency and 10 megabits per second throughput.</desc>
+  <defs>
+    <linearGradient id="surface" x2="1" y2="1">
+      <stop stop-color="#15262e"/><stop offset=".65" stop-color="#0d181e"/><stop offset="1" stop-color="#10221e"/>
+    </linearGradient>
+    <linearGradient id="before" x2="1" y2="0"><stop stop-color="#335b68"/><stop offset="1" stop-color="#8ac0cc"/></linearGradient>
+    <linearGradient id="after" x2="1" y2="0"><stop stop-color="#52896b"/><stop offset="1" stop-color="#b6f3bd"/></linearGradient>
+    <pattern id="old-requests" width="8" height="16" patternUnits="userSpaceOnUse"><rect x="1" y="1" width="5" height="14" rx="1.5" fill="#87bac5"/></pattern>
+    <pattern id="new-requests" width="8" height="16" patternUnits="userSpaceOnUse"><rect x="1" y="1" width="5" height="14" rx="1.5" fill="#a9efba"/></pattern>
+    <style>
+      .sans {font-family:Inter,"Segoe UI",Arial,sans-serif}
+      .mono {font-family:ui-monospace,"SFMono-Regular",Consolas,"Liberation Mono",monospace}
+      .cursor {opacity:0}
+    </style>
+    <style id="motion">
+      @media (prefers-reduced-motion: no-preference) {
+        .old {animation:old-clock 5.8s linear infinite}
+        .new {animation:new-clock 5.8s linear infinite}
+      }
+      @keyframes old-clock {
+        0%,9% {transform:translateX(0);opacity:0}
+        10% {transform:translateX(0);opacity:1}
+        75% {transform:translateX(286.88px);opacity:1}
+        82%,100% {transform:translateX(286.88px);opacity:0}
+      }
+      @keyframes new-clock {
+        0%,9% {transform:translateX(0);opacity:0}
+        10% {transform:translateX(0);opacity:1}
+        26.75% {transform:translateX(73.92px);opacity:1}
+        33.75%,100% {transform:translateX(73.92px);opacity:0}
+      }
+    </style>
+  </defs>
+
+  <rect x="1" y="1" width="638" height="288" rx="18" fill="url(#surface)" stroke="#38514e" stroke-width="2"/>
+  <g class="sans">
+    <text x="25" y="49" fill="#eef6f2" font-size="35" font-weight="700" letter-spacing="-1.3">Time to visible console</text>
+    <text x="26" y="79" fill="#b8caca" font-size="21">Median cold startup</text>
+    <text x="615" y="50" text-anchor="end" fill="#b3f4be" font-size="42" font-weight="700" letter-spacing="-1.5">74%</text>
+    <text x="615" y="77" text-anchor="end" fill="#b8caca" font-size="20">less time</text>
+  </g>
+
+  <!-- Common linear axis, 176 SVG units per second, for both published medians. -->
+  <g fill="none" stroke="#335050" stroke-width="1">
+    <path d="M143 98v98m88-98v98m88-98v98m88-98v98m88-98v98"/>
+    <path d="M143 196h352"/>
+  </g>
+  <g class="sans" font-weight="600" font-size="23" fill="#e5efed">
+    <text x="25" y="135">Before</text><text x="25" y="182">After</text>
+  </g>
+  <g fill="#213238">
+    <rect x="143" y="120" width="352" height="15" rx="3"/><rect x="143" y="167" width="352" height="15" rx="3"/>
+  </g>
+  <rect x="143" y="120" width="286.88" height="15" rx="3" fill="url(#before)"/>
+  <rect x="143" y="167" width="73.92" height="15" rx="3" fill="url(#after)"/>
+  <g stroke-linecap="round" stroke-width="3">
+    <path d="M429.88 117v21" stroke="#9fced8"/><path d="M216.92 164v21" stroke="#c4f9cb"/>
+  </g>
+  <g fill="#fff" stroke="#203b38" stroke-width="1.4">
+    <circle class="cursor old" cx="143" cy="127.5" r="5.5"/>
+    <circle class="cursor new" cx="143" cy="174.5" r="5.5"/>
+  </g>
+  <g class="mono" text-anchor="end" font-size="25" font-weight="600">
+    <text x="615" y="136" fill="#b1d8df">1.63 s</text><text x="615" y="183" fill="#b3f4be">0.42 s</text>
+  </g>
+  <g class="mono" font-size="18" fill="#a8bfc1" text-anchor="middle">
+    <text x="143" y="218">0</text><text x="319" y="218">1 s</text><text x="495" y="218">2 s</text>
+  </g>
+
+  <path d="M24 233h592" stroke="#36504d"/>
+  <text class="sans" x="25" y="269" fill="#dce9e4" font-size="22" font-weight="600">JavaScript requests</text>
+  <g transform="translate(270 253)">
+    <rect width="136" height="16" fill="url(#old-requests)"/>
+    <path d="M147 8h11m-4-4 4 4-4 4" fill="none" stroke="#b1c4c3" stroke-width="1.5"/>
+    <rect x="168" width="24" height="16" fill="url(#new-requests)"/>
+  </g>
+  <text class="mono" x="615" y="270" text-anchor="end" font-size="25" font-weight="600" fill="#c5f6d0">17 → 3</text>
+</svg>

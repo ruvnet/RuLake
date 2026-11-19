@@ -1,0 +1,112 @@
+<!-- Generated from lake-snapshot-flow.svg by scripts/readme_stills.py -->
+<svg xmlns="http://www.w3.org/2000/svg" width="768" height="420" viewBox="0 0 640 350" role="img" aria-labelledby="title description">
+  <title id="title">From lake to local search</title>
+  <desc id="description">Export vectors from BigQuery or another lake as Parquet or JSON. Prepare a ruvec1 snapshot and search it locally. The sample query returns ID 101 at squared L2 distance zero.</desc>
+  <defs>
+    <linearGradient id="surface" x2="1" y2="1" gradientUnits="objectBoundingBox">
+      <stop stop-color="#15262e" />
+      <stop offset=".65" stop-color="#0d181e" />
+      <stop offset="1" stop-color="#10221e" />
+    </linearGradient>
+    <linearGradient id="paper" x2="1" y2="1">
+      <stop stop-color="#203f4b" />
+      <stop offset="1" stop-color="#142932" />
+    </linearGradient>
+    <linearGradient id="plate" x2="1" y2="1">
+      <stop stop-color="#426d5e" />
+      <stop offset=".6" stop-color="#25483e" />
+      <stop offset="1" stop-color="#203a35" />
+    </linearGradient>
+    <linearGradient id="beam" x2="1" y2="0">
+      <stop stop-color="#e2ffdb" stop-opacity="0" />
+      <stop offset="1" stop-color="#d6ffd3" stop-opacity=".65" />
+    </linearGradient>
+    <pattern id="dots" width="14" height="14" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r=".85" fill="#91aba7" opacity=".26" />
+    </pattern>
+    <clipPath id="plate-top">
+      <path d="m254 138 66-28 66 28-66 28z" />
+    </clipPath>
+    <style>
+      .sans {font-family:Inter,"Segoe UI",Arial,sans-serif}
+      .mono {font-family:ui-monospace,"SFMono-Regular",Consolas,"Liberation Mono",monospace}
+      .packet,.scan,.echo {opacity:0}
+    </style>
+  </defs>
+  <rect x="1" y="1" width="638" height="348" rx="18" fill="url(#surface)" stroke="#38514e" stroke-width="2" />
+  <g class="sans" fill="#eef6f2">
+    <text x="25" y="51" font-size="36" font-weight="700" letter-spacing="-1.4">From lake to local search</text>
+  </g>
+  <g fill="none" stroke="#a9efba" stroke-width="2.4" stroke-linejoin="round" aria-hidden="true">
+    <path d="m568 32 19-8 19 8-19 8z" />
+    <path d="m568 39 19 8 19-8m-38 7 19 8 19-8" opacity=".66" />
+  </g>
+  <rect x="21" y="70" width="598" height="137" rx="8" fill="#101e24" />
+  <rect x="21" y="70" width="598" height="137" rx="8" fill="url(#dots)" />
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <g stroke="#678b89" stroke-width="2.3">
+      <path d="M164 145H236m-6-5 6 5-6 5M403 145h64m-6-5 6 5-6 5" />
+    </g>
+    <g stroke="#cdffe0" stroke-width="4" stroke-dasharray="12 140">
+      <path class="packet" d="M166 145h67" />
+      <path class="packet second" d="M405 145h60" />
+    </g>
+  </g>
+  <g stroke-linejoin="round">
+    <path d="m61 103 65-7 17 14 5 62-77 8z" fill="#162c36" stroke="#486b78" stroke-width="2" />
+    <path d="m67 111 65-4 16 15 3 60-78 4z" fill="#1c3541" stroke="#6696a4" stroke-width="2" />
+    <path d="M78 117h59l17 17v58H78z" fill="url(#paper)" stroke="#a6d5df" stroke-width="2.3" />
+    <path d="M136 118v17h17" fill="none" stroke="#a6d5df" stroke-width="2" />
+    <g fill="#90c6d1">
+      <rect x="89" y="144" width="9" height="6" rx="2" />
+      <rect x="89" y="158" width="9" height="6" rx="2" />
+      <rect x="89" y="172" width="9" height="6" rx="2" />
+    </g>
+    <g fill="none" stroke="#a5d7df" stroke-width="2.5" stroke-linecap="round">
+      <path d="M106 147h8l4-5 5 8 4-3h14M106 161h5l4 3 6-9 5 7h15M106 175h7l4-4 4 5 6-9 5 6h9" />
+    </g>
+  </g>
+  <g stroke-linejoin="round">
+    <path d="m254 168 66-28 66 28v6l-66 28-66-28z" fill="#1c3932" stroke="#578571" stroke-width="2" />
+    <path d="m254 158 66-28 66 28v6l-66 28-66-28z" fill="#25463c" stroke="#73a68c" stroke-width="2" />
+    <path d="m254 148 66-28 66 28v6l-66 28-66-28z" fill="#2b5043" stroke="#94c6a5" stroke-width="2" />
+    <path d="m254 138 66-28 66 28v6l-66 28-66-28z" fill="#24483a" stroke="#a9efba" stroke-width="2" />
+    <path d="m254 138 66-28 66 28-66 28z" fill="url(#plate)" stroke="#b3f3c3" stroke-width="2" />
+    <g clip-path="url(#plate-top)">
+      <path d="m261 117 100 43m-89-51 106 45m-88-52 107 45m-132 15 111-47m-123 40 111-47m-124 40 111-47" fill="none" stroke="#a1d7b4" stroke-width="1.2" opacity=".78" />
+      <path class="scan" d="m255 103 17 0 45 70h-17z" fill="url(#beam)" />
+    </g>
+    <path d="m312 136 11-4 10 4-11 5z" fill="#d6ffcc" />
+  </g>
+  <g>
+    <path d="M485 190h95m-91 3v-91" fill="none" stroke="#456163" stroke-width="1.5" />
+    <path d="m504 118 14 16 17 11 24-29m-24 29 26 20m-43-31-12 38" fill="none" stroke="#426969" stroke-width="1.5" stroke-dasharray="3 4" />
+    <g fill="#78a0a4">
+      <circle cx="504" cy="118" r="4" />
+      <circle cx="559" cy="116" r="4" />
+      <circle cx="518" cy="134" r="3.5" />
+      <circle cx="561" cy="165" r="4" />
+      <circle cx="506" cy="172" r="4" />
+      <circle cx="570" cy="149" r="3" />
+    </g>
+    <circle class="echo" cx="535" cy="145" r="16" fill="none" stroke="#aff3bd" stroke-width="2.2" />
+    <circle cx="535" cy="145" r="12" fill="#1b3b32" stroke="#a9efba" stroke-width="2" />
+    <circle cx="535" cy="145" r="4.5" fill="#c9ffd4" />
+    <path d="M535 126v5m0 28v5m-19-19h5m28 0h5" fill="none" stroke="#99cfae" stroke-width="2" />
+  </g>
+  <g class="sans" text-anchor="middle" font-size="25" font-weight="650" fill="#e9f2ee">
+    <text x="113" y="242">Export</text>
+    <text x="320" y="242">Snapshot</text>
+    <text x="535" y="242">Search</text>
+  </g>
+  <g class="mono" text-anchor="middle" font-size="19" fill="#b2c6c8">
+    <text x="113" y="267">Parquet / JSON</text>
+    <text x="320" y="267">ruvec1</text>
+    <text x="535" y="267">ID 101</text>
+  </g>
+  <path d="M24 285h592" stroke="#36504d" />
+  <text class="sans" x="25" y="322" fill="#c3d4d1" font-size="21">BigQuery and six other source guides</text>
+  <rect x="450" y="299" width="165" height="36" rx="7" fill="#a9efba" />
+  <text class="sans" x="464" y="324" fill="#11291f" font-size="21" font-weight="650">Open guide</text>
+  <path d="m591 320 8-8m-8 0h8v8" fill="none" stroke="#173a27" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+</svg>
