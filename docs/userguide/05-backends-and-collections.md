@@ -7,6 +7,10 @@ backend, and renders whatever comes back.
 
 ![Backends browser with three lakes, seven collections, federation graph and cache pressure bars](../../assets/console-browse.png)
 
+## Import warehouse or lake data
+
+The [data sources guide](https://ruvnet.github.io/RuLake/lakes/) includes export recipes, the Parquet and JSON importer, a local search and a stock MCP configuration. Start with the [BigQuery recipe](https://ruvnet.github.io/RuLake/lakes/#bigquery) or choose your source. Each filesystem collection represents the export you selected. Publish a new snapshot to pick up later source changes.
+
 ## What a "backend" is
 
 A backend is a Rust struct that implements the `BackendAdapter` trait from
@@ -46,7 +50,7 @@ A collection is a named set of vectors inside one backend, addressed as
 key for everything: cache pointer, bundle witness, audit row target,
 publish target.
 
-A collection row in the table carries:
+A fixture row in the demo table carries:
 
 | Column | Meaning |
 |---|---|
@@ -83,28 +87,18 @@ rulake_list_collections {b}  → ["memories", "docs.public", ...]   per backend
 ```
 
 The audit tail gains a `LIST_COLLECTIONS_OK` row on success or
-`LIST_COLLECTIONS_FAILED` on error. In `● LIVE` mode the row count
-populates `window.RULakeLiveCollections` and re-renders the table with
-real backends + collections.
+`LIST_COLLECTIONS_FAILED` on error. Live inventory loads when you enter the view or connect a server. Up to four collection lists are fetched concurrently. Empty and failed listings are shown explicitly. **Read bundle** requests the selected collection’s MCP resource.
 
-**Publish** queues a `rulake_publish_bundle` for the currently-selected
-row. The audit tail gains `PUBLISH_QUEUED`. The actual MCP call and
-generation bump happen server-side; refresh after a beat to see the new
-witness.
-
-> If you click Publish without selecting a row first, you get a toast
-> reminding you to click any row, then Publish.
+In demo mode, **Publish** records a simulated action for the selected fixture in the local audit log.
 
 ## Cache pressure (per backend)
 
 The lower-left card shows working-set / budget as a percentage bar per
-backend. Bars turn amber above 85%. The percentage is illustrative in
-demo mode; in `● LIVE` mode it reads from the same per-backend rollup the
-Stats screen uses.
+backend. Bars turn amber above 85%. The demo illustrates these percentages. Live inventory displays only fields returned by the server.
 
 ## Federation topology
 
-The lower-right card is a small canvas-rendered graph showing the
+In demo mode the lower-right card is a small canvas-rendered graph showing the
 planner → backends → collections fan-out, with a moving particle along
 each edge to indicate live request flow. Coloured dots:
 

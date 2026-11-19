@@ -1,0 +1,13 @@
+[[backends]]
+type = "fs"
+id = "lake"
+root = "."
+
+[[backends.collections]]
+name = "embeddings"
+filename = "sample.ruvec1"
+
+[[allow]]
+backend = "lake"
+collection = "embeddings"
+caps = ["read"]

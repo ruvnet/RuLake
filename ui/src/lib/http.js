@@ -32,9 +32,10 @@ function uuidLike(seed) {
     .join("");
 }
 
-async function postJson(url, body, headers = {}) {
+async function postJson(url, body, headers = {}, signal) {
   const resp = await fetch(url, {
     method:  "POST",
+    signal,
     headers: { "Content-Type": "application/json", Accept: ACCEPT, ...headers },
     body:    JSON.stringify(body),
   });
@@ -59,6 +60,7 @@ async function postJson(url, body, headers = {}) {
  * `null` if the stream closes without one.
  */
 async function readSseUntilResult(resp) {
+  if ((resp.headers.get("content-type") || "").includes("application/json")) return resp.json();
   if (!resp.body) {
     const text = await resp.text();
     try { return JSON.parse(text); } catch { return null; }
@@ -75,8 +77,8 @@ async function readSseUntilResult(resp) {
       while ((idx = buf.indexOf("\n")) !== -1) {
         const line = buf.slice(0, idx);
         buf = buf.slice(idx + 1);
-        if (!line.startsWith("data: ")) continue;
-        const data = line.slice(6).trim();
+        if (!line.startsWith("data:")) continue;
+        const data = line.slice(5).trim();
         if (!data) continue;
         try {
           const env = JSON.parse(data);
@@ -87,7 +89,7 @@ async function readSseUntilResult(resp) {
       }
     }
   } finally {
-    try { reader.cancel(); } catch { /* ignore */ }
+    try { await reader.cancel(); } catch { /* ignore */ }
   }
 }
 
@@ -110,6 +112,7 @@ class RuLakeHttp {
     this.headers       = opts.headers ?? {};
     this.sessionId     = null;
     this.requestSeed   = 1;
+    this.connected     = false;
   }
 
   _headers() {
@@ -139,9 +142,11 @@ class RuLakeHttp {
     );
     this.sessionId = resp.headers.get("mcp-session-id") || this.sessionId;
 
-    // Drain initialize response (don't actually need its body — the
-    // session id from headers is the load-bearing artifact).
-    try { await resp.body?.cancel?.(); } catch { /* ignore */ }
+    const env = await readSseUntilResult(resp);
+    if (!env?.result?.protocolVersion) {
+      throw new RuLakeHttpError(env?.error?.message || "MCP initialize returned no protocol version");
+    }
+    this.connected = true;
 
     // Fire `notifications/initialized` (no response expected).
     try {
@@ -156,20 +161,11 @@ class RuLakeHttp {
     }
   }
 
-  /** Call the `rulake_query` MCP tool. Returns the parsed result body. */
-  async query(args) {
-    if (!this.sessionId) await this.connect();
-    const reqId = uuidLike(this.requestSeed++);
-    const resp = await postJson(
-      this.url,
-      {
-        jsonrpc: "2.0",
-        id:      Date.now() & 0xffff,
-        method:  "tools/call",
-        params:  { name: "rulake_query", arguments: args },
-      },
-      { ...this._headers(), "MCP-Request-Id": reqId },
-    );
+  async rpc(method, params, signal) {
+    if (!this.connected && !this.sessionId) await this.connect();
+    const id = this.requestSeed++;
+    const resp = await postJson(this.url, { jsonrpc: "2.0", id, method, params },
+      { ...this._headers(), "MCP-Request-Id": uuidLike(id) }, signal);
     const env = await readSseUntilResult(resp);
     if (!env) throw new RuLakeHttpError("server closed stream without a result");
     if (env.error) {
@@ -179,6 +175,10 @@ class RuLakeHttp {
       });
     }
     return env.result;
+  }
+
+  query(args) {
+    return this.rpc("tools/call", { name: "rulake_query", arguments: args });
   }
 }
 

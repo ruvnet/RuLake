@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>ruLake Console · Verifiable Vector Memory for AI Agents · MCP-Native</title>
 
-  <meta name="description" content="ruLake Console — operator's lens for ruLake, the MCP-native verifiable vector cache for AI agents. Watch queries, inspect SHAKE-256 witnesses, audit honest refusals, and tune cache policy across federated lakes (S3, GCS, BigQuery, Parquet). ~1ms queries, 32× compression, zero-cost open source." />
+  <meta name="description" content="Inspect RuLake vector collections and query receipts. Import snapshots from BigQuery, Snowflake, S3, Delta Lake, Iceberg or Microsoft Fabric, and search them locally." />
   <meta name="keywords" content="ruLake, RuVector, MCP server, Model Context Protocol, vector cache, vector database alternative, AI agent memory, RAG infrastructure, RaBitQ, SHAKE-256 witness, federated vector search, verifiable retrieval, agent memory substrate, Claude Desktop MCP, Cursor MCP, Cline MCP, agentic-flow, embeddings cache, semantic search, lakehouse vector search" />
   <meta name="author" content="rUv · ruv.io" />
   <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large" />
@@ -25,16 +25,16 @@
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="ruLake" />
   <meta property="og:title" content="ruLake Console — Verifiable Vector Memory for AI Agents" />
-  <meta property="og:description" content="MCP-native cache that gives AI agents fast, trustworthy memory across S3, GCS, BigQuery, and Parquet — without standing up a vector database. ~1ms queries · SHAKE-256 witnesses · honest refusals." />
+  <meta property="og:description" content="Query local vector snapshots from BigQuery and other lakes. Inspect collections, cache state and receipts in the RuLake console." />
   <meta property="og:url" content="https://ruvnet.github.io/RuLake/" />
-  <meta property="og:image" content="https://ruvnet.github.io/RuLake/og.png" />
+  <meta property="og:image" content="https://raw.githubusercontent.com/ruvnet/RuLake/main/assets/console-hero.png" />
   <meta property="og:image:alt" content="ruLake Console — agent memory dashboard with witness verification" />
 
   <!-- Twitter / X -->
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="ruLake — Verifiable Vector Memory for AI Agents" />
-  <meta name="twitter:description" content="MCP-native vector cache. ~1ms queries, 32× compression, witness-verified, refuses on stale data. Open source." />
-  <meta name="twitter:image" content="https://ruvnet.github.io/RuLake/og.png" />
+  <meta name="twitter:description" content="Search warehouse snapshots locally and inspect query receipts in the RuLake console." />
+  <meta name="twitter:image" content="https://raw.githubusercontent.com/ruvnet/RuLake/main/assets/console-hero.png" />
   <meta name="twitter:creator" content="@ruvnet" />
 
   <!-- JSON-LD: SoftwareApplication -->
@@ -61,6 +61,7 @@
 </head>
 <body>
   <div id="root"></div>
+  <noscript><a href="./lakes/">Data sources and snapshot import guide</a></noscript>
   <script type="module" src="/src/main.jsx"></script>
 </body>
 </html>
